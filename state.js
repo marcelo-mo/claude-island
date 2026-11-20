@@ -4,7 +4,8 @@ const path = require('node:path');
 
 const STATE_DIR = path.join(os.homedir(), '.claude', 'island');
 
-const DONE_VISIBLE_MS = 6_000;
+// Tempo suficiente para alcançar o botão "Abrir" antes de a ilha sumir.
+const DONE_VISIBLE_MS = 10_000;
 // Sessão que morreu sem disparar SessionEnd deixa o arquivo para trás;
 // depois desses prazos ela para de aparecer.
 const RUNNING_STALE_MS = 2 * 60 * 60_000;
