@@ -162,11 +162,12 @@ test('a ilha só conta como viva com batimento recente', () => {
 
 test('instalar preserva hooks alheios, é idempotente e desinstalar limpa', () => {
   const foreign = { matcher: '', hooks: [{ type: 'command', command: 'node notify.js' }] };
-  const original = { model: 'x', hooks: { Stop: [foreign], SessionStart: [foreign], PermissionRequest: [foreign] } };
+  const original = { model: 'x', hooks: { Stop: [foreign], SubagentStop: [foreign], PermissionRequest: [foreign] } };
 
   const installed = applyHooks(applyHooks(original, true), true);
   assert.equal(installed.model, 'x');
-  assert.deepEqual(installed.hooks.SessionStart, [foreign]);
+  assert.deepEqual(installed.hooks.SubagentStop, [foreign]);
+  assert.equal(installed.hooks.SessionStart.length, 1);
   assert.deepEqual(installed.hooks.Stop, [foreign, { matcher: '', hooks: [{ type: 'command', command: COMMAND }] }]);
   assert.equal(installed.hooks.PreToolUse.length, 1);
   // o pedido de permissão tem script próprio, com prazo maior que a espera pelo clique

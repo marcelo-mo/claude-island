@@ -5,7 +5,8 @@ const path = require('node:path');
 
 const { PERMISSION_WAIT_MS } = require('./state');
 
-const EVENTS = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SessionEnd'];
+// SessionStart não muda estado nenhum: é ele que sobe a ilha quando ela não está no ar.
+const EVENTS = ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SessionEnd'];
 const HOOK_SCRIPT = path.join(__dirname, 'hook.js');
 const PERMISSION_SCRIPT = path.join(__dirname, 'permission-hook.js');
 const commandFor = (script) => `"${process.execPath}" "${script}"`;
