@@ -72,6 +72,17 @@
     border-radius: 9px; padding: 1px 7px; font-weight: 700;
   }
   #count:empty { visibility: hidden; }
+  #heading { display: flex; justify-content: center; align-items: center; gap: 8px; min-width: 0; }
+  /* Ao concluir, a sessão costuma pedir uma olhada: o atalho fica à mão sem precisar do hover. */
+  #open-compact {
+    display: none; flex: none; font: inherit; font-size: 11px; font-weight: 600;
+    color: var(--button-text); background: var(--button);
+    border: 0; border-radius: 10px; padding: 2px 9px; cursor: pointer;
+  }
+  #open-compact:hover { filter: brightness(1.15); }
+  #open-compact:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  #pill[data-state="done"].has-window:not(.expanded) { width: 240px; }
+  #pill[data-state="done"].has-window:not(.expanded) #open-compact { display: inline-block; }
   #detail {
     grid-column: 1 / -1; align-self: start; color: var(--muted); font-size: 12px;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -97,7 +108,10 @@
 <body>
   <div id="pill" data-state="idle" role="status" aria-live="polite">
     <span id="dot"></span>
-    <span id="title"></span>
+    <span id="heading">
+      <span id="title"></span>
+      <button id="open-compact" type="button" aria-label="Abrir sessão">Abrir</button>
+    </span>
     <span id="count"></span>
     <span id="detail"></span>
     <button id="open" type="button">Abrir sessão</button>
@@ -150,7 +164,9 @@
     render();
   });
 
-  document.getElementById('open').addEventListener('click', () => window.island.focusSession());
+  for (const id of ['open', 'open-compact']) {
+    document.getElementById(id).addEventListener('click', () => window.island.focusSession());
+  }
 
   // A janela deixa o clique atravessar; só a pílula (e o botão dentro dela) captura o mouse.
   function setHovering(isOverPill) {
@@ -170,7 +186,7 @@
   let drag = null;
 
   pill.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || event.target.closest('#open')) return;
+    if (event.button !== 0 || event.target.closest('button')) return;
     // Com a captura os pointermove continuam chegando mesmo se o ponteiro sair da pílula.
     pill.setPointerCapture(event.pointerId);
     drag = { startX: event.screenX, startY: event.screenY, moved: false };
@@ -204,7 +220,7 @@
   });
 
   pill.addEventListener('dblclick', (event) => {
-    if (event.target.closest('#open')) return;
+    if (event.target.closest('button')) return;
     window.island.resetPosition();
     // A janela sai de baixo do ponteiro sem gerar mouseleave; sem isto a pílula ficaria
     // expandida e a janela bloqueando cliques até o mouse passar por ela de novo.
