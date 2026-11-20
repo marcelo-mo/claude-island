@@ -1,6 +1,6 @@
 # claude-island
 
-Uma "Dynamic Island" de desktop para o Claude Code: uma pílula no topo central da tela que
+Uma "Dynamic Island" de desktop para o Claude Code: uma pílula no topo central de cada monitor que
 mostra quando uma sessão está executando, quando precisa da sua resposta e quando terminou.
 Feita em Electron, roda em Windows, macOS e Linux.
 
@@ -31,6 +31,14 @@ urgente; com mais de uma sessão ativa aparece um contador.
 
 Passar o mouse sobre a pílula expande e mostra o projeto e o que está rodando.
 
+Com mais de um monitor, cada um ganha a sua ilha, e elas acompanham quando um monitor é
+conectado, removido ou muda de resolução. O aviso sonoro toca uma vez só.
+
+Para tirar a ilha do caminho (numa reunião, por exemplo), **clique na pílula e arraste**. Ela
+fica dentro da área útil do monitor em que está, cada monitor guarda a própria posição e ela
+é mantida depois de reiniciar (fica em `positions.json`, na pasta de dados do app). **Duplo
+clique** na pílula devolve aquela ilha ao topo central.
+
 Expandida, a ilha mostra o botão **Abrir sessão**, que traz para frente (e restaura, se
 minimizada) a janela do terminal daquela sessão. No primeiro evento de cada sessão o hook sobe a
 árvore de processos até achar o processo dono da janela e guarda o PID no arquivo de estado; isso
@@ -46,7 +54,11 @@ for encontrada, o botão não aparece. O código específico de cada sistema fic
   — sem ele, ou em Wayland, o botão não aparece.
 - **Abrir sessão no Windows simula um toque na tecla Alt** para o sistema permitir a troca de
   janela ativa; em algum aplicativo isso pode destacar a barra de menus por um instante.
-
+- **A ilha não passa de um monitor para outro:** cada monitor tem a sua, e o arraste para na
+  borda dele.
+- **A posição salva é por identificador do monitor.** Se o sistema trocar esse identificador
+  (outro cabo, outra porta, dock), a ilha daquele monitor volta ao topo central.
+- **Arrastar e várias ilhas foram testados só no Windows.**
 - **Linux:** o clique não atravessa a área transparente em volta da pílula (o Electron não
   encaminha eventos de mouse lá). Transparência também depende de um compositor ativo.
 - **Não inicia com o sistema:** é preciso rodar `pnpm start`.
