@@ -29,6 +29,11 @@ urgente; com mais de uma sessão ativa aparece um contador.
 | Concluído | fim do turno | selo verde com check e botão "Abrir" por 10 segundos |
 | Ocioso | nenhuma sessão ativa | some |
 
+À direita da pílula, um anel mostra o percentual de contexto já usado pela sessão: verde
+até 50%, amarelo de 50% a 80% e vermelho acima disso. O dado vem do arquivo
+`claude-ctx-<sessão>.json` que o statusline do GSD grava na pasta temporária; sem o GSD, o
+anel não aparece. O percentual é o do GSD, medido até o ponto de compactação automática.
+
 Passar o mouse sobre a pílula expande e mostra o projeto e o que está rodando.
 
 Com mais de um monitor, cada um ganha a sua ilha, e elas acompanham quando um monitor é

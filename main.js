@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { STATE_DIR, pickState, defaultIslandPosition, clampIslandPosition } = require('./state');
 const { focusWindow } = require('./window');
@@ -47,6 +48,21 @@ function persistSavedOffsets() {
   }
 }
 
+/**
+ * Percentual de contexto usado pela sessão. Nenhum hook recebe esse dado; quem tem é o
+ * statusline. O do GSD já o grava por sessão em <tmp>/claude-ctx-<id>.json, então a ilha
+ * só lê, sem disputar o único slot de statusLine do Claude Code.
+ * ponytail: sem o GSD o anel não aparece; se precisar, a ilha registra um statusline próprio.
+ */
+function readContextPercent(sessionId) {
+  try {
+    const bridge = JSON.parse(fs.readFileSync(path.join(os.tmpdir(), `claude-ctx-${sessionId}.json`), 'utf8'));
+    return bridge.used_pct;
+  } catch {
+    return undefined; // sem arquivo (ou pela metade): a sessão fica sem anel
+  }
+}
+
 function readSessions() {
   let files;
   try {
@@ -58,7 +74,9 @@ function readSessions() {
   for (const file of files) {
     if (!file.endsWith('.json')) continue;
     try {
-      sessions.push(JSON.parse(fs.readFileSync(path.join(STATE_DIR, file), 'utf8')));
+      const session = JSON.parse(fs.readFileSync(path.join(STATE_DIR, file), 'utf8'));
+      session.contextPercent = readContextPercent(path.basename(file, '.json'));
+      sessions.push(session);
     } catch {
       // arquivo pela metade (hook gravando agora): o próximo ciclo pega
     }

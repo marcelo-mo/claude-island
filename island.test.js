@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { eventToState, pickState, defaultIslandPosition, clampIslandPosition } = require('./state');
+const { eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition } = require('./state');
 const { applyHooks, COMMAND } = require('./install');
 
 test('eventos do Claude Code viram estados da ilha', () => {
@@ -25,7 +25,7 @@ test('a ilha mostra a sessão mais urgente e expira as antigas', () => {
     { state: 'waiting', detail: 'Permissão', project: 'b', windowPid: 4242, updatedAt: now - 60_000 },
     { state: 'done', detail: 'Concluído', project: 'c', updatedAt: now - 1_000 },
   ], now);
-  assert.deepEqual(picked, { state: 'waiting', detail: 'Permissão', project: 'b', count: 3, windowPid: 4242 });
+  assert.deepEqual(picked, { state: 'waiting', detail: 'Permissão', project: 'b', count: 3, windowPid: 4242, context: null });
 
   // PID ausente ou adulterado no arquivo de estado: a ilha fica sem botão, não com PID inválido
   for (const windowPid of [undefined, null, '4242; calc', 1.5, -3]) {
@@ -57,6 +57,20 @@ test('a ilha arrastada fica dentro da área útil do monitor dela', () => {
   assert.deepEqual(clamp({ x: 5000, y: 5000 }), { x: -420, y: 880 });
   // monitor menor que a janela: não inverte os limites
   assert.deepEqual(clampIslandPosition({ x: 50, y: 50 }, { x: 0, y: 0, width: 300, height: 100 }, windowSize, 20), { x: -20, y: 0 });
+});
+
+test('o anel de contexto muda de faixa em 50% e 80% e rejeita valores inválidos', () => {
+  assert.deepEqual(contextUsage(25), { percent: 25, level: 'ok' });
+  assert.deepEqual(contextUsage(49.4), { percent: 49, level: 'ok' });
+  assert.deepEqual(contextUsage(50), { percent: 50, level: 'warn' });
+  assert.deepEqual(contextUsage(79.6), { percent: 80, level: 'critical' });
+  assert.deepEqual(contextUsage(140), { percent: 100, level: 'critical' });
+  assert.deepEqual(contextUsage(-5), { percent: 0, level: 'ok' });
+  for (const invalid of [undefined, null, '25', NaN, Infinity]) assert.equal(contextUsage(invalid), null);
+
+  const now = 1_000_000_000;
+  const picked = pickState([{ state: 'running', contextPercent: 62, updatedAt: now }], now);
+  assert.deepEqual(picked.context, { percent: 62, level: 'warn' });
 });
 
 test('instalar preserva hooks alheios, é idempotente e desinstalar limpa', () => {
