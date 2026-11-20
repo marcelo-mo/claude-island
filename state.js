@@ -27,7 +27,7 @@ function eventToState(input) {
       return { state: 'running', detail: 'Pensando…' };
     case 'PreToolUse':
       if (ASKING_TOOLS[input.tool_name]) return { state: 'waiting', detail: ASKING_TOOLS[input.tool_name] };
-      return { state: 'running', detail: input.tool_name || 'Executando…' };
+      return { state: 'running', detail: input.tool_name || 'Trabalhando…' };
     case 'PostToolUse':
       // Também é o que tira a sessão de 'waiting' depois que a permissão é concedida.
       return { state: 'running', detail: 'Pensando…' };
