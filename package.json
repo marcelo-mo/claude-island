@@ -11,9 +11,7 @@
     "hooks:uninstall": "node install.js --uninstall"
   },
   "devDependencies": {
-    "electron": "^39.0.0"
+    "electron": "^45.4.1"
   },
-  "allowScripts": {
-    "electron@39.8.10": true
-  }
+  "packageManager": "pnpm@11.10.0"
 }

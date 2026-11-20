@@ -11,26 +11,47 @@
     --waiting: #ff9f0a;
     --done: #30d158;
     --accent: var(--running);
+    --surface: #000;
+    --text: #fff;
+    --muted: #a1a1a6;
+    --shadow: 0 4px 14px rgba(0, 0, 0, .35);
+    /* Botão no padrão do quaint-money: --primary mais escuro com --primary-foreground,
+       fixo em todos os estados para o rótulo claro não cair sobre âmbar ou verde. */
+    --button: oklch(0.646 0.222 41.116);
+    --button-text: oklch(0.98 0.016 73.684);
     /* Curva com leve "overshoot": é o que dá a sensação elástica da ilha. */
     --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  }
+  /* O Electron segue o tema do sistema em tempo real; a ilha acompanha sem reiniciar. */
+  @media (prefers-color-scheme: light) {
+    :root {
+      --running: oklch(0.646 0.222 41.116); /* --primary do tema claro do quaint-money */
+      --waiting: #f08c00;
+      --done: #248a3d;
+      --surface: #fff;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      /* Sobre janelas claras a pílula branca some sem um contorno. */
+      --shadow: 0 0 0 1px rgba(0, 0, 0, .1), 0 4px 14px rgba(0, 0, 0, .18);
+    }
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; background: transparent; overflow: hidden; user-select: none; }
   body {
     display: flex; justify-content: center; align-items: flex-start; padding-top: 8px;
-    font: 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff;
+    font: 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text);
   }
 
   #pill {
     width: 190px; height: 36px; padding: 0 14px;
-    background: #000; border-radius: 22px;
+    background: var(--surface); border-radius: 22px;
     /* Colunas laterais iguais: o título fica no centro da pílula mesmo com o ponto de um
        lado e o contador (que pode nem existir) do outro. */
     display: grid; grid-template-columns: 26px 1fr 26px; grid-template-rows: 36px auto auto;
     column-gap: 8px; align-items: center; overflow: hidden; text-align: center;
     transition: width .45s var(--spring), height .45s var(--spring), border-radius .45s var(--spring),
-                opacity .25s, transform .45s var(--spring), box-shadow .3s;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+                opacity .25s, transform .45s var(--spring), box-shadow .3s, background .3s;
+    box-shadow: var(--shadow);
   }
   #pill[data-state="idle"] { opacity: 0; transform: scale(.6) translateY(-12px); pointer-events: none; }
   #pill[data-state="waiting"] { --accent: var(--waiting); }
@@ -50,18 +71,18 @@
   }
   #count:empty { visibility: hidden; }
   #detail {
-    grid-column: 1 / -1; align-self: start; color: #a1a1a6; font-size: 12px;
+    grid-column: 1 / -1; align-self: start; color: var(--muted); font-size: 12px;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     opacity: 0; transition: opacity .2s;
   }
   #open {
     grid-column: 1 / -1; justify-self: center; margin-top: 8px;
-    font: inherit; font-size: 12px; font-weight: 600; color: #000; background: var(--accent);
+    font: inherit; font-size: 12px; font-weight: 600; color: var(--button-text); background: var(--button);
     border: 0; border-radius: 14px; padding: 5px 16px; cursor: pointer;
     opacity: 0; transition: opacity .2s, filter .15s;
   }
   #open:hover { filter: brightness(1.15); }
-  #open:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  #open:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
   /* Fora do estado expandido o botão não existe para o mouse nem para leitor de tela. */
   #pill:not(.expanded.has-window) #open { visibility: hidden; }
   #pill.expanded #detail, #pill.expanded #open { opacity: 1; transition-delay: .15s; }
