@@ -19,6 +19,8 @@
        fixo em todos os estados para o rótulo claro não cair sobre âmbar ou verde. */
     --button: oklch(0.646 0.222 41.116);
     --button-text: oklch(0.98 0.016 73.684);
+    /* Verde mais escuro que o do ponto: o rótulo branco precisa de contraste nos dois temas. */
+    --done-button: #248a3d;
     /* Curva com leve "overshoot": é o que dá a sensação elástica da ilha. */
     --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   }
@@ -72,6 +74,22 @@
     border-radius: 9px; padding: 1px 7px; font-weight: 700;
   }
   #count:empty { visibility: hidden; }
+  /* Ao concluir, a sessão costuma pedir uma olhada: o atalho fica à mão sem precisar do hover.
+     Ele ocupa o lugar do contador, que cede a vez enquanto a pílula está compacta. */
+  #count, #open-compact { grid-column: 3; grid-row: 1; }
+  #open-compact {
+    display: none; justify-self: end; font: inherit; font-size: 11px; font-weight: 600;
+    color: #fff; background: var(--done-button);
+    border: 0; border-radius: 10px; padding: 2px 9px; cursor: pointer;
+  }
+  #open-compact:hover { filter: brightness(1.15); }
+  #open-compact:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  /* Laterais iguais e mais largas: cabe o botão e o título continua no centro. */
+  #pill[data-state="done"].has-window:not(.expanded) { width: 250px; grid-template-columns: 50px 1fr 50px; }
+  #pill[data-state="done"].has-window:not(.expanded) #open-compact { display: inline-block; }
+  #pill[data-state="done"].has-window:not(.expanded) #count { visibility: hidden; }
+  /* Concluído é verde por inteiro, inclusive o botão da versão expandida. */
+  #pill[data-state="done"] #open { color: #fff; background: var(--done-button); }
   #detail {
     grid-column: 1 / -1; align-self: start; color: var(--muted); font-size: 12px;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -99,6 +117,7 @@
     <span id="dot"></span>
     <span id="title"></span>
     <span id="count"></span>
+    <button id="open-compact" type="button" aria-label="Abrir sessão">Abrir</button>
     <span id="detail"></span>
     <button id="open" type="button">Abrir sessão</button>
   </div>
@@ -150,7 +169,9 @@
     render();
   });
 
-  document.getElementById('open').addEventListener('click', () => window.island.focusSession());
+  for (const id of ['open', 'open-compact']) {
+    document.getElementById(id).addEventListener('click', () => window.island.focusSession());
+  }
 
   // A janela deixa o clique atravessar; só a pílula (e o botão dentro dela) captura o mouse.
   function setHovering(isOverPill) {
@@ -170,7 +191,7 @@
   let drag = null;
 
   pill.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || event.target.closest('#open')) return;
+    if (event.button !== 0 || event.target.closest('button')) return;
     // Com a captura os pointermove continuam chegando mesmo se o ponteiro sair da pílula.
     pill.setPointerCapture(event.pointerId);
     drag = { startX: event.screenX, startY: event.screenY, moved: false };
@@ -204,7 +225,7 @@
   });
 
   pill.addEventListener('dblclick', (event) => {
-    if (event.target.closest('#open')) return;
+    if (event.target.closest('button')) return;
     window.island.resetPosition();
     // A janela sai de baixo do ponteiro sem gerar mouseleave; sem isto a pílula ficaria
     // expandida e a janela bloqueando cliques até o mouse passar por ela de novo.

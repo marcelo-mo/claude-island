@@ -26,7 +26,7 @@ urgente; com mais de uma sessão ativa aparece um contador.
 |---|---|---|
 | Executando | prompt enviado ou ferramenta em uso | pílula compacta, ponto laranja pulsando |
 | Precisa de você | pedido de permissão, pergunta ou plano aguardando aprovação | expande sozinha, brilho âmbar e aviso sonoro |
-| Concluído | fim do turno | ponto verde por 6 segundos |
+| Concluído | fim do turno | ponto verde e botão "Abrir" por 10 segundos |
 | Ocioso | nenhuma sessão ativa | some |
 
 Passar o mouse sobre a pílula expande e mostra o projeto e o que está rodando.

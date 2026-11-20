@@ -38,7 +38,8 @@ test('a ilha mostra a sessão mais urgente e expira as antigas', () => {
     { state: 'running', project: 'nova', updatedAt: now },
   ], now).project, 'nova');
 
-  assert.equal(pickState([{ state: 'done', updatedAt: now - 7_000 }], now).state, 'idle');
+  assert.equal(pickState([{ state: 'done', updatedAt: now - 9_000 }], now).state, 'done');
+  assert.equal(pickState([{ state: 'done', updatedAt: now - 11_000 }], now).state, 'idle');
   assert.equal(pickState([{ state: 'running', updatedAt: now - 3 * 60 * 60_000 }], now).state, 'idle');
 });
 
