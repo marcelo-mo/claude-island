@@ -65,4 +65,23 @@ function pickState(sessions, now) {
   return { state, detail, project, count: alive.length, windowPid: hasWindow ? windowPid : null };
 }
 
-module.exports = { STATE_DIR, eventToState, pickState };
+/** Posição padrão da janela da ilha: topo central da área útil do monitor. */
+function defaultIslandPosition(workArea, windowSize) {
+  return { x: Math.round(workArea.x + (workArea.width - windowSize.width) / 2), y: workArea.y };
+}
+
+/**
+ * Mantém a janela da ilha dentro da área útil do monitor dela. `horizontalSlack` é quanto
+ * da janela pode sair pelos lados: a janela é mais larga que a pílula, e sem essa folga a
+ * pílula nunca encostaria na borda da tela.
+ */
+function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
+  // Monitor menor que a janela: o máximo cairia abaixo do mínimo; vence o mínimo.
+  const clamp = (value, min, max) => Math.round(Math.max(min, Math.min(value, max)));
+  return {
+    x: clamp(position.x, workArea.x - horizontalSlack, workArea.x + workArea.width - windowSize.width + horizontalSlack),
+    y: clamp(position.y, workArea.y, workArea.y + workArea.height - windowSize.height),
+  };
+}
+
+module.exports = { STATE_DIR, eventToState, pickState, defaultIslandPosition, clampIslandPosition };
