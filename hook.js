@@ -18,7 +18,11 @@ function startIslandIfStopped() {
   // Desacoplada e sem stdio: tem de sobreviver ao fim do hook sem segurar a saída dele.
   // Duas sessões abrindo juntas disparam duas vezes; a trava de instância única resolve.
   const { spawn } = require('node:child_process');
-  spawn(require('electron'), [__dirname], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  // Binário do Electron ausente chega como evento 'error' assíncrono, fora do try/catch: sem
+  // ouvinte, o hook quebraria com exceção visível na sessão do Claude. A ilha só não sobe.
+  spawn(require('electron'), [__dirname], { detached: true, stdio: 'ignore', windowsHide: true })
+    .on('error', () => {})
+    .unref();
 }
 
 let raw = '';
