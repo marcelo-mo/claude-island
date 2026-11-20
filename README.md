@@ -7,12 +7,12 @@ Feita em Electron, roda em Windows, macOS e Linux.
 ## Uso
 
 ```bash
-npm install            # baixa o Electron
-npm run hooks:install  # registra os hooks no ~/.claude/settings.json (faz backup antes)
-npm start              # sobe a ilha
+pnpm install            # baixa o Electron
+pnpm hooks:install  # registra os hooks no ~/.claude/settings.json (faz backup antes)
+pnpm start              # sobe a ilha
 ```
 
-Para remover os hooks: `npm run hooks:uninstall`. Testes: `npm test`.
+Para remover os hooks: `pnpm hooks:uninstall`. Testes: `pnpm test`.
 
 Sessões do Claude Code abertas antes do `hooks:install` só passam a aparecer depois de reiniciadas.
 
@@ -49,9 +49,4 @@ for encontrada, o botão não aparece. O código específico de cada sistema fic
 
 - **Linux:** o clique não atravessa a área transparente em volta da pílula (o Electron não
   encaminha eventos de mouse lá). Transparência também depende de um compositor ativo.
-- **Não inicia com o sistema:** é preciso rodar `npm start`.
-- **Node 26 no Windows:** o postinstall do Electron 39 pode sair em silêncio sem extrair o
-  binário (`Electron failed to install correctly`). O zip já fica em
-  `%LOCALAPPDATA%\electron\Cache`; extraia-o em `node_modules/electron/dist` e crie
-  `node_modules/electron/path.txt` contendo `electron.exe`. No npm 11 também é preciso
-  aprovar o script (`npm approve-scripts electron`), o que já está registrado no `package.json`.
+- **Não inicia com o sistema:** é preciso rodar `pnpm start`.
