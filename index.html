@@ -53,7 +53,7 @@
     column-gap: 8px; align-items: center; overflow: hidden; text-align: center;
     transition: width .45s var(--spring), height .45s var(--spring), border-radius .45s var(--spring),
                 opacity .25s, transform .45s var(--spring), box-shadow .3s, background .3s;
-    box-shadow: 0 0 0 1.5px var(--ring), var(--shadow);
+    box-shadow: 0 0 0 1px var(--ring), var(--shadow);
     cursor: grab;
   }
   #pill.dragging { cursor: grabbing; }
@@ -113,7 +113,7 @@
 
   @keyframes breathe { 50% { transform: scale(.55); opacity: .5; } }
   @keyframes glow {
-    50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 70%, transparent), 0 2px 20px color-mix(in srgb, var(--accent) 60%, transparent); }
+    50% { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 80%, transparent), 0 2px 16px color-mix(in srgb, var(--accent) 50%, transparent); }
   }
   @media (prefers-reduced-motion: reduce) { #pill, #dot { animation: none !important; transition: opacity .2s; } }
 </style>
