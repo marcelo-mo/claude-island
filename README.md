@@ -19,6 +19,11 @@ Sessões do Claude Code abertas antes do `hooks:install` só passam a aparecer d
 Quem já tinha os hooks instalados precisa rodar `pnpm hooks:install` de novo para ganhar os hooks
 novos (permissão e início automático).
 
+O `~/.claude/settings.json.island-backup` guarda o seu `settings.json` como era antes da ilha:
+reinstalar ou desinstalar não o sobrescreve. Mudou a pasta do repo de lugar ou trocou de Node? Rode
+`pnpm hooks:install` de novo e os hooks antigos da ilha são trocados pelos novos; hooks de outras
+ferramentas ficam como estão.
+
 ## Contribuindo
 
 Sugestões e relatos de erro são bem-vindos por **issue**; pull requests de fora não são aceitos.
