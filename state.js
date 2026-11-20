@@ -43,6 +43,21 @@ function eventToState(input) {
   }
 }
 
+// Faixas do anel de contexto: verde, amarelo e vermelho.
+const CONTEXT_WARN_PERCENT = 50;
+const CONTEXT_CRITICAL_PERCENT = 80;
+
+/**
+ * Normaliza o percentual de contexto usado, que vem de um arquivo gravado por outra
+ * ferramenta. Devolve { percent, level } ou null se o valor não for um percentual válido.
+ */
+function contextUsage(usedPercent) {
+  if (typeof usedPercent !== 'number' || !Number.isFinite(usedPercent)) return null;
+  const percent = Math.round(Math.min(100, Math.max(0, usedPercent)));
+  const level = percent >= CONTEXT_CRITICAL_PERCENT ? 'critical' : percent >= CONTEXT_WARN_PERCENT ? 'warn' : 'ok';
+  return { percent, level };
+}
+
 const PRIORITY = { waiting: 3, running: 2, done: 1 };
 
 /**
@@ -60,10 +75,14 @@ function pickState(sessions, now) {
   });
   if (alive.length === 0) return { state: 'idle', count: 0 };
   alive.sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt);
-  const { state, detail, project, windowPid } = alive[0];
+  const { state, detail, project, windowPid, contextPercent } = alive[0];
   // windowPid vem de um arquivo em disco: só sai daqui se for um PID plausível.
   const hasWindow = Number.isInteger(windowPid) && windowPid > 0;
-  return { state, detail, project, count: alive.length, windowPid: hasWindow ? windowPid : null };
+  return {
+    state, detail, project, count: alive.length,
+    windowPid: hasWindow ? windowPid : null,
+    context: contextUsage(contextPercent),
+  };
 }
 
 /** Posição padrão da janela da ilha: topo central da área útil do monitor. */
@@ -85,4 +104,4 @@ function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
   };
 }
 
-module.exports = { STATE_DIR, eventToState, pickState, defaultIslandPosition, clampIslandPosition };
+module.exports = { STATE_DIR, eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition };
