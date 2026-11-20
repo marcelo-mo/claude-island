@@ -1,0 +1,19 @@
+{
+  "name": "claude-island",
+  "version": "0.1.0",
+  "description": "Dynamic Island de desktop que mostra o estado das sessões do Claude Code",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "hooks:install": "node install.js",
+    "hooks:uninstall": "node install.js --uninstall"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0"
+  },
+  "allowScripts": {
+    "electron@39.8.10": true
+  }
+}
