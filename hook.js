@@ -2,8 +2,24 @@
 // e grava o estado da sessão em ~/.claude/island/<session_id>.json.
 const fs = require('node:fs');
 const path = require('node:path');
-const { STATE_DIR, eventToState, keepsPermission } = require('./state');
+const { STATE_DIR, HEARTBEAT_FILE, eventToState, keepsPermission, isHeartbeatFresh } = require('./state');
 const { findWindowPid } = require('./window');
+
+/** Sobe a ilha se ela não estiver no ar: ninguém precisa lembrar de abri-la a cada dia. */
+function startIslandIfStopped() {
+  let heartbeatAt;
+  try {
+    heartbeatAt = Number(fs.readFileSync(HEARTBEAT_FILE, 'utf8'));
+  } catch {
+    // sem batimento: a ilha nunca rodou nesta máquina
+  }
+  if (isHeartbeatFresh(heartbeatAt, Date.now())) return;
+  // Fora do Electron, require('electron') devolve o caminho do executável.
+  // Desacoplada e sem stdio: tem de sobreviver ao fim do hook sem segurar a saída dele.
+  // Duas sessões abrindo juntas disparam duas vezes; a trava de instância única resolve.
+  const { spawn } = require('node:child_process');
+  spawn(require('electron'), [__dirname], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+}
 
 let raw = '';
 process.stdin.on('data', (chunk) => (raw += chunk));
@@ -11,6 +27,7 @@ process.stdin.on('end', () => {
   // Um hook que falha atrapalha a sessão do Claude; a ilha nunca pode custar isso.
   try {
     const input = JSON.parse(raw);
+    if (input.hook_event_name === 'SessionStart') return startIslandIfStopped();
     // session_id vira nome de arquivo: não pode carregar separador de caminho.
     const sessionId = String(input.session_id || '').replace(/[^\w-]/g, '');
     if (!sessionId) return;
