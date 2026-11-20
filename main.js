@@ -2,11 +2,15 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { STATE_DIR, pickState, defaultIslandPosition, clampIslandPosition } = require('./state');
+const {
+  STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS,
+  pickState, decisionOutput, defaultIslandPosition, clampIslandPosition,
+} = require('./state');
 const { focusWindow } = require('./window');
 
 // A janela é maior que a pílula para caber a versão expandida; a sobra é transparente.
-const WINDOW_SIZE = { width: 440, height: 172 };
+// A altura é a da pílula com um pedido de permissão no tamanho máximo (texto com rolagem).
+const WINDOW_SIZE = { width: 440, height: 324 };
 // A pílula expandida (400px) fica centrada na janela (440px): sobram 20px transparentes de
 // cada lado, que podem sair da tela para a pílula encostar na borda do monitor.
 const HORIZONTAL_SLACK = 20;
@@ -28,6 +32,10 @@ const dragStartPositions = new Map();
 let savedOffsets = {};
 let lastPickedState = { state: 'idle', count: 0 };
 let shownWindowPid = null;
+// Pedido de permissão em exibição e desde quando: é a este id que um clique em "Permitir"
+// ou "Negar" se refere. O renderer nunca informa o id.
+let shownPermissionId = null;
+let shownPermissionSince = 0;
 
 const positionsFile = () => path.join(app.getPath('userData'), 'positions.json');
 
@@ -61,6 +69,38 @@ function readContextPercent(sessionId) {
   } catch {
     return undefined; // sem arquivo (ou pela metade): a sessão fica sem anel
   }
+}
+
+// Avisa o permission-hook de que há uma ilha no ar para mostrar os botões.
+function writeHeartbeat() {
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(HEARTBEAT_FILE, String(Date.now()));
+  } catch (error) {
+    console.error('Não foi possível gravar o batimento da ilha:', error.message);
+  }
+}
+
+// Decisão cujo hook já tinha saído (respondido no terminal, por exemplo) fica sem leitor.
+function removeOrphanDecisions() {
+  try {
+    for (const file of fs.readdirSync(DECISIONS_DIR)) {
+      const decisionFile = path.join(DECISIONS_DIR, file);
+      if (Date.now() - fs.statSync(decisionFile).mtimeMs > PERMISSION_WAIT_MS) fs.rmSync(decisionFile, { force: true });
+    }
+  } catch {
+    // pasta ainda não existe: nenhuma decisão foi gravada
+  }
+}
+
+/** Grava a decisão do usuário para o permission-hook que espera por ela. */
+function writeDecision(permissionId, behavior) {
+  const decisionFile = path.join(DECISIONS_DIR, `${permissionId}.json`);
+  // Grava num temporário e renomeia: o hook nunca lê uma decisão pela metade.
+  const temporaryFile = `${decisionFile}.tmp`;
+  fs.mkdirSync(DECISIONS_DIR, { recursive: true });
+  fs.writeFileSync(temporaryFile, JSON.stringify({ behavior }));
+  fs.renameSync(temporaryFile, decisionFile);
 }
 
 function readSessions() {
@@ -204,10 +244,27 @@ function registerIpcHandlers() {
       if (error) console.error('Não foi possível focar a janela da sessão:', error.message);
     });
   });
+
+  // Fronteira de confiança: isto aprova a execução de um comando. O renderer só diz
+  // 'allow' ou 'deny'; o pedido é o que está em exibição, guardado aqui.
+  ipcMain.on('island:decide', (event, behavior) => {
+    if (![...islands.values()].includes(islandOf(event))) return;
+    if (!shownPermissionId || !decisionOutput(behavior)) return;
+    // Pedido recém-trocado: o clique foi dado olhando para o anterior (ver PERMISSION_ARM_MS).
+    if (Date.now() - shownPermissionSince < PERMISSION_ARM_MS) return;
+    try {
+      writeDecision(shownPermissionId, behavior);
+    } catch (error) {
+      console.error('Não foi possível gravar a decisão do pedido de permissão:', error.message);
+    }
+  });
 }
 
 function start() {
   loadSavedOffsets();
+  removeOrphanDecisions();
+  writeHeartbeat();
+  setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
   registerIpcHandlers();
   syncIslands();
   screen.on('display-added', syncIslands);
@@ -225,6 +282,11 @@ function start() {
     lastSent = serialized;
     lastPickedState = picked;
     shownWindowPid = picked.windowPid ?? null;
+    const permissionId = picked.permission ? picked.permission.id : null;
+    if (permissionId !== shownPermissionId) {
+      shownPermissionId = permissionId;
+      shownPermissionSince = Date.now();
+    }
     for (const island of islands.values()) sendState(island);
   }, POLL_MS);
 }
@@ -234,4 +296,6 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.whenReady().then(start);
   app.on('window-all-closed', () => app.quit());
+  // Sem isto um permission-hook em espera só perceberia a saída quando o batimento envelhecesse.
+  app.on('will-quit', () => fs.rmSync(HEARTBEAT_FILE, { force: true }));
 }

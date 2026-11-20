@@ -70,6 +70,8 @@
   #pill[data-state="done"] { --accent: var(--done); }
   #pill.expanded { width: 400px; height: 104px; border-radius: 30px; }
   #pill.expanded.has-window { height: 148px; }
+  /* Com pedido de permissão a altura segue o texto do pedido (até o limite com rolagem). */
+  #pill.expanded.has-permission { height: auto; padding-bottom: 16px; }
   /* O contorno pulsa na cor do estado: dá para ler a situação de relance, sem mirar no ponto.
      Quem pede ação pulsa mais rápido; executando é o mais calmo para não cansar. */
   #pill { --ring: color-mix(in srgb, var(--accent) 40%, transparent); --pulse: 2.4s; animation: glow var(--pulse) ease-in-out infinite; }
@@ -135,17 +137,45 @@
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     opacity: 0; transition: opacity .2s;
   }
-  #open {
-    grid-column: 1 / -1; justify-self: center; margin-top: 8px;
-    font: inherit; font-size: 13px; font-weight: 600; color: var(--button-text); background: var(--button);
-    border: 0; border-radius: 17px; padding: 8px 20px; cursor: pointer;
-    opacity: 0; transition: opacity .2s, filter .15s;
+  /* Pedido de permissão: o texto aparece inteiro, quebrando linha e rolando se preciso.
+     Nada de reticências: não se aprova um comando cortado. */
+  #permission {
+    width: 0; min-width: 100%; grid-column: 1 / -1; margin-top: 8px; text-align: left;
+    background: color-mix(in srgb, var(--text) 9%, transparent); border-radius: 12px; padding: 8px 6px 8px 12px;
   }
-  #open:hover { filter: brightness(1.15); }
-  #open:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  #permission[hidden] { display: none; }
+  #permission-tool { display: block; font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+  #permission-text {
+    font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text);
+    white-space: pre-wrap; overflow-wrap: anywhere; max-height: 105px; overflow-y: auto; padding-right: 6px;
+    cursor: default; scrollbar-width: thin; scrollbar-color: var(--muted) transparent;
+  }
+  #permission-text:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  #permission-hint { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
+  #permission-hint[hidden] { display: none; }
+  #actions {
+    width: 0; min-width: 100%; grid-column: 1 / -1; margin-top: 8px;
+    display: flex; justify-content: center; align-items: center; gap: 8px;
+    opacity: 0; transition: opacity .2s;
+  }
+  #actions button {
+    font: inherit; font-size: 13px; font-weight: 600; color: var(--button-text); background: var(--button);
+    border: 0; border-radius: 17px; padding: 8px 20px; cursor: pointer; transition: filter .15s, opacity .15s;
+  }
+  #actions button[hidden] { display: none; }
+  #actions button:hover:not(:disabled) { filter: brightness(1.15); }
+  #actions button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  #actions button:disabled { opacity: .45; cursor: default; }
+  /* "Negar" e, havendo pedido, "Abrir sessão" são secundários: só "Permitir" fica preenchido. */
+  #actions #deny, #pill.has-permission #open {
+    color: var(--text); background: transparent;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 35%, transparent);
+  }
+  #pill.has-permission #open { margin-right: auto; box-shadow: none; color: var(--muted); padding-inline: 4px; }
   /* Fora do estado expandido o botão não existe para o mouse nem para leitor de tela. */
   #pill:not(.expanded.has-window) #open { visibility: hidden; }
-  #pill.expanded #detail, #pill.expanded #open { opacity: 1; transition-delay: .15s; }
+  #pill.has-permission:not(.has-window) #open { display: none; }
+  #pill.expanded #detail, #pill.expanded #actions { opacity: 1; transition-delay: .15s; }
 
   @keyframes breathe { 50% { transform: scale(.55); opacity: .5; } }
   @keyframes hop { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-4px); } }
@@ -179,7 +209,16 @@
     </span>
     </div>
     <span id="detail"></span>
-    <button id="open" type="button">Abrir sessão</button>
+    <div id="permission" hidden>
+      <span id="permission-tool"></span>
+      <pre id="permission-text" tabindex="0" aria-label="Pedido de permissão"></pre>
+      <span id="permission-hint" hidden>Role até o fim para poder permitir</span>
+    </div>
+    <div id="actions">
+      <button id="open" type="button">Abrir sessão</button>
+      <button id="deny" type="button" hidden>Negar</button>
+      <button id="allow" type="button" hidden>Permitir</button>
+    </div>
   </div>
 
 <script>
@@ -191,9 +230,23 @@
   const contextNumber = document.getElementById('context-number');
   const contextValue = context.querySelector('.value');
 
+  const permissionBox = document.getElementById('permission');
+  const permissionTool = document.getElementById('permission-tool');
+  const permissionText = document.getElementById('permission-text');
+  const permissionHint = document.getElementById('permission-hint');
+  const allowButton = document.getElementById('allow');
+  const denyButton = document.getElementById('deny');
+
   const TITLES = { running: 'Trabalhando', waiting: 'Precisa de você', done: 'Concluído' };
+  // A ilha abre sozinha quando chega um pedido; os botões só valem depois deste tempo na tela,
+  // para um clique que já ia para outra janela não virar aprovação. O main.js aplica a mesma
+  // regra (PERMISSION_ARM_MS no state.js) e é quem de fato decide.
+  const PERMISSION_ARM_MS = 800;
   let current = { state: 'idle' };
   let hovering = false;
+  let armedPermissionId = null;
+  let answeredPermissionId = null;
+  let readPermissionId = null;
 
   function render() {
     pill.dataset.state = current.state;
@@ -216,7 +269,38 @@
     detail.textContent = usage
       ? `${current.project} · ${current.detail} · contexto ${usage.percent}%`
       : `${current.project} · ${current.detail}`;
+
+    const permission = current.permission;
+    pill.classList.toggle('has-permission', Boolean(permission));
+    permissionBox.hidden = allowButton.hidden = denyButton.hidden = !permission;
+    if (!permission) return;
+    permissionTool.textContent = permission.tool;
+    // Regravar o mesmo texto devolveria a rolagem ao topo a cada atualização de estado.
+    if (permissionText.textContent !== permission.text) {
+      permissionText.textContent = permission.text;
+      permissionText.scrollTop = 0;
+    }
+    // Só se permite o que foi visto inteiro: se o texto não coube, "Permitir" espera a rolagem
+    // chegar ao fim. Negar não precisa disso.
+    const hiddenBelow = permissionText.scrollHeight - permissionText.scrollTop - permissionText.clientHeight;
+    if (permissionText.clientHeight > 0 && hiddenBelow <= 2) readPermissionId = permission.id;
+    const wasRead = readPermissionId === permission.id;
+    permissionHint.hidden = wasRead;
+    // Depois do clique os botões ficam travados até o pedido sair do estado.
+    const locked = permission.id !== armedPermissionId || permission.id === answeredPermissionId;
+    denyButton.disabled = locked;
+    allowButton.disabled = locked || !wasRead;
   }
+  permissionText.addEventListener('scroll', render);
+
+  function decide(behavior) {
+    if (!current.permission) return;
+    answeredPermissionId = current.permission.id;
+    window.island.decide(behavior);
+    render();
+  }
+  allowButton.addEventListener('click', () => decide('allow'));
+  denyButton.addEventListener('click', () => decide('deny'));
 
   // Notas diferentes para dar para saber, sem olhar, se é para responder ou se acabou.
   const CHIMES = { waiting: [880, 1175], done: [660, 880] };
@@ -240,7 +324,12 @@
   // Com uma ilha por monitor, só a que o main indicar toca o aviso.
   window.island.onState((next, shouldChime) => {
     if (shouldChime && next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
+    const previousPermissionId = current.permission ? current.permission.id : null;
     current = next;
+    const permissionId = next.permission ? next.permission.id : null;
+    if (permissionId && permissionId !== previousPermissionId) {
+      setTimeout(() => { armedPermissionId = permissionId; render(); }, PERMISSION_ARM_MS);
+    }
     render();
   });
 
@@ -266,7 +355,8 @@
   let drag = null;
 
   pill.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0 || event.target.closest('button')) return;
+    // No texto do pedido o arraste é da barra de rolagem, não da ilha.
+    if (event.button !== 0 || event.target.closest('button, #permission')) return;
     // Com a captura os pointermove continuam chegando mesmo se o ponteiro sair da pílula.
     pill.setPointerCapture(event.pointerId);
     drag = { startX: event.screenX, startY: event.screenY, moved: false };
@@ -300,7 +390,7 @@
   });
 
   pill.addEventListener('dblclick', (event) => {
-    if (event.target.closest('button')) return;
+    if (event.target.closest('button, #permission')) return;
     window.island.resetPosition();
     // A janela sai de baixo do ponteiro sem gerar mouseleave; sem isto a pílula ficaria
     // expandida e a janela bloqueando cliques até o mouse passar por ela de novo.

@@ -1,7 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition } = require('./state');
-const { applyHooks, COMMAND } = require('./install');
+const {
+  eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
+  keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh, PERMISSION_TEXT_LIMIT,
+} = require('./state');
+const { applyHooks, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
 test('eventos do Claude Code viram estados da ilha', () => {
   assert.equal(eventToState({ hook_event_name: 'UserPromptSubmit' }).state, 'running');
@@ -25,7 +28,7 @@ test('a ilha mostra a sessão mais urgente e expira as antigas', () => {
     { state: 'waiting', detail: 'Permissão', project: 'b', windowPid: 4242, updatedAt: now - 60_000 },
     { state: 'done', detail: 'Concluído', project: 'c', updatedAt: now - 1_000 },
   ], now);
-  assert.deepEqual(picked, { state: 'waiting', detail: 'Permissão', project: 'b', count: 3, windowPid: 4242, context: null });
+  assert.deepEqual(picked, { state: 'waiting', detail: 'Permissão', project: 'b', count: 3, windowPid: 4242, context: null, permission: null });
 
   // PID ausente ou adulterado no arquivo de estado: a ilha fica sem botão, não com PID inválido
   for (const windowPid of [undefined, null, '4242; calc', 1.5, -3]) {
@@ -73,15 +76,108 @@ test('o anel de contexto muda de faixa em 50% e 80% e rejeita valores inválidos
   assert.deepEqual(picked.context, { percent: 62, level: 'warn' });
 });
 
+test('o pedido de permissão só vai para a ilha se couber inteiro e for legível', () => {
+  const bash = (command) => permissionRequest({ tool_name: 'Bash', tool_input: { command, description: 'd' } });
+  assert.deepEqual(bash('node escreve.js'), { tool: 'Bash', text: 'node escreve.js' });
+  assert.deepEqual(bash('echo a\necho b'), { tool: 'Bash', text: 'echo a\necho b' });
+  assert.deepEqual(
+    permissionRequest({ tool_name: 'Read', tool_input: { file_path: 'a.txt' } }),
+    { tool: 'Read', text: '{\n  "file_path": "a.txt"\n}' },
+  );
+
+  assert.notEqual(bash('x'.repeat(PERMISSION_TEXT_LIMIT)), null);
+  assert.equal(bash('x'.repeat(PERMISSION_TEXT_LIMIT + 1)), null);
+  assert.equal(permissionRequest({ tool_name: 'Write', tool_input: { content: 'x'.repeat(PERMISSION_TEXT_LIMIT) } }), null);
+  // texto que esconderia o comando real: muitas linhas, caracteres de controle ou invisíveis
+  assert.equal(bash(`echo ok${'\n'.repeat(20)}rm -rf .`), null);
+  for (const deceptive of ['echo ok\r', 'a\x1b[2Kb', 'a‮b', 'a​b', 'a b']) assert.equal(bash(deceptive), null);
+  for (const invalid of [undefined, null, 42, '', '   ', ['ls']]) assert.equal(bash(invalid), null);
+
+  // campo do Bash que muda o risco sem aparecer na ilha: o terminal decide
+  assert.equal(permissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls', dangerouslyDisableSandbox: true } }), null);
+  assert.deepEqual(
+    permissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls', timeout: 5000, run_in_background: true } }),
+    { tool: 'Bash', text: 'ls' },
+  );
+  assert.equal(permissionRequest({ tool_name: 'Bash' }), null);
+  assert.equal(permissionRequest({ tool_name: 'Bash', tool_input: 'ls' }), null);
+  assert.equal(permissionRequest({ tool_input: { command: 'ls' } }), null);
+  assert.equal(permissionRequest({ tool_name: 'x'.repeat(101), tool_input: {} }), null);
+  // pergunta e plano pedem mais que um sim/não: ficam com o terminal
+  assert.equal(permissionRequest({ tool_name: 'AskUserQuestion', tool_input: { questions: [] } }), null);
+  assert.equal(permissionRequest({ tool_name: 'ExitPlanMode', tool_input: { plan: 'p' } }), null);
+});
+
+test('o pedido lido do disco é validado antes de chegar à ilha', () => {
+  const now = 1_000_000_000;
+  const permission = { id: '3f2b8c1e-9d4a-4b6f-8a1c-2e5d7f9b0c3a', tool: 'Bash', text: 'node escreve.js' };
+  assert.deepEqual(validPermission({ ...permission, extra: 'descartado' }), permission);
+  assert.deepEqual(pickState([{ state: 'waiting', permission, updatedAt: now }], now).permission, permission);
+  // só quem espera resposta tem pedido pendente
+  assert.equal(pickState([{ state: 'running', permission, updatedAt: now }], now).permission, null);
+
+  for (const invalid of [
+    undefined, null, 'x', [],
+    { ...permission, id: '../../settings' },
+    { ...permission, id: `${permission.id}/..` },
+    { ...permission, id: permission.id.toUpperCase() },
+    { ...permission, id: 7 },
+    { ...permission, tool: undefined },
+    { ...permission, tool: '' },
+    { ...permission, text: 42 },
+    { ...permission, text: 'x'.repeat(PERMISSION_TEXT_LIMIT + 1) },
+    { ...permission, text: 'a‮b' },
+  ]) {
+    assert.equal(validPermission(invalid), null);
+    assert.equal(pickState([{ state: 'waiting', permission: invalid, updatedAt: now }], now).permission, null);
+  }
+});
+
+test('a decisão só sai como allow ou deny, e o pedido só sobrevive ao Notification', () => {
+  assert.equal(
+    decisionOutput('allow'),
+    '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}',
+  );
+  assert.equal(
+    decisionOutput('deny'),
+    '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":"Negado pelo usuário na ilha"}}}',
+  );
+  for (const invalid of [undefined, null, '', 'ALLOW', 'allow ', 'ask', true, { behavior: 'allow' }, ['allow']]) {
+    assert.equal(decisionOutput(invalid), null);
+  }
+
+  assert.equal(keepsPermission('Notification'), true);
+  for (const event of ['PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Stop', undefined]) assert.equal(keepsPermission(event), false);
+});
+
+test('a ilha só conta como viva com batimento recente', () => {
+  const now = 1_000_000_000;
+  assert.equal(isHeartbeatFresh(now, now), true);
+  assert.equal(isHeartbeatFresh(now - 6_000, now), true);
+  assert.equal(isHeartbeatFresh(now - 6_001, now), false);
+  // relógio adiantado no arquivo não vale como "viva para sempre"
+  assert.equal(isHeartbeatFresh(now + 60_000, now), false);
+  for (const invalid of [NaN, undefined, null, '']) assert.equal(isHeartbeatFresh(invalid, now), false);
+});
+
 test('instalar preserva hooks alheios, é idempotente e desinstalar limpa', () => {
   const foreign = { matcher: '', hooks: [{ type: 'command', command: 'node notify.js' }] };
-  const original = { model: 'x', hooks: { Stop: [foreign], SessionStart: [foreign] } };
+  const original = { model: 'x', hooks: { Stop: [foreign], SessionStart: [foreign], PermissionRequest: [foreign] } };
 
   const installed = applyHooks(applyHooks(original, true), true);
   assert.equal(installed.model, 'x');
   assert.deepEqual(installed.hooks.SessionStart, [foreign]);
   assert.deepEqual(installed.hooks.Stop, [foreign, { matcher: '', hooks: [{ type: 'command', command: COMMAND }] }]);
   assert.equal(installed.hooks.PreToolUse.length, 1);
+  // o pedido de permissão tem script próprio, com prazo maior que a espera pelo clique
+  assert.deepEqual(installed.hooks.PermissionRequest, [
+    foreign,
+    { matcher: '', hooks: [{ type: 'command', command: PERMISSION_COMMAND, timeout: PERMISSION_TIMEOUT_SECONDS }] },
+  ]);
+  assert.equal(PERMISSION_TIMEOUT_SECONDS, 330);
+  assert.match(PERMISSION_COMMAND, /permission-hook\.js"$/);
+  // nenhum outro evento chama o permission-hook, e o PermissionRequest não chama o hook.js
+  assert.equal(JSON.stringify(installed).split('permission-hook.js').length - 1, 1);
 
   assert.deepEqual(applyHooks(installed, false), original);
 });
