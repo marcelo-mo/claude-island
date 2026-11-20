@@ -1,10 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const {
   eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
   keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh, PERMISSION_TEXT_LIMIT,
 } = require('./state');
-const { applyHooks, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
+const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
 test('eventos do Claude Code viram estados da ilha', () => {
   assert.equal(eventToState({ hook_event_name: 'UserPromptSubmit' }).state, 'running');
@@ -176,9 +179,63 @@ test('instalar preserva hooks alheios, é idempotente e desinstalar limpa', () =
     { matcher: '', hooks: [{ type: 'command', command: PERMISSION_COMMAND, timeout: PERMISSION_TIMEOUT_SECONDS }] },
   ]);
   assert.equal(PERMISSION_TIMEOUT_SECONDS, 330);
-  assert.match(PERMISSION_COMMAND, /permission-hook\.js"$/);
+  assert.match(PERMISSION_COMMAND, /permission-hook\.js" --claude-island$/);
   // nenhum outro evento chama o permission-hook, e o PermissionRequest não chama o hook.js
   assert.equal(JSON.stringify(installed).split('permission-hook.js').length - 1, 1);
 
   assert.deepEqual(applyHooks(installed, false), original);
+});
+
+test('hook da ilha de outra pasta ou de outro Node é trocado; hook.js alheio fica', () => {
+  const entry = (command) => ({ matcher: '', hooks: [{ type: 'command', command }] });
+  const moved = entry('"/old/node" "/repo-antigo/hook.js" --claude-island');
+  const foreign = entry('node /outra-ferramenta/hook.js');
+  const legacy = entry(COMMAND.replace(' --claude-island', ''));
+  const installed = applyHooks({ hooks: { Stop: [moved, foreign, legacy] } }, true);
+  assert.deepEqual(installed.hooks.Stop, [foreign, entry(COMMAND)]);
+  assert.deepEqual(applyHooks(installed, false).hooks.Stop, [foreign]);
+});
+
+/** Cria um diretório temporário com um settings.json e devolve o caminho dele. */
+function tempSettings(content) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'island-install-'));
+  const file = path.join(dir, 'settings.json');
+  fs.writeFileSync(file, JSON.stringify(content));
+  return file;
+}
+
+test('o backup guarda a versão de antes da ilha, mesmo instalando duas vezes e desinstalando', () => {
+  const original = { model: 'x', hooks: { Stop: [{ matcher: '', hooks: [{ type: 'command', command: 'node notify.js' }] }] } };
+  const file = tempSettings(original);
+  const backup = () => JSON.parse(fs.readFileSync(`${file}.island-backup`, 'utf8'));
+
+  updateSettingsFile(file, true);
+  updateSettingsFile(file, true);
+  assert.deepEqual(backup(), original);
+  updateSettingsFile(file, false);
+  assert.deepEqual(backup(), original);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), original);
+  // nenhum temporário fica para trás
+  assert.deepEqual(fs.readdirSync(path.dirname(file)).sort(), ['settings.json', 'settings.json.island-backup']);
+});
+
+test('settings.json inválido não é tocado', () => {
+  const file = tempSettings({});
+  fs.writeFileSync(file, '{ quebrado');
+  assert.throws(() => updateSettingsFile(file, true));
+  assert.equal(fs.readFileSync(file, 'utf8'), '{ quebrado');
+});
+
+test('settings.json que é link (dotfiles) continua link e o alvo recebe os hooks', (t) => {
+  const target = tempSettings({ model: 'x' });
+  const link = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'island-link-')), 'settings.json');
+  try {
+    fs.symlinkSync(target, link, 'file');
+  } catch {
+    return t.skip('sem permissão para criar symlink nesta máquina');
+  }
+  updateSettingsFile(link, true);
+  assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
+  assert.equal(JSON.parse(fs.readFileSync(target, 'utf8')).model, 'x');
+  assert.ok(JSON.parse(fs.readFileSync(target, 'utf8')).hooks.Stop);
 });
