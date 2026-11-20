@@ -77,32 +77,3 @@ Por baixo: o hook `PermissionRequest` chama `permission-hook.js`, que grava o pe
 de estado da sessão e espera até 5 minutos pelo arquivo de decisão que a ilha grava em
 `~/.claude/island/decisions/`. Ele só participa se a ilha estiver no ar (ela grava um batimento
 em `~/.claude/island/.heartbeat` a cada 2 s); senão, sai na hora e nada muda no Claude Code.
-
-## Limitações conhecidas
-
-- **Os botões de permissão só aparecem quando o Claude Code de fato mostra o diálogo.** No modo
-  de permissão `auto` isso é raro: a maioria dos pedidos é resolvida sem diálogo e sem disparar
-  o hook. Para ver em ação, abra a sessão com `claude --permission-mode manual`.
-- **Pedido respondido no terminal:** os botões só somem da ilha no próximo evento da sessão
-  (em geral, quando a ferramenta termina). Clicar neles nesse intervalo não tem efeito.
-- **Com mais de uma sessão esperando,** a ilha mostra só a mais recente; o pedido das outras
-  fica com o terminal até chegar a vez delas.
-- **Quem consegue gravar em `~/.claude/island/` consegue aprovar um pedido.** É a mesma
-  fronteira do `~/.claude/settings.json`: qualquer programa rodando com o seu usuário.
-- **Permitir e negar pela ilha não foram testados em macOS nem em Linux.**
-- **Abrir sessão traz a janela, não a aba:** no Windows Terminal e no terminal integrado do
-  VS Code várias sessões dividem a mesma janela; o botão não troca para a aba certa.
-- **Abrir sessão fora do Windows não foi testado.** macOS usa `osascript` (o sistema pede
-  permissão de Automação/Acessibilidade na primeira vez); Linux depende do `xdotool` e de X11
-  — sem ele, ou em Wayland, o botão não aparece.
-- **Abrir sessão no Windows simula um toque na tecla Alt** para o sistema permitir a troca de
-  janela ativa; em algum aplicativo isso pode destacar a barra de menus por um instante.
-- **A ilha não passa de um monitor para outro:** cada monitor tem a sua, e o arraste para na
-  borda dele.
-- **A posição salva é por identificador do monitor.** Se o sistema trocar esse identificador
-  (outro cabo, outra porta, dock), a ilha daquele monitor volta ao topo central.
-- **Arrastar e várias ilhas foram testados só no Windows.**
-- **Linux:** o clique não atravessa a área transparente em volta da pílula (o Electron não
-  encaminha eventos de mouse lá). Transparência também depende de um compositor ativo.
-- **Não inicia com o sistema:** a ilha sobe na primeira sessão do Claude Code, não no login.
-  Se for fechada com sessões abertas, só volta na próxima sessão ou com `pnpm start`.
