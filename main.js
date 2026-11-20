@@ -6,7 +6,7 @@ const { STATE_DIR, pickState, defaultIslandPosition, clampIslandPosition } = req
 const { focusWindow } = require('./window');
 
 // A janela é maior que a pílula para caber a versão expandida; a sobra é transparente.
-const WINDOW_SIZE = { width: 440, height: 160 };
+const WINDOW_SIZE = { width: 440, height: 172 };
 // A pílula expandida (400px) fica centrada na janela (440px): sobram 20px transparentes de
 // cada lado, que podem sair da tela para a pílula encostar na borda do monitor.
 const HORIZONTAL_SLACK = 20;
