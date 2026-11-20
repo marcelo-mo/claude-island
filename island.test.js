@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { eventToState, pickState } = require('./state');
+const { eventToState, pickState, defaultIslandPosition, clampIslandPosition } = require('./state');
 const { applyHooks, COMMAND } = require('./install');
 
 test('eventos do Claude Code viram estados da ilha', () => {
@@ -40,6 +40,22 @@ test('a ilha mostra a sessão mais urgente e expira as antigas', () => {
 
   assert.equal(pickState([{ state: 'done', updatedAt: now - 7_000 }], now).state, 'idle');
   assert.equal(pickState([{ state: 'running', updatedAt: now - 3 * 60 * 60_000 }], now).state, 'idle');
+});
+
+test('a ilha arrastada fica dentro da área útil do monitor dela', () => {
+  const windowSize = { width: 440, height: 160 };
+  // monitor secundário à esquerda do primário, com barra de tarefas embaixo
+  const workArea = { x: -1920, y: 0, width: 1920, height: 1040 };
+  const clamp = (position) => clampIslandPosition(position, workArea, windowSize, 20);
+
+  assert.deepEqual(defaultIslandPosition(workArea, windowSize), { x: -1180, y: 0 });
+  assert.deepEqual(clamp({ x: -1180, y: 0 }), { x: -1180, y: 0 });
+  assert.deepEqual(clamp({ x: -1000.4, y: 300.6 }), { x: -1000, y: 301 });
+  // a folga horizontal deixa a pílula (não a janela) encostar na borda
+  assert.deepEqual(clamp({ x: -5000, y: -50 }), { x: -1940, y: 0 });
+  assert.deepEqual(clamp({ x: 5000, y: 5000 }), { x: -420, y: 880 });
+  // monitor menor que a janela: não inverte os limites
+  assert.deepEqual(clampIslandPosition({ x: 50, y: 50 }, { x: 0, y: 0, width: 300, height: 100 }, windowSize, 20), { x: -20, y: 0 });
 });
 
 test('instalar preserva hooks alheios, é idempotente e desinstalar limpa', () => {

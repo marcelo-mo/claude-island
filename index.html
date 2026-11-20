@@ -52,7 +52,9 @@
     transition: width .45s var(--spring), height .45s var(--spring), border-radius .45s var(--spring),
                 opacity .25s, transform .45s var(--spring), box-shadow .3s, background .3s;
     box-shadow: var(--shadow);
+    cursor: grab;
   }
+  #pill.dragging { cursor: grabbing; }
   #pill[data-state="idle"] { opacity: 0; transform: scale(.6) translateY(-12px); pointer-events: none; }
   #pill[data-state="waiting"] { --accent: var(--waiting); }
   #pill[data-state="done"] { --accent: var(--done); }
@@ -66,7 +68,7 @@
 
   #title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
   #count {
-    justify-self: end; font-size: 11px; color: #000; background: var(--accent);
+    justify-self: end; font-size: 11px; color: var(--button-text); background: var(--button);
     border-radius: 9px; padding: 1px 7px; font-weight: 700;
   }
   #count:empty { visibility: hidden; }
@@ -141,8 +143,9 @@
     setTimeout(() => audio.close(), 1000);
   }
 
-  window.island.onState((next) => {
-    if (next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
+  // Com uma ilha por monitor, só a que o main indicar toca o aviso.
+  window.island.onState((next, shouldChime) => {
+    if (shouldChime && next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
     current = next;
     render();
   });
@@ -150,8 +153,63 @@
   document.getElementById('open').addEventListener('click', () => window.island.focusSession());
 
   // A janela deixa o clique atravessar; só a pílula (e o botão dentro dela) captura o mouse.
-  pill.addEventListener('mouseenter', () => { hovering = true; window.island.setHover(true); render(); });
-  pill.addEventListener('mouseleave', () => { hovering = false; window.island.setHover(false); render(); });
+  function setHovering(isOverPill) {
+    hovering = isOverPill;
+    window.island.setHover(isOverPill);
+    render();
+  }
+  pill.addEventListener('mouseenter', () => setHovering(true));
+  // Rede de segurança: se um mouseenter se perder, o primeiro movimento sobre a pílula corrige.
+  pill.addEventListener('mousemove', () => { if (!hovering) setHovering(true); });
+  // No meio de um arraste a pílula não pode encolher nem devolver o clique para a janela de trás.
+  pill.addEventListener('mouseleave', () => { if (!drag) setHovering(false); });
+
+  // Arraste manual: -webkit-app-region: drag engoliria, no Windows, o hover e o clique no botão.
+  // Abaixo deste limiar é clique (ou duplo clique), não arraste.
+  const DRAG_THRESHOLD_PX = 4;
+  let drag = null;
+
+  pill.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || event.target.closest('#open')) return;
+    // Com a captura os pointermove continuam chegando mesmo se o ponteiro sair da pílula.
+    pill.setPointerCapture(event.pointerId);
+    drag = { startX: event.screenX, startY: event.screenY, moved: false };
+  });
+
+  pill.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    // screenX/screenY não mudam quando a janela anda; clientX/clientY andariam junto com ela.
+    const deltaX = event.screenX - drag.startX;
+    const deltaY = event.screenY - drag.startY;
+    if (!drag.moved) {
+      if (Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
+      drag.moved = true;
+      pill.classList.add('dragging');
+    }
+    window.island.drag(deltaX, deltaY);
+  });
+
+  // Dispara ao soltar o botão e também se o sistema cancelar o gesto.
+  pill.addEventListener('lostpointercapture', (event) => {
+    if (!drag) return;
+    const moved = drag.moved;
+    drag = null;
+    pill.classList.remove('dragging');
+    if (moved) window.island.endDrag();
+    // O mouseleave foi ignorado durante o arraste: confere onde o ponteiro terminou.
+    const rect = pill.getBoundingClientRect();
+    const isOverPill = event.clientX >= rect.left && event.clientX <= rect.right
+      && event.clientY >= rect.top && event.clientY <= rect.bottom;
+    if (isOverPill !== hovering) setHovering(isOverPill);
+  });
+
+  pill.addEventListener('dblclick', (event) => {
+    if (event.target.closest('#open')) return;
+    window.island.resetPosition();
+    // A janela sai de baixo do ponteiro sem gerar mouseleave; sem isto a pílula ficaria
+    // expandida e a janela bloqueando cliques até o mouse passar por ela de novo.
+    setHovering(false);
+  });
 </script>
 </body>
 </html>
