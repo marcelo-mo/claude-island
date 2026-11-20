@@ -3,6 +3,21 @@ const os = require('node:os');
 const path = require('node:path');
 
 const STATE_DIR = path.join(os.homedir(), '.claude', 'island');
+// A ilha grava aqui a decisão de cada pedido de permissão (<id>.json); o permission-hook lê e apaga.
+const DECISIONS_DIR = path.join(STATE_DIR, 'decisions');
+// Batimento da ilha: sem ele o permission-hook não espera por botões que ninguém vai ver.
+const HEARTBEAT_FILE = path.join(STATE_DIR, '.heartbeat');
+const HEARTBEAT_INTERVAL_MS = 2_000;
+const HEARTBEAT_STALE_MS = 6_000;
+// Quanto o permission-hook espera pela resposta na ilha antes de deixar só o terminal decidir.
+const PERMISSION_WAIT_MS = 5 * 60_000;
+// Os botões só valem depois que o pedido ficou este tempo na tela: a ilha abre sozinha, e um
+// clique que já estava a caminho de outra janela não pode virar uma aprovação.
+const PERMISSION_ARM_MS = 800;
+// Acima disto o pedido não cabe na ilha de forma legível; quem decide é o terminal.
+const PERMISSION_TEXT_LIMIT = 600;
+const PERMISSION_LINE_LIMIT = 20;
+const PERMISSION_TOOL_LIMIT = 100;
 
 // Tempo suficiente para alcançar o botão "Abrir" antes de a ilha sumir.
 const DONE_VISIBLE_MS = 10_000;
@@ -43,6 +58,68 @@ function eventToState(input) {
   }
 }
 
+/**
+ * Um pedido de permissão pendente só continua valendo quando o evento seguinte é o
+ * Notification do mesmo pedido. Qualquer outro evento da sessão quer dizer que ele já foi
+ * respondido (no terminal); sumir do arquivo de estado é o aviso para o permission-hook.
+ */
+function keepsPermission(hookEventName) {
+  return hookEventName === 'Notification';
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// Caracteres de controle e de formatação invisível (inversão de direção, largura zero,
+// separadores de linha Unicode): com eles o texto exibido pode não ser o que será executado.
+const DECEPTIVE_CHARACTERS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
+/** O usuário só pode aprovar pela ilha o que consegue ler inteiro e sem truques. */
+function isReadablePermissionText(text) {
+  if (typeof text !== 'string' || text.trim() === '' || text.length > PERMISSION_TEXT_LIMIT) return false;
+  const lines = text.split('\n');
+  return lines.length <= PERMISSION_LINE_LIMIT && !lines.some((line) => DECEPTIVE_CHARACTERS.test(line));
+}
+
+const isPermissionTool = (tool) => typeof tool === 'string' && tool !== '' && tool.length <= PERMISSION_TOOL_LIMIT
+  && !DECEPTIVE_CHARACTERS.test(tool);
+
+/**
+ * Monta, a partir do payload do hook PermissionRequest, o que a ilha vai mostrar:
+ * { tool, text }. Devolve null quando o pedido não pode ser decidido pela ilha (texto
+ * ilegível ou longo demais, ou ferramenta que pede mais que um sim/não); aí o terminal resolve.
+ */
+function permissionRequest(input) {
+  const tool = input.tool_name;
+  if (!isPermissionTool(tool) || ASKING_TOOLS[tool]) return null;
+  const toolInput = input.tool_input;
+  if (!toolInput || typeof toolInput !== 'object') return null;
+  const text = tool === 'Bash' ? toolInput.command : JSON.stringify(toolInput, null, 2);
+  return isReadablePermissionText(text) ? { tool, text } : null;
+}
+
+/** Valida o pedido lido do arquivo de estado (dado em disco: nunca confiar). */
+function validPermission(permission) {
+  if (!permission || typeof permission !== 'object') return null;
+  const { id, tool, text } = permission;
+  if (typeof id !== 'string' || !UUID_PATTERN.test(id)) return null;
+  if (!isPermissionTool(tool) || !isReadablePermissionText(text)) return null;
+  return { id, tool, text };
+}
+
+/**
+ * Saída que o Claude Code espera do hook PermissionRequest. Vale só para esta chamada:
+ * nada de updatedPermissions. Devolve null se `behavior` não for exatamente allow ou deny.
+ */
+function decisionOutput(behavior) {
+  if (behavior !== 'allow' && behavior !== 'deny') return null;
+  const decision = behavior === 'allow' ? { behavior } : { behavior, message: 'Negado pelo usuário na ilha' };
+  return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } });
+}
+
+/** A ilha está no ar se o batimento dela é recente (e não veio do futuro). */
+function isHeartbeatFresh(heartbeatAt, now) {
+  return Number.isFinite(heartbeatAt) && heartbeatAt <= now + HEARTBEAT_STALE_MS && now - heartbeatAt <= HEARTBEAT_STALE_MS;
+}
+
 // Faixas do anel de contexto: verde, amarelo e vermelho.
 const CONTEXT_WARN_PERCENT = 50;
 const CONTEXT_CRITICAL_PERCENT = 80;
@@ -64,6 +141,7 @@ const PRIORITY = { waiting: 3, running: 2, done: 1 };
  * Escolhe o que a ilha mostra entre todas as sessões: a mais urgente e, no empate,
  * a mais recente. `count` é quantas sessões estão ativas (para o contador da ilha) e
  * `windowPid` é o processo dono da janela do terminal dela (null se desconhecido).
+ * `permission` é o pedido de permissão que a ilha pode responder (null se não houver).
  */
 function pickState(sessions, now) {
   const alive = sessions.filter((session) => {
@@ -75,13 +153,15 @@ function pickState(sessions, now) {
   });
   if (alive.length === 0) return { state: 'idle', count: 0 };
   alive.sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt);
-  const { state, detail, project, windowPid, contextPercent } = alive[0];
+  const { state, detail, project, windowPid, contextPercent, permission } = alive[0];
   // windowPid vem de um arquivo em disco: só sai daqui se for um PID plausível.
   const hasWindow = Number.isInteger(windowPid) && windowPid > 0;
   return {
     state, detail, project, count: alive.length,
     windowPid: hasWindow ? windowPid : null,
     context: contextUsage(contextPercent),
+    // Só quem está esperando resposta tem pedido pendente.
+    permission: state === 'waiting' ? validPermission(permission) : null,
   };
 }
 
@@ -104,4 +184,8 @@ function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
   };
 }
 
-module.exports = { STATE_DIR, eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition };
+module.exports = {
+  STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
+  eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh,
+  pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
+};

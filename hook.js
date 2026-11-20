@@ -2,7 +2,7 @@
 // e grava o estado da sessão em ~/.claude/island/<session_id>.json.
 const fs = require('node:fs');
 const path = require('node:path');
-const { STATE_DIR, eventToState } = require('./state');
+const { STATE_DIR, eventToState, keepsPermission } = require('./state');
 const { findWindowPid } = require('./window');
 
 let raw = '';
@@ -23,8 +23,12 @@ process.stdin.on('end', () => {
     // Achar a janela do terminal custa uma chamada ao sistema (~0,4 s no Windows), então
     // é feita uma vez por sessão. `null` também é reaproveitado: "já tentei e não achei".
     let windowPid;
+    let permission;
     try {
-      windowPid = JSON.parse(fs.readFileSync(file, 'utf8')).windowPid;
+      const previous = JSON.parse(fs.readFileSync(file, 'utf8'));
+      windowPid = previous.windowPid;
+      // Pedido de permissão pendente (gravado pelo permission-hook): ver keepsPermission.
+      if (keepsPermission(input.hook_event_name)) permission = previous.permission;
     } catch {
       // primeiro evento da sessão: ainda não há arquivo
     }
@@ -32,7 +36,7 @@ process.stdin.on('end', () => {
 
     fs.mkdirSync(STATE_DIR, { recursive: true });
     const project = path.basename(input.cwd || '') || 'Claude';
-    fs.writeFileSync(file, JSON.stringify({ ...result, project, windowPid, updatedAt: Date.now() }));
+    fs.writeFileSync(file, JSON.stringify({ ...result, project, windowPid, permission, updatedAt: Date.now() }));
   } catch {
     // silencioso de propósito (ver comentário acima)
   }

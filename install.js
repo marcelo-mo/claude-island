@@ -3,18 +3,35 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+const { PERMISSION_WAIT_MS } = require('./state');
+
 const EVENTS = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SessionEnd'];
 const HOOK_SCRIPT = path.join(__dirname, 'hook.js');
-const COMMAND = `"${process.execPath}" "${HOOK_SCRIPT}"`;
+const PERMISSION_SCRIPT = path.join(__dirname, 'permission-hook.js');
+const commandFor = (script) => `"${process.execPath}" "${script}"`;
+const COMMAND = commandFor(HOOK_SCRIPT);
+const PERMISSION_COMMAND = commandFor(PERMISSION_SCRIPT);
+// Folga sobre a espera do permission-hook: quem encerra é ele, em silêncio, e não o Claude
+// Code matando o processo por timeout.
+const PERMISSION_TIMEOUT_SECONDS = PERMISSION_WAIT_MS / 1000 + 30;
 
-const isOurs = (entry) => (entry.hooks || []).some((hook) => (hook.command || '').includes(HOOK_SCRIPT));
+// Hook de cada evento. O PermissionRequest tem script próprio porque espera o clique do usuário.
+const HOOKS_BY_EVENT = {
+  ...Object.fromEntries(EVENTS.map((event) => [event, { type: 'command', command: COMMAND }])),
+  PermissionRequest: { type: 'command', command: PERMISSION_COMMAND, timeout: PERMISSION_TIMEOUT_SECONDS },
+};
+
+const isOurs = (entry) => (entry.hooks || []).some((hook) => {
+  const command = hook.command || '';
+  return command.includes(HOOK_SCRIPT) || command.includes(PERMISSION_SCRIPT);
+});
 
 /** Devolve um novo objeto de settings com os hooks da ilha removidos e, se `install`, recolocados. */
 function applyHooks(settings, install) {
   const hooks = { ...(settings.hooks || {}) };
-  for (const event of EVENTS) {
+  for (const [event, hook] of Object.entries(HOOKS_BY_EVENT)) {
     const others = (hooks[event] || []).filter((entry) => !isOurs(entry));
-    if (install) others.push({ matcher: '', hooks: [{ type: 'command', command: COMMAND }] });
+    if (install) others.push({ matcher: '', hooks: [hook] });
     if (others.length) hooks[event] = others;
     else delete hooks[event];
   }
@@ -31,4 +48,4 @@ if (require.main === module) {
   console.log(`${install ? 'Hooks instalados em' : 'Hooks removidos de'} ${settingsFile} (backup: settings.json.island-backup)`);
 }
 
-module.exports = { applyHooks, COMMAND };
+module.exports = { applyHooks, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS };
