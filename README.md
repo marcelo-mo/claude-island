@@ -10,14 +10,19 @@ Feita em Electron, roda em Windows, macOS e Linux.
 ```bash
 pnpm install            # baixa o Electron
 pnpm hooks:install  # registra os hooks no ~/.claude/settings.json (faz backup antes)
-pnpm start              # sobe a ilha
 ```
 
-Para remover os hooks: `pnpm hooks:uninstall`. Testes: `pnpm test`.
+Pronto: a ilha sobe sozinha quando uma sessão do Claude Code começa e ela não está no ar.
+Para abrir à mão, `pnpm start`. Para remover os hooks: `pnpm hooks:uninstall`. Testes: `pnpm test`.
 
 Sessões do Claude Code abertas antes do `hooks:install` só passam a aparecer depois de reiniciadas.
-Quem já tinha os hooks instalados precisa rodar `pnpm hooks:install` de novo para ganhar o hook de
-permissão.
+Quem já tinha os hooks instalados precisa rodar `pnpm hooks:install` de novo para ganhar os hooks
+novos (permissão e início automático).
+
+## Contribuindo
+
+Sugestões e relatos de erro são bem-vindos por **issue**; pull requests de fora não são aceitos.
+Veja o [CONTRIBUTING.md](CONTRIBUTING.md). Licença [MIT](LICENSE).
 
 ## Como funciona
 
@@ -99,4 +104,5 @@ em `~/.claude/island/.heartbeat` a cada 2 s); senão, sai na hora e nada muda no
 - **Arrastar e várias ilhas foram testados só no Windows.**
 - **Linux:** o clique não atravessa a área transparente em volta da pílula (o Electron não
   encaminha eventos de mouse lá). Transparência também depende de um compositor ativo.
-- **Não inicia com o sistema:** é preciso rodar `pnpm start`.
+- **Não inicia com o sistema:** a ilha sobe na primeira sessão do Claude Code, não no login.
+  Se for fechada com sessões abertas, só volta na próxima sessão ou com `pnpm start`.
