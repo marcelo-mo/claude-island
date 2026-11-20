@@ -93,6 +93,12 @@ test('o pedido de permissão só vai para a ilha se couber inteiro e for legíve
   for (const deceptive of ['echo ok\r', 'a\x1b[2Kb', 'a‮b', 'a​b', 'a b']) assert.equal(bash(deceptive), null);
   for (const invalid of [undefined, null, 42, '', '   ', ['ls']]) assert.equal(bash(invalid), null);
 
+  // campo do Bash que muda o risco sem aparecer na ilha: o terminal decide
+  assert.equal(permissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls', dangerouslyDisableSandbox: true } }), null);
+  assert.deepEqual(
+    permissionRequest({ tool_name: 'Bash', tool_input: { command: 'ls', timeout: 5000, run_in_background: true } }),
+    { tool: 'Bash', text: 'ls' },
+  );
   assert.equal(permissionRequest({ tool_name: 'Bash' }), null);
   assert.equal(permissionRequest({ tool_name: 'Bash', tool_input: 'ls' }), null);
   assert.equal(permissionRequest({ tool_input: { command: 'ls' } }), null);

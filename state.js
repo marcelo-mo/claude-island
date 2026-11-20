@@ -67,7 +67,9 @@ function keepsPermission(hookEventName) {
   return hookEventName === 'Notification';
 }
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// Campos do Bash que a ilha mostra (command) ou que não alteram o que o comando pode fazer.
+const BASH_DISPLAYED_OR_HARMLESS_FIELDS = new Set(['command', 'description', 'timeout', 'run_in_background']);
+const UUID_PATTERN =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Caracteres de controle e de formatação invisível (inversão de direção, largura zero,
 // separadores de linha Unicode): com eles o texto exibido pode não ser o que será executado.
 const DECEPTIVE_CHARACTERS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
@@ -92,6 +94,9 @@ function permissionRequest(input) {
   if (!isPermissionTool(tool) || ASKING_TOOLS[tool]) return null;
   const toolInput = input.tool_input;
   if (!toolInput || typeof toolInput !== 'object') return null;
+  // Do Bash a ilha mostra só o comando. Se o pedido traz outro campo (ex.: rodar fora do
+  // sandbox), o risco muda sem aparecer na tela; aí quem decide é o terminal.
+  if (tool === 'Bash' && Object.keys(toolInput).some((field) => !BASH_DISPLAYED_OR_HARMLESS_FIELDS.has(field))) return null;
   const text = tool === 'Bash' ? toolInput.command : JSON.stringify(toolInput, null, 2);
   return isReadablePermissionText(text) ? { tool, text } : null;
 }
