@@ -205,6 +205,9 @@ function pickState(sessions, now) {
 // getBounds() arredonda com escala de DPI fracionária (como 125%), e a janela pode medir 1 ou 2 px
 // a mais que o esperado. Recusar por engano é seguro (o terminal segue valendo), mas não pode
 // virar recusa permanente de uma janela que está de fato na tela.
+// Decisão da Fase 4 (D-14): a tolerância continua 2 px. Depois do setBounds com o tamanho explícito a
+// 125% a deriva é de +2 DIP, que cabe; +3 só aparece com setPosition, que a ilha não usa, e recusar essa
+// por engano é o lado seguro. Os vetores de 125% do fixture fixam os dois lados do limite.
 const WORK_AREA_TOLERANCE_PX = 2;
 
 /**

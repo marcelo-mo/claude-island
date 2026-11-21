@@ -372,6 +372,10 @@ function createIsland(display) {
       ...SECURE_WEB_PREFERENCES,
     },
   });
+  // A 125% de escala a janela nasce 6 DIP mais alta (520×416 medido). O setBounds com o tamanho explícito a
+  // devolve a 520×412, e a deriva de +2 DIP que resta cabe na tolerância do gate. Nunca setPosition, que
+  // também muda o tamanho.
+  moveIsland(island, savedPosition(display), display.workArea);
   // Reexibir ou restaurar de minimizada põe os botões sob o cursor de novo, então o main reinicia
   // os 0,8 s. Nada esconde nem minimiza a ilha de propósito antes da Fase 4: a prova ponta a ponta
   // fica para lá (Assumption A9).
