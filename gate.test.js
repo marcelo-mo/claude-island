@@ -418,7 +418,7 @@ test('island:decide: o eco vem do renderer, o alvo e o relógio do main, os fato
     ['now', 'performance.now()'],
     ['decidedId', 'decidedPermissionId'],
     ['windowVisible', 'island.isVisible() && !island.isMinimized()'],
-    ['coveredByFullscreen', 'false'],
+    ['coveredByFullscreen', 'display ? fullscreenByDisplay.has(display.id) : true'],
     ['withinVisibleArea', 'Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor))'],
   ]);
   // O renderer manda o eco como o segundo argumento do preload; sem ele toda decisão seria recusada.
@@ -1106,13 +1106,18 @@ test('esconder nunca decide, reexibir passa pelo rearme e o atalho é registrado
   );
   assert.ok(bodyOf("app.on('will-quit'", '\n  });').includes('globalShortcut.unregisterAll();'), 'o atalho é liberado em will-quit');
   const hide = bodyOf('function setUserHidden(');
-  assert.equal(occurrences('showInactive('), 1, 'showInactive só em setUserHidden');
-  assert.ok(hide.includes('showInactive('));
+  const visibility = bodyOf('function applyVisibility(');
+  assert.equal(occurrences('showInactive('), 1, 'showInactive só em applyVisibility');
+  assert.ok(visibility.includes('showInactive('));
+  assert.ok(hide.includes('applyVisibility();'), 'setUserHidden esconde e mostra por applyVisibility');
   assert.equal(/\.show\(\)/.test(code), false, 'main.js mostra a ilha por show()');
   for (const forbidden of ['writeDecision', 'acceptDecision', 'decidedPermissionId']) {
     assert.equal(hide.includes(forbidden), false, `setUserHidden toca em ${forbidden}`);
   }
-  assert.ok(bodyOf('function createIsland(').includes('show: !userHidden,'), 'a ilha nova nasce escondida se o usuário a escondeu');
+  assert.ok(
+    bodyOf('function createIsland(').includes('show: isIslandVisible({ userHidden, covered: fullscreenByDisplay.has(display.id) }),'),
+    'a ilha nova nasce escondida se o usuário a escondeu ou se o monitor está coberto',
+  );
   const hideListener = bodyOf("island.on('hide', () => {", '\n  });');
   assert.ok(hideListener.includes('releaseCapture(island);') && hideListener.includes('updateCursorTick();'), 'esconder solta a captura e reavalia o timer');
   assert.ok(mainSource.includes("island.on('show', () => refresh('rearm'))"));
@@ -1140,4 +1145,18 @@ test('a transparência sai do mesmo passo do refresh e nunca vale com pedido na 
     /for \(const island of islands\.values\(\)\) \{\s*applyOpacity\(island\);\s*sendState\(island\);\s*\}/,
   );
   assert.ok(bodyOf('function createIsland(').includes('applyOpacity(island);'), 'a ilha nova já nasce com a opacidade efetiva');
+});
+
+// Trava de regressão (texto): só o main esconde e mostra, combinando o usuário com a tela cheia por monitor,
+// e o atalho respeita a tela cheia (T-04-21, T-04-22, D-12, D-19).
+test('esconder combina o usuário e a tela cheia, só no main, e o atalho respeita a tela cheia', () => {
+  const start = mainSource.indexOf('function applyVisibility(');
+  assert.ok(start >= 0, 'applyVisibility ausente no main.js');
+  const visibility = mainSource.slice(start, mainSource.indexOf('\n}', start));
+  assert.ok(visibility.includes('isIslandVisible({ userHidden, covered: fullscreenByDisplay.has(displayId) })'));
+  assert.equal(visibility.includes('updateCursorTick'), false, 'applyVisibility deixa o timer para o evento hide/show');
+  assert.ok(mainSource.includes(
+    'nextUserHidden({ userHidden, displayIds: [...islands.keys()], coveredDisplayIds: [...fullscreenByDisplay.keys()] })',
+  ), 'o atalho passa por nextUserHidden');
+  assert.ok(mainSource.includes("island.on('hide', () => {"), 'o ouvinte de hide continua');
 });

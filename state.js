@@ -152,6 +152,30 @@ function acceptDecision({
   return { accept: true, permissionId: shownId, behavior };
 }
 
+/**
+ * A ilha deve estar na tela? Só com o usuário não a escondendo e sem app em tela cheia no monitor dela:
+ * o atalho não vence a tela cheia (D-12). Entrada ausente ou de outro tipo esconde (lado seguro).
+ */
+function isIslandVisible(facts) {
+  const { userHidden, covered } = facts ?? {};
+  return userHidden === false && covered === false;
+}
+
+/**
+ * Próximo valor de `userHidden` quando o atalho é apertado. Nunca lança nem muta. Com toda ilha
+ * coberta por tela cheia (inclusive sem nenhuma ilha) devolve o valor atual: o atalho não teria efeito
+ * visível e, ao sair da tela cheia, a ilha voltaria escondida contra a intenção. `userHidden` é global,
+ * então basta uma ilha não coberta para o atalho inverter. `userHidden` que não é `true` conta como
+ * falso; ids que não são lista contam como vazios.
+ */
+function nextUserHidden(input) {
+  const { userHidden, displayIds, coveredDisplayIds } = input ?? {};
+  const current = userHidden === true;
+  const ids = Array.isArray(displayIds) ? displayIds : [];
+  const covered = Array.isArray(coveredDisplayIds) ? coveredDisplayIds : [];
+  return ids.every((id) => covered.includes(id)) ? current : !current;
+}
+
 /** A ilha está no ar se o batimento dela é recente (e não veio do futuro). */
 function isHeartbeatFresh(heartbeatAt, now) {
   return Number.isFinite(heartbeatAt) && heartbeatAt <= now + HEARTBEAT_STALE_MS && now - heartbeatAt <= HEARTBEAT_STALE_MS;
@@ -581,7 +605,7 @@ module.exports = {
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
-  islandDisplays, nextShownPermission,
+  islandDisplays, nextShownPermission, isIslandVisible, nextUserHidden,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
   normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate, registerShortcut,
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, SHORTCUT_PATTERN, SHORTCUT_MAX_LENGTH,

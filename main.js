@@ -8,7 +8,7 @@ const {
   pickState, acceptDecision, anchorPosition, horizontalSlackFor, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
-  effectiveOpacity,
+  effectiveOpacity, isIslandVisible, nextUserHidden,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -63,6 +63,9 @@ const nearIslands = new Set();
 let cursorTimer = null;
 // Escondida pelo usuário, pelo atalho ou pelo menu. Não é persistida: a ilha sempre sobe visível (D-12).
 let userHidden = false;
+// Monitor coberto por app em tela cheia -> HWND que o cobre. Só o main calcula, nunca o renderer (D-19).
+// Vazio enquanto não houver sensor: nenhum monitor conhecido conta como coberto.
+const fullscreenByDisplay = new Map();
 // Resultado do registro do atalho em start ('ok', 'unavailable' ou 'invalid'); o menu o mostra.
 let shortcutStatus = 'unavailable';
 
@@ -220,9 +223,17 @@ function toMenuItem(item) {
 // 'hide' (solta a captura e reavalia o timer do cursor) e o showInactive() emite 'show' (religa).
 function setUserHidden(hidden) {
   userHidden = hidden;
-  for (const island of islands.values()) {
-    if (hidden && island.isVisible()) island.hide();
-    else if (!hidden && !island.isVisible()) island.showInactive();
+  applyVisibility();
+}
+
+// Único lugar que esconde e mostra a ilha: combina o usuário com a tela cheia do monitor dela. Nunca
+// destrói a janela (o som do pedido e o rearme dependem dela viva). Reexibir emite 'show', que rearma;
+// esconder emite 'hide', que solta a captura e, sem ilha visível, para o timer do cursor.
+function applyVisibility() {
+  for (const [displayId, island] of islands) {
+    const visible = isIslandVisible({ userHidden, covered: fullscreenByDisplay.has(displayId) });
+    if (visible && !island.isVisible()) island.showInactive();
+    else if (!visible && island.isVisible()) island.hide();
   }
 }
 
@@ -398,7 +409,7 @@ function createIsland(display) {
     ...clampIslandPosition(savedPosition(display), display.workArea, WINDOW_SIZE, horizontalSlackFor(preferences.anchor)),
     frame: false,
     transparent: true,
-    show: !userHidden, // monitor plugado com a ilha escondida já nasce escondido
+    show: isIslandVisible({ userHidden, covered: fullscreenByDisplay.has(display.id) }), // monitor novo já nasce escondido se for o caso
     resizable: false,
     movable: false, // o arraste é manual (ver island:drag); o do sistema engoliria o hover
     skipTaskbar: true,
@@ -489,6 +500,8 @@ function syncIslands() {
     nearIslands.delete(island);
     island.destroy();
   }
+  // Uma ilha reaproveitada pode ter ido para um monitor coberto por tela cheia.
+  applyVisibility();
   // A ilha destruída pode ter sido a última visível, e destruir não emite o evento 'hide'.
   updateCursorTick();
 }
@@ -575,8 +588,8 @@ function registerIpcHandlers() {
       now: performance.now(),
       decidedId: decidedPermissionId,
       windowVisible: island.isVisible() && !island.isMinimized(),
-      // ponytail: sem sonda de tela cheia até a Fase 4 (TELA-01); a entrada já existe no contrato e nos vetores.
-      coveredByFullscreen: false,
+      // Fail-safe (D-19): monitor desconhecido conta como coberto.
+      coveredByFullscreen: display ? fullscreenByDisplay.has(display.id) : true,
       withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor)),
     });
     // Recusa e falha de gravação reenviam o estado a quem clicou: o renderer trava os botões ao enviar
@@ -609,7 +622,7 @@ function start() {
   shortcutStatus = registerShortcut(
     (accelerator, onPress) => globalShortcut.register(accelerator, onPress),
     preferences.shortcut,
-    () => setUserHidden(!userHidden),
+    () => setUserHidden(nextUserHidden({ userHidden, displayIds: [...islands.keys()], coveredDisplayIds: [...fullscreenByDisplay.keys()] })),
   );
   if (shortcutStatus !== 'ok') console.error(`Não foi possível registrar o atalho ${preferences.shortcut}: ${shortcutStatus}`);
   syncIslands();
