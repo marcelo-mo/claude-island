@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
-  effectiveOpacity, isIslandSender,
+  effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -90,17 +90,22 @@ const rendererSource = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8
 const RULES_START = '// regras-do-gate:inicio';
 const RULES_END = '// regras-do-gate:fim';
 
-function loadRendererRules() {
-  for (const marker of [RULES_START, RULES_END]) {
+// Extrai o texto entre dois marcadores do index.html e o executa num contexto vazio, devolvendo só os
+// nomes pedidos. Serve a todo bloco puro inline (regras do gate, mola).
+function loadInlineBlock(startMarker, endMarker, exported) {
+  for (const marker of [startMarker, endMarker]) {
     assert.equal(rendererSource.split(marker).length - 1, 1, `marcador ausente ou repetido no index.html: ${marker}`);
   }
-  const start = rendererSource.indexOf(RULES_START) + RULES_START.length;
-  const block = rendererSource.slice(start, rendererSource.indexOf(RULES_END));
-  const exported = [
-    'PERMISSION_ARM_MS', 'SETTLE_STABLE_MS', 'PRESS_DWELL_MS', 'WHEEL_SETTLE_MS', 'READ_TOLERANCE_PX',
-    'settleStep', 'canPress', 'isValidRelease', 'isWheelSettled', 'canMarkRead',
-  ];
+  const start = rendererSource.indexOf(startMarker) + startMarker.length;
+  const block = rendererSource.slice(start, rendererSource.indexOf(endMarker));
   return vm.runInNewContext(`${block}\n({ ${exported.join(', ')} })`, Object.create(null));
+}
+
+function loadRendererRules() {
+  return loadInlineBlock(RULES_START, RULES_END, [
+    'PERMISSION_ARM_MS', 'SETTLE_STABLE_MS', 'PRESS_DWELL_MS', 'WHEEL_SETTLE_MS', 'READ_TOLERANCE_PX',
+    'settleStep', 'canPress', 'isValidRelease', 'isWheelSettled', 'canMarkRead', 'canArm',
+  ]);
 }
 
 // O bloco das regras roda isolado acima; isto compila o script inteiro. Erro de sintaxe na cola ou
@@ -150,6 +155,12 @@ for (const vector of vectors.isWheelSettled) {
 for (const vector of vectors.canMarkRead) {
   test(`canMarkRead: ${vector.name}`, () => {
     assert.equal(loadRendererRules().canMarkRead(vector.input), vector.expect);
+  });
+}
+
+for (const vector of vectors.canArm) {
+  test(`canArm: ${vector.name}`, () => {
+    assert.equal(loadRendererRules().canArm(vector.input), vector.expect);
   });
 }
 
@@ -403,4 +414,155 @@ test('o renderer aplica as preferências do payload e rearma se mudaram com pedi
   );
   const apply = rendererSource.slice(rendererSource.indexOf('function applyPreferences('));
   assert.ok(apply.slice(0, apply.indexOf('\n  }\n')).includes('if (changed && current.permission) restartArming();'));
+});
+
+// Bloco puro da mola (D-03): inline como o das regras do gate, extraído e executado num contexto
+// vazio. A prova de comportamento é a simulação da própria função que a ilha roda.
+const SPRING_START = '// mola:inicio';
+const SPRING_END = '// mola:fim';
+
+function loadSpringRules() {
+  return loadInlineBlock(SPRING_START, SPRING_END, [
+    'SPRING_STEP_MS', 'SPRING_MAX_FRAME_MS', 'SPRING_GROW', 'SPRING_SHRINK', 'SPRING_NEUTRAL', 'SPRING_STYLE_FACTORS',
+    'REST_DISTANCE_PX', 'REST_SPEED_PX_S', 'springParams', 'retargetSpring', 'springStep', 'snapSpring', 'isSpringAtRest',
+  ]);
+}
+
+const spring = loadSpringRules();
+
+// Mola parada em `from` que recebe o alvo `to`: é o que a ilha faz ao crescer ou encolher.
+function movingSpring(from, to) {
+  const resting = {
+    position: from, velocity: 0, target: from, direction: 'grow',
+    restDistance: spring.REST_DISTANCE_PX, restSpeed: spring.REST_SPEED_PX_S,
+  };
+  return spring.retargetSpring(resting, to);
+}
+
+// Roda springStep em quadros de `frameMs` até a mola repousar (limite de 10 s simulados).
+function simulate(rules, from, to, style, speed, frameMs = 16) {
+  let current = movingSpring(from, to);
+  let peak = from;
+  let min = from;
+  let elapsedMs = 0;
+  while (!rules.isSpringAtRest(current) && elapsedMs < 10_000) {
+    current = rules.springStep(current, frameMs, style, speed);
+    peak = Math.max(peak, current.position);
+    min = Math.min(min, current.position);
+    elapsedMs += frameMs;
+  }
+  return { peak, min, elapsedMs };
+}
+
+const plain = (value) => ({ ...value });
+
+test('springParams: valores do mod, fator de estilo e encolher no mínimo crítico', () => {
+  assert.deepEqual(plain(spring.springParams('grow', 'default')), { stiffness: 380, damping: 26 });
+  assert.deepEqual(plain(spring.springParams('grow', 'bouncy')), { stiffness: 380 * 1.1, damping: 26 * 0.7 });
+  assert.deepEqual(plain(spring.springParams('grow', 'estilo-inventado')), { stiffness: 380, damping: 26 });
+  assert.deepEqual(plain(spring.springParams('grow', 'toString')), { stiffness: 380, damping: 26 });
+  assert.deepEqual(plain(spring.springParams('shrink', 'default')), { stiffness: 200, damping: 2 * Math.sqrt(200) });
+  assert.deepEqual(plain(spring.springParams('shrink', 'bouncy')), { stiffness: 220, damping: 2 * Math.sqrt(220) });
+  // Snappy já está acima do crítico (35 > 34,64): o fator do mod fica.
+  assert.deepEqual(plain(spring.springParams('shrink', 'snappy')), { stiffness: 300, damping: 35 });
+  assert.deepEqual(plain(spring.springParams('neutral', 'bouncy')), { stiffness: 280, damping: 24 });
+  assert.deepEqual(plain(spring.springParams('sideways', 'snappy')), { stiffness: 280, damping: 24 });
+  for (const style of ANIMATION_STYLES) {
+    const { stiffness, damping } = spring.springParams('shrink', style);
+    assert.ok(damping >= 2 * Math.sqrt(stiffness), `encolher ${style} abaixo do crítico`);
+  }
+});
+
+test('os estilos da mola são os de ANIMATION_STYLES e o padrão é um deles', () => {
+  assert.deepEqual(Object.keys(spring.SPRING_STYLE_FACTORS).sort(), [...ANIMATION_STYLES].sort());
+  assert.ok(Object.hasOwn(spring.SPRING_STYLE_FACTORS, DEFAULT_PREFERENCES.animationStyle));
+});
+
+test('mola Padrão ao crescer passa do alvo entre 4% e 8% e assenta em menos de 2 s', () => {
+  const { peak, elapsedMs } = simulate(spring, 200, 400, 'default', 1);
+  const overshoot = (peak - 400) / 200;
+  assert.ok(overshoot >= 0.04 && overshoot <= 0.08, `passagem ${overshoot}`);
+  assert.ok(elapsedMs < 2000, `assentou em ${elapsedMs} ms`);
+});
+
+test('mola ao encolher não balança em nenhum estilo nem velocidade', () => {
+  for (const style of ANIMATION_STYLES) {
+    for (const speed of [0.5, 1, 2]) {
+      const { min, elapsedMs } = simulate(spring, 400, 200, style, speed);
+      assert.ok((200 - min) / 200 < 0.005, `${style} a ${speed}×: passou ${(200 - min) / 200}`);
+      assert.ok(elapsedMs < 3000, `${style} a ${speed}×: assentou em ${elapsedMs} ms`);
+    }
+  }
+});
+
+test('os quatro estilos ao crescer são distinguíveis', () => {
+  const overshoot = (style) => (simulate(spring, 200, 400, style, 1).peak - 400) / 200;
+  assert.ok(overshoot('smooth') < 0.01, `smooth ${overshoot('smooth')}`);
+  assert.ok(overshoot('default') >= 0.04 && overshoot('default') <= 0.08);
+  assert.ok(overshoot('bouncy') > 0.15, `bouncy ${overshoot('bouncy')}`);
+  assert.ok(simulate(spring, 200, 400, 'snappy', 1).elapsedMs < simulate(spring, 200, 400, 'default', 1).elapsedMs);
+});
+
+test('a velocidade escala o tempo e preserva o pico', () => {
+  const slow = simulate(spring, 200, 400, 'default', 0.5);
+  const normal = simulate(spring, 200, 400, 'default', 1);
+  const fast = simulate(spring, 200, 400, 'default', 2);
+  assert.ok(fast.elapsedMs / normal.elapsedMs >= 0.4 && fast.elapsedMs / normal.elapsedMs <= 0.6, `2×: ${fast.elapsedMs / normal.elapsedMs}`);
+  assert.ok(slow.elapsedMs / normal.elapsedMs >= 1.8 && slow.elapsedMs / normal.elapsedMs <= 2.2, `0,5×: ${slow.elapsedMs / normal.elapsedMs}`);
+  assert.ok(Math.abs(fast.peak - normal.peak) <= 2, 'pico a 2× difere do de 1×');
+  assert.ok(Math.abs(slow.peak - normal.peak) <= 2, 'pico a 0,5× difere do de 1×');
+});
+
+test('retargetSpring mantém posição e velocidade e só recalcula a direção', () => {
+  const moving = { position: 300, velocity: 150, target: 400, direction: 'grow', restDistance: 0.05, restSpeed: 0.5 };
+  assert.deepEqual(plain(spring.retargetSpring(moving, 250)), { ...moving, target: 250, direction: 'shrink' });
+  assert.deepEqual(plain(spring.retargetSpring({ ...moving, direction: 'shrink' }, 500)), { ...moving, target: 500, direction: 'grow' });
+  // Alvo igual à posição atual: a direção anterior continua.
+  assert.deepEqual(plain(spring.retargetSpring(moving, 300)), { ...moving, target: 300 });
+  assert.deepEqual(plain(spring.retargetSpring({ ...moving, direction: 'neutral' }, 250)), { ...moving, target: 250, direction: 'neutral' });
+  // Alvo inválido ou igual ao atual: sem mudança, e a entrada não é mutada.
+  assert.deepEqual(plain(spring.retargetSpring(moving, NaN)), moving);
+  assert.deepEqual(plain(spring.retargetSpring(moving, 400)), moving);
+  assert.deepEqual(plain(moving), { position: 300, velocity: 150, target: 400, direction: 'grow', restDistance: 0.05, restSpeed: 0.5 });
+});
+
+test('springStep: quadro atrasado é limitado, entrada inválida não anda e nunca devolve NaN', () => {
+  const moving = movingSpring(200, 400);
+  const warm = spring.springStep(moving, 16, 'default', 1);
+  assert.deepEqual(plain(spring.springStep(warm, 1000, 'default', 1)), plain(spring.springStep(warm, 50, 'default', 1)));
+  for (const frameMs of [NaN, -5, Infinity, undefined]) {
+    assert.deepEqual(plain(spring.springStep(warm, frameMs, 'default', 1)), plain(warm), `frameMs ${String(frameMs)}`);
+  }
+  for (const speed of [NaN, 0, -1, undefined, '2']) {
+    assert.deepEqual(plain(spring.springStep(warm, 16, 'default', speed)), plain(spring.springStep(warm, 16, 'default', 1)), `speed ${String(speed)}`);
+  }
+  for (const broken of [
+    { ...warm, position: NaN }, { ...warm, velocity: NaN }, { ...warm, target: NaN }, { ...warm, position: Infinity },
+  ]) {
+    const result = spring.springStep(broken, 16, 'default', 1);
+    for (const field of ['position', 'velocity', 'target']) assert.ok(Number.isFinite(result[field]), `${field} não finito`);
+    assert.equal(result.velocity, 0);
+    assert.equal(spring.isSpringAtRest(result), true);
+  }
+  assert.deepEqual(plain(spring.springStep({ ...warm, position: NaN, target: 400 }, 16, 'default', 1)), { ...warm, position: 400, velocity: 0, target: 400 });
+  // A entrada pode estar congelada: springStep devolve cópia.
+  assert.doesNotThrow(() => spring.springStep(Object.freeze({ ...warm }), 16, 'default', 1));
+});
+
+test('springStep assenta exatamente no alvo, sem velocidade', () => {
+  let current = movingSpring(200, 400);
+  for (let frame = 0; frame < 1000 && !spring.isSpringAtRest(current); frame += 1) current = spring.springStep(current, 16, 'default', 1);
+  assert.equal(current.position, 400);
+  assert.equal(current.velocity, 0);
+  assert.equal(spring.isSpringAtRest(current), true);
+});
+
+test('snapSpring leva ao alvo parada e isSpringAtRest só vale com posição no alvo e velocidade zero', () => {
+  const snapped = spring.snapSpring(movingSpring(200, 400));
+  assert.equal(snapped.position, 400);
+  assert.equal(snapped.velocity, 0);
+  assert.equal(spring.isSpringAtRest(snapped), true);
+  assert.equal(spring.isSpringAtRest({ ...snapped, position: 399.99 }), false);
+  assert.equal(spring.isSpringAtRest({ ...snapped, velocity: 0.001 }), false);
+  assert.equal(spring.isSpringAtRest(movingSpring(200, 400)), false);
 });
