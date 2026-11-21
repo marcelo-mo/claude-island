@@ -61,7 +61,7 @@ trocar de janela — sem nunca aprovar algo que o usuário não viu.
 ## Context
 
 - **Código atual:** Electron 45 + Node, sem framework de UI. Hooks do Claude Code (`hook.js`, `permission-hook.js`) escrevem JSON em `~/.claude/island/`; o processo principal (`main.js`) faz polling a cada 400 ms e envia o estado às janelas (uma por monitor). Lógica pura em `state.js`, testada com `node:test` (`island.test.js`). Mapa detalhado em `.planning/codebase/`.
-- **Consumo medido (2026-11-21):** 426 MB de memória e ~1,5% de CPU com a ilha parada e 2 monitores — caro para uma pílula; é o motivo do experimento de tecnologia.
+- **Consumo medido (2026-11-21):** 426 MB de memória e ~1,5% de CPU com a ilha parada e 2 monitores — caro para uma pílula; é o motivo do experimento de tecnologia. Remedido na Fase 1 com `scripts/measure-footprint.ps1` (ilha atual ociosa: 117,2 MB e 0,2266% da CPU; método e tabela em `spike/RESULTADOS.md`); os 426 MB antigos não são comparáveis (método não registrado).
 - **Referência de comportamento:** mod do Windhawk "Dynamic Island for Windows" v1.4.0 (MIT, autor Himanshu / github devcode90), fonte em `C:\ProgramData\Windhawk\ModsSource\dynamic-island-for-windows.wh.cpp` (~24 mil linhas de C++/Direct2D). Análise com constantes de mola, temas, camadas do material e inventário de módulos em `.planning/research/WINDHAWK-MOD.md`.
 - **Convivência:** o usuário roda esse mod também. As duas ilhas ocupam o topo central e se sobrepõem; o mod não aceita conteúdo de outros programas (sem pipe, arquivo ou API) e reafirma o topmost a cada 1 s.
 - **Ambiente do autor:** Windows 11, dois monitores (2560×1080 a 100% e 1920 a 125%), PowerShell como shell principal, Windows Terminal. macOS e Linux têm código mas nunca foram testados.
@@ -81,7 +81,7 @@ trocar de janela — sem nunca aprovar algo que o usuário não viu.
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Electron + Node em vez de PowerShell/WPF | Rodar em Windows, macOS e Linux | ⚠️ Revisit — 426 MB; experimento Electron vs. Tauri |
+| Electron + Node em vez de PowerShell/WPF | Rodar em Windows, macOS e Linux | ✓ Good — confirmado pela medição da Fase 1 |
 | Arquivos JSON em `~/.claude/island/` como barramento | Sem servidor, sem rede; hooks curtos e à prova de falha | ✓ Good |
 | Resposta de permissão por hook `PermissionRequest`, com o terminal valendo em paralelo | Experimento mostrou que quem responde primeiro decide e o terminal nunca trava | ✓ Good |
 | Portar comportamento e visual do mod, não os módulos | A ilha só existe enquanto o Claude roda; módulos exigem código nativo e quebram multiplataforma | — Pending |
@@ -89,6 +89,7 @@ trocar de janela — sem nunca aprovar algo que o usuário não viu.
 | Integração com a ilha do sistema por encaixe lateral, não por fork | Única forma sob nosso controle; o mod não aceita conteúdo externo | — Pending |
 | `.planning/` versionado no repositório público | Processo aberto junto com o código | ✓ Good |
 | Cores de estado fixas, nunca substituídas pelas do mod (2026-11-21, pedido do autor). Laranja de trabalhando e do botão, herdado do quaint-money: escuro `oklch(0.705 0.213 47.604)`, claro `oklch(0.646 0.222 41.116)`. Verde de concluído: `#30d158` / `#248a3d`. Âmbar de precisa de você: `#ff9f0a` / `#f08c00` | Identidade da ilha. Vale para a cor de destaque dos estados, o brilho tingido e o botão; os 8 temas do mod podem mudar só o fundo e a superfície da pílula, nunca a cor do estado. A Fase 3 herda | ✓ Locked |
+| Base tecnológica decidida por medição na Fase 1 (Windows): Electron (Etapa 1 reprovada) | Regra escrita antes de medir (commit `68db4e5`), 3 execuções por cenário, árvore inteira de processos. T0 (Tauri) / E_ref (E3, Electron com 1 janela) em private working set: ociosa 94,7 / 69,3 MB (136,7%), trabalhando 105,1 / 79,5 MB (132,2%), precisa de você 114,4 / 97,3 MB (117,6%), contra o limite de 60%. CPU ociosa T0 0,0105% × E3 0,0082% do total (N2 estrito reprova, mas a diferença está dentro do ruído; a decisão se apoia no N1). CPU ociosa E0 → E1: 0,2266% → 0,0129% do total (BASE-05). Vale só para Windows; base Tauri exigiria validação em macOS e Linux. Veredito em `scripts/spike-verdict.js`, ferramenta do spike fora do `state.js`; tabela em `spike/RESULTADOS.md`. Etapa 2 não roda e não há fase 3.1. | ✓ Good |
 
 ## Evolution
 

@@ -73,10 +73,19 @@
   /* Com pedido de permissão a altura segue o texto do pedido (até o limite com rolagem). */
   #pill.expanded.has-permission { height: auto; padding-bottom: 16px; }
   /* O contorno pulsa na cor do estado: dá para ler a situação de relance, sem mirar no ponto.
-     Quem pede ação pulsa mais rápido; executando é o mais calmo para não cansar. */
-  #pill { --ring: color-mix(in srgb, var(--accent) 40%, transparent); --pulse: 2.4s; animation: glow var(--pulse) ease-in-out infinite; }
+     Quem pede ação pulsa mais rápido; executando é o mais calmo para não cansar.
+     O brilho pulsa por opacidade numa camada própria (::before) e a ilha parada não anima nada. */
+  #pill { --ring: color-mix(in srgb, var(--accent) 40%, transparent); --pulse: 2.4s; position: relative; isolation: isolate; }
   #pill[data-state="waiting"] { --pulse: 1.4s; }
   #pill[data-state="done"] { --pulse: 1.8s; }
+  /* A sombra é desenhada uma vez, atrás do conteúdo, e só a opacidade pulsa: o compositor anima sem
+     repintar. É interna porque o overflow: hidden da pílula recortaria um halo externo. */
+  #pill::before {
+    content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0;
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 80%, transparent),
+                inset 0 0 14px color-mix(in srgb, var(--accent) 50%, transparent);
+  }
+  #pill:not([data-state="idle"])::before { animation: glow var(--pulse) ease-in-out infinite; }
 
   /* Ícone de estado: ponto que respira enquanto trabalha; vira selo com check ao concluir
      e com exclamação quando precisa de resposta. */
@@ -182,9 +191,11 @@
   @keyframes breathe { 50% { transform: scale(.55); opacity: .5; } }
   @keyframes hop { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-4px); } }
   @keyframes glow {
-    50% { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 80%, transparent), 0 2px 16px color-mix(in srgb, var(--accent) 50%, transparent); }
+    50% { opacity: 1; }
   }
-  @media (prefers-reduced-motion: reduce) { #pill, #dot, #dots i { animation: none !important; transition: opacity .2s; } }
+  /* Janela escondida (hide() ou minimizada): a página fica hidden e nada deve animar. */
+  html[data-hidden="true"] *, html[data-hidden="true"] ::before { animation-play-state: paused !important; }
+  @media (prefers-reduced-motion: reduce) { #pill, #pill::before, #dot, #dots i { animation: none !important; transition: opacity .2s; } }
 </style>
 </head>
 <body>
@@ -310,6 +321,8 @@
   }
   // regras-do-gate:fim
 
+  // A CSS pausa as animações com a janela escondida; o Electron só reporta hidden com hide() ou minimizada.
+  document.addEventListener('visibilitychange', () => { document.documentElement.dataset.hidden = document.hidden; });
   const pill = document.getElementById('pill');
   const title = document.getElementById('title');
   const count = document.getElementById('count');

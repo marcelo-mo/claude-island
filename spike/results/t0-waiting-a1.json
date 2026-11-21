@@ -1,0 +1,122 @@
+{
+    "label":  "t0",
+    "scenario":  "waiting",
+    "attempt":  1,
+    "status":  "ok",
+    "error":  null,
+    "source":  "df25c37cb96f0f20cbcf266acb68c3b712a5866b+tauri 2.12.7",
+    "exe":  "C:\\Users\\marce\\AppData\\Local\\claude-island\\spike-tauri-target\\release\\claude-island-spike.exe",
+    "arguments":  "",
+    "env":  [
+
+            ],
+    "measuredAt":  "2026-11-21T07:02:23.7603897Z",
+    "versions":  {
+                     "exe":  "0.0.0",
+                     "os":  "10.0.26300",
+                     "powershell":  "5.1.26100.9818"
+                 },
+    "logicalProcessors":  20,
+    "warmupSeconds":  30,
+    "windowSeconds":  60,
+    "runs":  [
+                 {
+                     "processes":  8,
+                     "privateWsMb":  113.7,
+                     "cpuPercentTotal":  0.2687,
+                     "cpuPercentOfOneCore":  5.374,
+                     "seconds":  66.9,
+                     "rootAlive":  true,
+                     "windows":  [
+                                     {
+                                         "pid":  6052,
+                                         "x":  1060,
+                                         "y":  30,
+                                         "width":  440,
+                                         "height":  324,
+                                         "dpi":  96,
+                                         "widthDip":  440,
+                                         "heightDip":  324,
+                                         "exStyle":  "0x8000198",
+                                         "topmost":  true,
+                                         "toolWindow":  true,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  0,
+                                                             "y":  30,
+                                                             "width":  2560,
+                                                             "height":  990
+                                                         }
+                                     }
+                                 ],
+                     "foregroundInTree":  false
+                 },
+                 {
+                     "processes":  8,
+                     "privateWsMb":  114.4,
+                     "cpuPercentTotal":  0.294,
+                     "cpuPercentOfOneCore":  5.88,
+                     "seconds":  67,
+                     "rootAlive":  true,
+                     "windows":  [
+                                     {
+                                         "pid":  22152,
+                                         "x":  1060,
+                                         "y":  30,
+                                         "width":  440,
+                                         "height":  324,
+                                         "dpi":  96,
+                                         "widthDip":  440,
+                                         "heightDip":  324,
+                                         "exStyle":  "0x8000198",
+                                         "topmost":  true,
+                                         "toolWindow":  true,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  0,
+                                                             "y":  30,
+                                                             "width":  2560,
+                                                             "height":  990
+                                                         }
+                                     }
+                                 ],
+                     "foregroundInTree":  false
+                 },
+                 {
+                     "processes":  8,
+                     "privateWsMb":  114.8,
+                     "cpuPercentTotal":  0.2794,
+                     "cpuPercentOfOneCore":  5.588,
+                     "seconds":  66.8,
+                     "rootAlive":  true,
+                     "windows":  [
+                                     {
+                                         "pid":  3336,
+                                         "x":  1060,
+                                         "y":  30,
+                                         "width":  440,
+                                         "height":  324,
+                                         "dpi":  96,
+                                         "widthDip":  440,
+                                         "heightDip":  324,
+                                         "exStyle":  "0x8000198",
+                                         "topmost":  true,
+                                         "toolWindow":  true,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  0,
+                                                             "y":  30,
+                                                             "width":  2560,
+                                                             "height":  990
+                                                         }
+                                     }
+                                 ],
+                     "foregroundInTree":  false
+                 }
+             ],
+    "median":  {
+                   "privateWsMb":  114.4,
+                   "cpuPercentTotal":  0.2794,
+                   "processes":  8
+               }
+}

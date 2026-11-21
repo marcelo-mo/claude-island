@@ -1,20 +1,18 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 2
-current_phase_name: Fundação segura do gate de permissão
-current_plan: 4
-status: verifying
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-11-21T05:44:35.068Z"
+current_phase: 3
+current_phase_name: Palco fixo, animação e visual
+status: ready_to_plan
+stopped_at: Fases 1 e 2 entregues
+last_updated: "2026-11-21T12:00:00.000Z"
 last_activity: 2026-11-21
-last_activity_desc: "Phase 2 shipped as PR #4 (aguarda UAT humana)"
-state_head: e9e6f8ee78921e79bad76b1b8df45f15b44624b9
+last_activity_desc: "Fases 1 e 2 entregues (PRs #5 e #4); UAT manual dispensada pelo autor"
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 4
-  completed_plans: 4
-  percent: 0
+  completed_phases: 2
+  total_plans: 8
+  completed_plans: 8
+  percent: 33
 ---
 
 # Project State
@@ -24,15 +22,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-21)
 
 **Core value:** Saber de relance o que cada sessão do Claude Code está fazendo e responder ao que ela pede sem trocar de janela, sem nunca aprovar algo que o usuário não viu.
-**Current focus:** Phase 1 — Spike de medição e decisão de base
+**Current focus:** Phase 3 — Palco fixo, animação e visual
 
 ## Current Position
 
-Phase: 2 (Fundação segura do gate de permissão) — READY TO EXECUTE
-Current Plan: 4
-Total Plans in Phase: 4
-Status: Phase complete — ready for verification
-Last activity: 2026-11-21 -- Phase 2 shipped as PR #4 (aguarda UAT humana)
+Phase: 3 (Palco fixo, animação e visual) — READY TO PLAN
+Status: Fases 1 e 2 entregues; UAT manual das duas dispensada pelo autor (itens seguem em 01-UAT.md e 02-UAT.md)
+Last activity: 2026-11-21 — Fases 1 e 2 entregues (PRs #5 e #4)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -58,6 +54,10 @@ Progress: [░░░░░░░░░░] 0%
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
+| Phase 1 P01 | 25min | 3 tasks | 6 files |
+| Phase 1 P02 | 30min | 3 tasks | 12 files |
+| Phase 1 P03 | 85min | 3 tasks | 18 files |
+| Phase 1 P04 | 5min | 3 tasks | 0 files |
 | Phase 02 P01 | 3min | 2 tasks | 6 files |
 | Phase 02 P02 | 4min | 2 tasks | 4 files |
 | Phase 02 P03 | 14min | 2 tasks | 3 files |
@@ -81,6 +81,12 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Phase 02]: Plano 02-03: isValidRelease exige a mesma geração de armamento (armToken) do pointerdown; armed sozinho não pega rearme que volta a armar no meio do gesto
 - [Phase 02]: 02-04: sem trava de process.sandboxed no preload (A7 não verificada, sem Electron); reavaliar na UAT-1
 - [Phase 02]: 02-04: aviso MIT validado comparando o corpo com o LICENSE do repositório, sem rede
+- [Phase 1]: Validade de janela (D-10) com tolerância de 2% no tamanho: o Electron abre a janela a 125% com 550x410, não 550x405; errata commitada antes de qualquer medição
+- [Phase 1]: Regra Electron x Tauri commitada em spike/REGRA-DE-DECISAO.md antes de existir spike/results; o medidor recusa gravar lá sem ela
+- [Phase 1]: Medidor ignora a janela interna do Tao ('Tao Thread Event Target', 16x16) e aceita -Exe sem argumentos; sem isso o T0 sairia inválido pela D-10
+- [Phase 1]: Etapa 1 reprovada: T0 de 117,6% a 136,7% do WS de E3 e CPU ociosa acima; base continua Electron, sem Etapa 2 nem fase 3.1 (só Windows)
+- [Phase 1]: E2 inelegível (capturas PrintWindow pretas com --in-process-gpu); E_ref = E3
+- [Phase 1]: Plano 01-04: Etapa 2 pulada (Etapa 1 reprovada, D-04/BASE-03); Task 3 pending-human, halo D-03 a conferir pelo autor no PR
 
 ### Pending Todos
 
@@ -105,6 +111,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T05:08:28.027Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-11-21T07:17:02.265Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
