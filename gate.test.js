@@ -393,7 +393,7 @@ test('island:decide: o eco vem do renderer, o alvo e o relógio do main, os fato
     ['decidedId', 'decidedPermissionId'],
     ['windowVisible', 'island.isVisible() && !island.isMinimized()'],
     ['coveredByFullscreen', 'false'],
-    ['withinVisibleArea', 'Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK)'],
+    ['withinVisibleArea', 'Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor))'],
   ]);
   // O renderer manda o eco como o segundo argumento do preload; sem ele toda decisão seria recusada.
   assert.ok(preloadSource.includes("decide: (behavior, pressedId) => ipcRenderer.send('island:decide', behavior, pressedId),"));
@@ -414,8 +414,8 @@ test('refresh não engole o rearme e o estado enviado leva answeredId, armEpoch 
     "nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm')",
     'if (serialized === lastSent && nextShown.epoch === shown.epoch) return;',
     '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea }',
-    // a mesma conferência do gate (isWithinWorkArea com a folga), nunca uma mais frouxa
-    'const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK);',
+    // a mesma conferência do gate (isWithinWorkArea com a folga da âncora), nunca uma mais frouxa
+    'const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor));',
   ]) {
     assert.ok(mainSource.includes(glue), `main.js sem a cola: ${glue}`);
   }

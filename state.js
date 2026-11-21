@@ -209,18 +209,21 @@ const WORK_AREA_TOLERANCE_PX = 2;
 
 /**
  * A janela está dentro da área útil do monitor? `horizontalSlack` é a folga lateral que a
- * janela transparente já tem (ver clampIslandPosition). Devolve false quando `bounds` ou
- * `workArea` não têm todos os campos numéricos: dado que não confere não decide. Num monitor
- * menor que a janela também devolve false, que é o lado seguro.
+ * janela transparente já tem (ver clampIslandPosition): um número vale para os dois lados e um objeto
+ * `{ left, right }` para cada lado. Devolve false quando `bounds` ou `workArea` não têm todos os campos
+ * numéricos, ou quando a folga em objeto não traz os dois lados numéricos: dado que não confere não
+ * decide. Num monitor menor que a janela também devolve false, que é o lado seguro.
  */
 function isWithinWorkArea(bounds, workArea, horizontalSlack) {
+  const slack = typeof horizontalSlack === 'object' && horizontalSlack !== null
+    ? horizontalSlack
+    : { left: horizontalSlack, right: horizontalSlack };
   const fields = [bounds && bounds.x, bounds && bounds.y, bounds && bounds.width, bounds && bounds.height,
     workArea && workArea.x, workArea && workArea.y, workArea && workArea.width, workArea && workArea.height,
-    horizontalSlack];
+    slack.left, slack.right];
   if (!fields.every(Number.isFinite)) return false;
-  const sideMargin = horizontalSlack + WORK_AREA_TOLERANCE_PX;
-  return bounds.x >= workArea.x - sideMargin
-    && bounds.x + bounds.width <= workArea.x + workArea.width + sideMargin
+  return bounds.x >= workArea.x - slack.left - WORK_AREA_TOLERANCE_PX
+    && bounds.x + bounds.width <= workArea.x + workArea.width + slack.right + WORK_AREA_TOLERANCE_PX
     && bounds.y >= workArea.y - WORK_AREA_TOLERANCE_PX
     && bounds.y + bounds.height <= workArea.y + workArea.height + WORK_AREA_TOLERANCE_PX;
 }
@@ -247,6 +250,15 @@ const WINDOW_SIZE = Object.freeze({ width: 520, height: 410 });
 // sair da tela para a pílula encostar na borda do monitor. O valor subiu de 20 para 60 junto com a largura
 // do palco (440 → 520) e mantém (largura − 400) / 2: a borda da pílula no mesmo lugar de antes.
 const HORIZONTAL_SLACK = 60;
+// Distância da pílula à lateral e à base da área útil nas âncoras (valores do mod Dynamic Island for
+// Windows, MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md).
+const ANCHOR_SIDE_GAP_PX = 16;
+const ANCHOR_BOTTOM_GAP_PX = 40;
+// Margem do palco do lado ancorado para a sombra, que alcança 14 px para os lados e 19 px para baixo. O CSS
+// a repete em --stage-shadow.
+const STAGE_SHADOW_PX = 20;
+// Largura da pílula expandida no CSS (#pill.expanded).
+const EXPANDED_PILL_WIDTH_PX = 400;
 
 /** Posição padrão da janela da ilha: topo central da área útil do monitor. */
 function defaultIslandPosition(workArea, windowSize) {
@@ -254,30 +266,67 @@ function defaultIslandPosition(workArea, windowSize) {
 }
 
 /**
- * Posição da janela a partir do deslocamento salvo pelo usuário. O deslocamento é relativo à posição
- * padrão, que centra pela largura da janela, então trocar o tamanho do palco preserva o centro
- * horizontal e o topo da pílula sem converter nada. Devolve a posição padrão quando o
- * deslocamento não é um objeto com x e y numéricos: o arquivo é editável à mão, e dado em disco não é
- * confiável. Não muta nada. Quem prende a janela na área útil é clampIslandPosition, e por isso uma
- * ilha salva nos últimos ~86 px de baixo do monitor sobe até caber (exceção aceita: o gate exige a
- * janela inteira na área útil, ver isWithinWorkArea).
+ * Posição da janela para a âncora escolhida, `{ x, y }`; âncora fora de ANCHORS vale 'top-center', que é
+ * igual a defaultIslandPosition. A pílula encosta no lado ancorado do palco, deixando só a margem da
+ * sombra, então a janela sai STAGE_SHADOW_PX além da distância de 16 px à lateral e de 40 px à base. Em
+ * cima a janela começa na área útil e o respiro vem do --stage-top do CSS. Embaixo a janela fica 20 px
+ * acima da área útil, o que sobra para a deriva de getBounds() com escala de DPI de 125%.
  */
-function positionFromSavedOffset(workArea, windowSize, offset) {
-  const standard = defaultIslandPosition(workArea, windowSize);
+function anchorPosition(anchor, workArea, windowSize) {
+  const valid = ANCHORS.includes(anchor) ? anchor : 'top-center';
+  let x = Math.round(workArea.x + (workArea.width - windowSize.width) / 2);
+  if (valid.endsWith('-left')) x = workArea.x + ANCHOR_SIDE_GAP_PX - STAGE_SHADOW_PX;
+  if (valid.endsWith('-right')) x = workArea.x + workArea.width - ANCHOR_SIDE_GAP_PX + STAGE_SHADOW_PX - windowSize.width;
+  const y = valid.startsWith('bottom-')
+    ? workArea.y + workArea.height - ANCHOR_BOTTOM_GAP_PX + STAGE_SHADOW_PX - windowSize.height
+    : workArea.y;
+  return { x, y };
+}
+
+/**
+ * Folga lateral `{ left, right }` da janela para a âncora, sempre um objeto novo; âncora fora de ANCHORS
+ * vale 'top-center'. No centro a pílula expandida fica centrada e sobram 60 px de cada lado. Numa âncora de
+ * canto ela encosta no lado ancorado do palco, com só a margem da sombra: a folga simétrica deixaria a
+ * pílula sair 40 px da tela e o gate aceitaria a decisão fora da área visível. Daí 20 px do lado ancorado e
+ * o resto do outro, de modo que a folga mais a pílula expandida some sempre a largura do palco.
+ */
+function horizontalSlackFor(anchor) {
+  const valid = ANCHORS.includes(anchor) ? anchor : 'top-center';
+  const free = WINDOW_SIZE.width - STAGE_SHADOW_PX - EXPANDED_PILL_WIDTH_PX;
+  if (valid.endsWith('-left')) return { left: STAGE_SHADOW_PX, right: free };
+  if (valid.endsWith('-right')) return { left: free, right: STAGE_SHADOW_PX };
+  return { left: HORIZONTAL_SLACK, right: HORIZONTAL_SLACK };
+}
+
+/**
+ * Posição da janela a partir do deslocamento salvo pelo usuário. O deslocamento é relativo à posição
+ * da âncora (topo centro quando `anchor` falta ou é inválido), que centra pela largura da janela, então
+ * trocar o tamanho do palco preserva o centro horizontal e o topo da pílula sem converter nada. Devolve a
+ * posição da âncora quando o deslocamento não é um objeto com x e y numéricos: o arquivo é editável à
+ * mão, e dado em disco não é confiável. Não muta nada. Quem prende a janela na área útil é
+ * clampIslandPosition, e por isso uma ilha salva nos últimos ~86 px de baixo do monitor sobe até caber
+ * (exceção aceita: o gate exige a janela inteira na área útil, ver isWithinWorkArea).
+ */
+function positionFromSavedOffset(workArea, windowSize, offset, anchor) {
+  const standard = anchorPosition(anchor, workArea, windowSize);
   if (!offset || typeof offset !== 'object' || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return standard;
   return { x: standard.x + offset.x, y: standard.y + offset.y };
 }
 
 /**
- * Mantém a janela da ilha dentro da área útil do monitor dela. `horizontalSlack` é quanto
- * da janela pode sair pelos lados: a janela é mais larga que a pílula, e sem essa folga a
- * pílula nunca encostaria na borda da tela.
+ * Mantém a janela da ilha dentro da área útil do monitor dela. `horizontalSlack` é quanto da janela pode
+ * sair pelos lados: um número vale para os dois lados e um objeto `{ left, right }` (horizontalSlackFor)
+ * para cada lado. A janela é mais larga que a pílula, e sem essa folga a pílula nunca encostaria na
+ * borda da tela.
  */
 function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
+  const { left, right } = typeof horizontalSlack === 'object' && horizontalSlack !== null
+    ? horizontalSlack
+    : { left: horizontalSlack, right: horizontalSlack };
   // Monitor menor que a janela: o máximo cairia abaixo do mínimo; vence o mínimo.
   const clamp = (value, min, max) => Math.round(Math.max(min, Math.min(value, max)));
   return {
-    x: clamp(position.x, workArea.x - horizontalSlack, workArea.x + workArea.width - windowSize.width + horizontalSlack),
+    x: clamp(position.x, workArea.x - left, workArea.x + workArea.width - windowSize.width + right),
     y: clamp(position.y, workArea.y, workArea.y + workArea.height - windowSize.height),
   };
 }
@@ -422,12 +471,16 @@ const PREFERENCE_LABELS = Object.freeze({
   animationStyle: Object.freeze({ smooth: 'Suave', default: 'Padrão', bouncy: 'Elástico', snappy: 'Rápido' }),
   animationSpeed: Object.freeze({ 0.5: '0,5×', 0.75: '0,75×', 1: '1×', 1.5: '1,5×', 2: '2×' }),
   expandOn: Object.freeze({ hover: 'Ao passar o mouse', click: 'Ao clicar' }),
+  anchor: Object.freeze({
+    'top-center': 'Topo, centro', 'top-left': 'Topo, esquerda', 'top-right': 'Topo, direita',
+    'bottom-center': 'Base, centro', 'bottom-left': 'Base, esquerda', 'bottom-right': 'Base, direita',
+  }),
 });
 
 /**
  * Modelo do menu de preferências para o main montar com Menu.buildFromTemplate. Devolve um array novo
  * de submenus `{ label, submenu: [...] }` (Tema, Forma, Estilo da animação, Velocidade da animação,
- * Expandir) mais a caixa 'Fixar aberta', cada filho de submenu um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
+ * Expandir, Âncora) mais a caixa 'Fixar aberta', cada filho de submenu um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
  * atual. `key` e `value` são para o main traduzir o clique em applyPreference; as chaves que ainda
  * não têm item entram com o efeito delas. A entrada passa por normalizePreferences (lixo vira
  * padrão). Nunca lança e nunca muta a entrada.
@@ -451,6 +504,7 @@ function menuTemplate(preferences) {
     {
       type: 'checkbox', label: 'Fixar aberta', checked: current.pinExpanded, key: 'pinExpanded', value: !current.pinExpanded,
     },
+    { label: 'Âncora', submenu: radios('anchor', ANCHORS) },
   ];
 }
 
@@ -465,6 +519,7 @@ module.exports = {
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
+  ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
   nextShownPermission,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
   normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate,

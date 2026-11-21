@@ -5,9 +5,9 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  pickState, acceptDecision, anchorPosition, horizontalSlackFor, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
-  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath,
+  WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -184,8 +184,16 @@ function writePreferences() {
 function applyPreference(key, value) {
   const next = normalizePreferences({ ...preferences, [key]: value });
   if (JSON.stringify(next) === JSON.stringify(preferences)) return;
+  if (next.anchor !== preferences.anchor) {
+    // Os deslocamentos salvos eram relativos à âncora antiga: aplicá-los à nova jogaria a ilha num lugar
+    // sem sentido.
+    savedOffsets = {};
+    persistSavedOffsets();
+  }
   preferences = next;
   writePreferences();
+  // Reposiciona toda ilha que não está sendo arrastada antes de rearmar: a âncora move os botões.
+  syncIslands();
   refresh('rearm');
 }
 
@@ -299,11 +307,11 @@ function displayOf(island) {
 function moveIsland(island, position, workArea) {
   // setBounds com o tamanho explícito (e não setPosition): com escala de DPI fracionária a
   // janela transparente muda de tamanho a cada setPosition no Windows.
-  island.setBounds({ ...clampIslandPosition(position, workArea, WINDOW_SIZE, HORIZONTAL_SLACK), ...WINDOW_SIZE });
+  island.setBounds({ ...clampIslandPosition(position, workArea, WINDOW_SIZE, horizontalSlackFor(preferences.anchor)), ...WINDOW_SIZE });
 }
 
 function savedPosition(display) {
-  return positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id]);
+  return positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id], preferences.anchor);
 }
 
 // Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.
@@ -317,7 +325,7 @@ function sendState(island) {
   // (monitor baixo, DPI alto) toda decisão seria recusada, então o renderer nem oferece os botões.
   // Só pode desabilitar: o gate continua sendo quem decide.
   const display = displayOf(island);
-  const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK);
+  const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor));
   island.webContents.send(
     'island:state',
     { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea },
@@ -349,7 +357,7 @@ function refresh(reason) {
 function createIsland(display) {
   const island = new BrowserWindow({
     ...WINDOW_SIZE,
-    ...clampIslandPosition(savedPosition(display), display.workArea, WINDOW_SIZE, HORIZONTAL_SLACK),
+    ...clampIslandPosition(savedPosition(display), display.workArea, WINDOW_SIZE, horizontalSlackFor(preferences.anchor)),
     frame: false,
     transparent: true,
     resizable: false,
@@ -457,7 +465,7 @@ function registerIpcHandlers() {
     if (!display || !dragStartPositions.delete(island)) return;
     // O arraste segurava a captura; terminado, volta o último pedido do renderer.
     applyCapture(island);
-    const standard = defaultIslandPosition(display.workArea, WINDOW_SIZE);
+    const standard = anchorPosition(preferences.anchor, display.workArea, WINDOW_SIZE);
     const bounds = island.getBounds();
     savedOffsets[display.id] = { x: bounds.x - standard.x, y: bounds.y - standard.y };
     persistSavedOffsets();
@@ -469,7 +477,7 @@ function registerIpcHandlers() {
     if (!display) return;
     delete savedOffsets[display.id];
     persistSavedOffsets();
-    moveIsland(island, defaultIslandPosition(display.workArea, WINDOW_SIZE), display.workArea);
+    moveIsland(island, anchorPosition(preferences.anchor, display.workArea, WINDOW_SIZE), display.workArea);
   });
 
   // O renderer só diz "focar"; o PID é o da sessão em exibição, guardado aqui.
@@ -497,7 +505,7 @@ function registerIpcHandlers() {
       windowVisible: island.isVisible() && !island.isMinimized(),
       // ponytail: sem sonda de tela cheia até a Fase 4 (TELA-01); a entrada já existe no contrato e nos vetores.
       coveredByFullscreen: false,
-      withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK),
+      withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor)),
     });
     // Recusa e falha de gravação reenviam o estado a quem clicou: o renderer trava os botões ao enviar
     // e só os solta quando o main responde. Ele nunca reenvia sozinho; o próximo clique é do usuário.

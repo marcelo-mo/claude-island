@@ -41,6 +41,9 @@
     --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
     /* Respiro entre o topo do palco (a janela) e a pílula; o notch o zera e cola a pílula na borda. */
     --stage-top: 8px;
+    /* Margem do palco do lado ancorado para a sombra (igual a STAGE_SHADOW_PX do state.js): a sombra alcança
+       14 px para os lados e 19 px para baixo. */
+    --stage-shadow: 20px;
   }
   /* O Electron segue o tema do sistema em tempo real; a ilha acompanha sem reiniciar. Só o tema auto
      (ou sem atributo, antes do primeiro estado) segue o sistema: um tema escuro escolhido num sistema
@@ -142,6 +145,16 @@
   /* Notch: topo reto colado na borda do palco (sem o respiro de 8 px) e só a base arredondada. */
   :root[data-shape="notch"] { --stage-top: 0px; }
   :root[data-shape="notch"] #pill { border-radius: 0 0 16px 16px; }
+  /* Âncoras: a pílula encosta no lado ancorado do palco, deixando a margem da sombra, e a ampliação do cursor
+     cresce a partir da borda ancorada. O centro e o topo seguem a regra base do body e do #pill. Embaixo o
+     respiro de cima não vale (padding-top: 0) e a margem da sombra passa para a base. */
+  :root[data-anchor] #pill { transform-origin: var(--origin-x, 50%) var(--origin-y, 0); }
+  :root[data-anchor$="-left"] { --origin-x: 0%; }
+  :root[data-anchor$="-right"] { --origin-x: 100%; }
+  :root[data-anchor^="bottom-"] { --origin-y: 100%; }
+  :root[data-anchor$="-left"] body { justify-content: flex-start; padding-left: var(--stage-shadow); }
+  :root[data-anchor$="-right"] body { justify-content: flex-end; padding-right: var(--stage-shadow); }
+  :root[data-anchor^="bottom-"] body { align-items: flex-end; padding-top: 0; padding-bottom: var(--stage-shadow); }
   /* O contorno pulsa na cor do estado: dá para ler a situação de relance, sem mirar no ponto.
      Quem pede ação pulsa mais rápido; executando é o mais calmo para não cansar.
      O brilho pulsa por opacidade numa camada própria (::before) e a ilha parada não anima nada. */
@@ -971,9 +984,12 @@
     const root = document.documentElement;
     const theme = preferences?.theme || 'auto';
     const shape = preferences?.shape || 'pill';
-    const changed = root.dataset.theme !== theme || root.dataset.shape !== shape;
+    const anchor = preferences?.anchor || 'top-center';
+    // Trocar a âncora move os botões no palco; rearmar é o lado seguro.
+    const changed = root.dataset.theme !== theme || root.dataset.shape !== shape || root.dataset.anchor !== anchor;
     root.dataset.theme = theme;
     root.dataset.shape = shape;
+    root.dataset.anchor = anchor;
     if (changed && current.permission) restartArming();
   }
 
