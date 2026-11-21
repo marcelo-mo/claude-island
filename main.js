@@ -8,7 +8,7 @@ const {
   pickState, acceptDecision, anchorPosition, horizontalSlackFor, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
-  effectiveOpacity, isIslandVisible, nextUserHidden,
+  effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -212,18 +212,6 @@ function applyPreference(key, value) {
   refresh('rearm');
 }
 
-// Item do modelo puro vira item do Menu: o par key/value do rádio vira o clique que aplica a escolha.
-function toMenuItem(item) {
-  if (item.submenu) return { ...item, submenu: item.submenu.map(toMenuItem) };
-  if (item.key === undefined) return { ...item };
-  if (item.action === 'hide') {
-    const { action, ...rest } = item;
-    return { ...rest, click: () => setUserHidden(true) };
-  }
-  const { key, value, ...rest } = item;
-  return { ...rest, click: () => applyPreference(key, value) };
-}
-
 // Esconder nunca aprova: o gate recusa decisão com a janela escondida (windowVisible). Reexibir passa
 // pelo evento 'show', que chama refresh('rearm'); showInactive não rouba o foco do terminal. Nunca
 // destruir a ilha para esconder: o som do pedido e o rearme dependem da janela viva. O hide() emite
@@ -247,7 +235,10 @@ function applyVisibility() {
 // O menu abre sobre a pílula e pode cobrir Permitir e Negar, e o clique que o fecha pode cair num
 // botão: abrir e fechar rearmam os botões (D-09).
 function openMenu(island) {
-  const menu = Menu.buildFromTemplate(menuTemplate(preferences, shortcutStatus).map(toMenuItem));
+  // toMenuItem vive no state.js (lógica pura, com teste de comportamento): o clique de cada item chama um
+  // destes dois efeitos, os únicos que o menu tem.
+  const effects = { onHide: () => setUserHidden(true), onPreference: applyPreference };
+  const menu = Menu.buildFromTemplate(menuTemplate(preferences, shortcutStatus).map((item) => toMenuItem(item, effects)));
   menu.on('menu-will-show', () => refresh('rearm'));
   menu.on('menu-will-close', () => {
     menuIsland = null;

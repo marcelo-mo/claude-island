@@ -1122,8 +1122,10 @@ test('esconder nunca decide, reexibir passa pelo rearme e o atalho é registrado
   assert.ok(hideListener.includes('releaseCapture(island);') && hideListener.includes('updateCursorTick();'), 'esconder solta a captura e reavalia o timer');
   assert.ok(mainSource.includes("island.on('show', () => refresh('rearm'))"));
   assert.ok(bodyOf('function openMenu(').includes('menuTemplate(preferences, shortcutStatus)'));
-  const menuItem = bodyOf('function toMenuItem(');
-  assert.ok(/if \(item\.action === 'hide'\)/.test(menuItem) && menuItem.includes('setUserHidden(true)'));
+  // toMenuItem agora vive no state.js e tem teste de comportamento em prefs.test.js; aqui só a ligação.
+  assert.equal(code.includes('function toMenuItem('), false, 'toMenuItem voltou para o main.js');
+  const openMenu = bodyOf('function openMenu(');
+  assert.ok(openMenu.includes('onHide: () => setUserHidden(true)') && openMenu.includes('toMenuItem(item, effects)'));
 });
 
 // Trava de regressão (texto): o main é dono do fato "há pedido", então a opacidade sai do mesmo passo do

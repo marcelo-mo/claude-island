@@ -637,6 +637,24 @@ function menuTemplate(preferences, shortcutStatus) {
   ];
 }
 
+/**
+ * Traduz um item do modelo de menuTemplate para o item que o Menu do Electron monta. Os efeitos entram por
+ * parâmetro (`onHide`, `onPreference(key, value)`), como em registerShortcut, para esta função não saber do
+ * Electron. Submenus são traduzidos recursivamente. A ação 'hide' vem antes do teste de `key`: o item de
+ * Esconder não tem `key`, e testar `key` primeiro o deixaria sem clique. Item desabilitado nunca ganha
+ * clique. Devolve um objeto novo e nunca muta a entrada.
+ */
+function toMenuItem(item, { onHide, onPreference }) {
+  if (item.submenu) return { ...item, submenu: item.submenu.map((child) => toMenuItem(child, { onHide, onPreference })) };
+  if (item.action === 'hide') {
+    const { action, ...rest } = item;
+    return item.enabled === false ? rest : { ...rest, click: () => onHide() };
+  }
+  if (item.key === undefined) return { ...item };
+  const { key, value, ...rest } = item;
+  return { ...rest, click: () => onPreference(key, value) };
+}
+
 // Explícito protege de regressão: ligar nodeIntegration desligaria o sandbox em silêncio. O renderer
 // só carrega o index.html local, com CSP default-src 'none'.
 const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: true, nodeIntegration: false });
@@ -652,7 +670,7 @@ module.exports = {
   islandDisplays, nextShownPermission, isIslandVisible, nextUserHidden,
   FULLSCREEN_TOLERANCE_PX, SHELL_WINDOW_CLASSES, WS_EX_TRANSPARENT, nextFullscreen,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
-  normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate, registerShortcut,
+  normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate, registerShortcut, toMenuItem,
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, SHORTCUT_PATTERN, SHORTCUT_MAX_LENGTH,
   PREFERENCES_VERSION, PREFERENCES_MAX_BYTES, PREFERENCE_VALIDATORS, quarantinePath,
 };

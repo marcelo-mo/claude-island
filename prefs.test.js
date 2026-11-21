@@ -4,6 +4,7 @@ const {
   menuTemplate, PREFERENCE_LABELS, ANIMATION_SPEED_STEPS, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES,
   ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, normalizePreferences, quarantinePath, isSessionFile, EXPAND_ON, OPACITY_LEVELS,
   ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, PREFERENCES_VERSION, PREFERENCES_MAX_BYTES, PREFERENCE_VALIDATORS, registerShortcut,
+  toMenuItem,
 } = require('./state');
 
 // Lista de valores que cada chave do menu deve oferecer. Os planos seguintes acrescentam linhas aqui.
@@ -285,4 +286,30 @@ test('quarantinePath leva o carimbo de tempo e nunca repete caminho', () => {
   assert.equal(isSessionFile(named.split('/').pop()), false);
   for (const now of [NaN, undefined, '1']) assert.equal(quarantinePath('/x/preferences.json', now), '/x/preferences.json.bad');
   assert.equal(quarantinePath('/x/preferences.json', 1.9), '/x/preferences.json.1.bad');
+});
+
+// Comportamento, não texto: o defeito CR-01 (clique de Esconder nunca ligado) passava num teste de regex.
+test('toMenuItem liga o clique de Esconder só com o atalho registrado e o de cada rádio a applyPreference', () => {
+  const calls = [];
+  const effects = { onHide: () => calls.push(['hide']), onPreference: (key, value) => calls.push([key, value]) };
+  const translate = (status) => menuTemplate(DEFAULT_PREFERENCES, status).map((item) => toMenuItem(item, effects));
+
+  const hide = translate('ok').at(-1);
+  assert.equal(typeof hide.click, 'function', 'Esconder com atalho ok precisa de clique');
+  assert.equal(hide.action, undefined);
+  hide.click();
+  assert.deepEqual(calls, [['hide']]);
+
+  for (const status of ['unavailable', 'invalid', undefined]) {
+    const disabled = translate(status).at(-1);
+    assert.equal(disabled.enabled, false);
+    assert.equal(disabled.click, undefined, `${status}: Esconder desabilitado não tem clique`);
+  }
+  assert.equal(translate('ok').at(-2).click, undefined, 'a informação do atalho não clica');
+
+  calls.length = 0;
+  const [, shape] = submenuOf(translate('ok'), 'Forma').submenu;
+  shape.click();
+  translate('ok').find((item) => item.label === 'Fixar aberta').click();
+  assert.deepEqual(calls, [['shape', SHAPES[1]], ['pinExpanded', true]]);
 });
