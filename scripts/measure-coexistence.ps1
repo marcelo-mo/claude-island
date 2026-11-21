@@ -5,19 +5,29 @@
 # Uso (Windows PowerShell 5.1; com as duas ilhas visíveis e sem mexer no mouse):
 #   powershell -NoProfile -File scripts/measure-coexistence.ps1 -DurationSec 300
 #
-# Somente leitura: EnumWindows, GetClassName, GetWindowText, GetWindowRect, IsWindowVisible e GetWindowLongPtr.
-# Nunca move, mostra, esconde nem manda mensagem para janela alguma, e não lê nem grava o registro. Mostrar a
-# ilha do mod é tarefa de quem roda (o atalho dele ou reiniciar o mod): o script só recusa se ela estiver escondida.
+# Somente leitura: EnumWindows, GetClassNameW, GetWindowTextW, GetWindowRect, IsWindowVisible e
+# GetWindowThreadProcessId, mais SetThreadDpiAwarenessContext, que só muda a thread do próprio script. Nunca move,
+# mostra, esconde nem manda mensagem para janela alguma, e não lê nem grava o registro. Mostrar a ilha do mod é
+# tarefa de quem roda (o atalho dele ou reiniciar o mod): o script só recusa se ela estiver escondida.
 #
 # Saída: 0 = convivência limpa; 1 = inversão de ordem, sumiço ou sobreposição em mais de 1 amostra;
-#        2 = não dá para medir (ilha do mod ou a nossa não visível no início).
+#        2 = não dá para medir (ilha do mod ou a nossa não visível no início); 3 = o script falhou.
 param(
   [int]$DurationSec = 300,
   [int]$IntervalMs = 500,
   [string]$OutCsv = (Join-Path $env:TEMP ("claude-island-coexistence-{0}.csv" -f (Get-Date -Format 'yyyyMMdd-HHmmss')))
 )
 $ErrorActionPreference = 'Stop'
+# Erro inesperado sai com 3, separado do 1 de "convivência falhou".
+trap { Write-Host "Falha do medidor: $_"; exit 3 }
+# O console do Windows em pt-BR usa a página OEM: sem isto os acentos saem quebrados quando a saída é redirecionada.
+[Console]::OutputEncoding = New-Object Text.UTF8Encoding $false
 $inv = [Globalization.CultureInfo]::InvariantCulture
+# Validado aqui, e não com ValidateRange: erro de parâmetro do -File sai com 1, que aqui quer dizer "falhou".
+if ($DurationSec -lt 1 -or $IntervalMs -lt 100) {
+  Write-Host 'Parâmetros inválidos: -DurationSec >= 1 e -IntervalMs >= 100.'
+  exit 2
+}
 
 Add-Type -TypeDefinition @'
 using System;
@@ -27,8 +37,8 @@ using System.Text;
 
 public static class Coexistence {
   public class Window {
-    public long Hwnd; public uint Pid; public int Z; public string Class; public string Title;
-    public bool Visible; public bool Topmost; public int L; public int T; public int R; public int B;
+    public long Hwnd; public int Z; public string Class; public bool Visible;
+    public int L; public int T; public int R; public int B;
   }
   delegate bool EnumProc(IntPtr hwnd, IntPtr lParam);
   [StructLayout(LayoutKind.Sequential)] struct RECT { public int L, T, R, B; }
@@ -37,12 +47,7 @@ public static class Coexistence {
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextW(IntPtr hwnd, StringBuilder text, int max);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
-  [DllImport("user32.dll")] static extern IntPtr GetWindowLongPtrW(IntPtr hwnd, int index);
-  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
   [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
-
-  const int GWL_EXSTYLE = -20;
-  const long WS_EX_TOPMOST = 0x8;
 
   // Janelas que interessam, na ordem de z (a primeira está acima de todas). Z é a posição na lista completa.
   public static List<Window> Snapshot() {
@@ -60,12 +65,7 @@ public static class Coexistence {
       bool ours = name == "Chrome_WidgetWin_1" && title.ToString() == "Claude Island";
       if (!ours && name != "Windhawk.DynamicIslandForWindows" && name != "DynamicIslandBackdrop") return true;
       RECT r; GetWindowRect(hwnd, out r);
-      uint pid; GetWindowThreadProcessId(hwnd, out pid);
-      long exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE).ToInt64();
-      found.Add(new Window {
-        Hwnd = hwnd.ToInt64(), Pid = pid, Z = z, Class = name, Title = title.ToString(),
-        Visible = IsWindowVisible(hwnd), Topmost = (exStyle & WS_EX_TOPMOST) != 0, L = r.L, T = r.T, R = r.R, B = r.B,
-      });
+      found.Add(new Window { Hwnd = hwnd.ToInt64(), Z = z, Class = name, Visible = IsWindowVisible(hwnd), L = r.L, T = r.T, R = r.R, B = r.B });
       return true;
     }, IntPtr.Zero);
     return found;
@@ -80,14 +80,28 @@ function Get-OverlapArea($a, $b) {
   return [long]$width * $height
 }
 
+# Sem a janela DynamicIslandBackdrop (blur do mod desligado, ou um instante em que ela some), a pílula é estimada
+# pelo palco: o maior painel do mod (380×184 com hover de 1,025), centrado, 22 px abaixo do topo do palco. A escala
+# sai da largura do palco (936 px a 100%). Valores do mod, MIT, ver THIRD_PARTY_NOTICES.md.
+function Get-EstimatedPill($stage) {
+  $scale = ($stage.R - $stage.L) / 936
+  $halfWidth = 380 * 1.025 / 2 * $scale
+  $center = ($stage.L + $stage.R) / 2
+  $top = $stage.T + 22 * $scale
+  [pscustomobject]@{ L = [int]($center - $halfWidth); R = [int]($center + $halfWidth); T = [int]$top; B = [int]($top + 184 * 1.025 * $scale) }
+}
+
 function Get-Sample {
   $windows = [Coexistence]::Snapshot()
-  $mod = $windows | Where-Object { $_.Class -eq 'Windhawk.DynamicIslandForWindows' } | Select-Object -First 1
-  # A janela DynamicIslandBackdrop acompanha a pílula viva com 1 px de recuo, mas só existe com o fundo de
-  # blur/acrílico do mod ligado; sem ela, o palco inteiro do mod é a estimativa conservadora.
+  $mods = @($windows | Where-Object { $_.Class -eq 'Windhawk.DynamicIslandForWindows' })
+  $mod = $mods | Select-Object -First 1
+  # A janela DynamicIslandBackdrop acompanha a pílula viva com 1 px de recuo (.wh.cpp:3751).
   $backdrop = $windows | Where-Object { $_.Class -eq 'DynamicIslandBackdrop' -and $_.Visible } | Select-Object -First 1
-  $ours = @($windows | Where-Object { $_.Class -eq 'Chrome_WidgetWin_1' })
-  [pscustomobject]@{ Mod = $mod; Pill = $(if ($backdrop) { $backdrop } else { $mod }); PillSource = $(if ($backdrop) { 'backdrop' } else { 'palco' }); Ours = $ours }
+  $pill = if ($backdrop) { $backdrop } elseif ($mod) { Get-EstimatedPill $mod } else { $null }
+  [pscustomobject]@{
+    Mod = $mod; ModCount = $mods.Count; Pill = $pill; PillSource = $(if ($backdrop) { 'backdrop' } else { 'estimada' })
+    Ours = @($windows | Where-Object { $_.Class -eq 'Chrome_WidgetWin_1' })
+  }
 }
 
 $first = Get-Sample
@@ -100,13 +114,14 @@ if ($tracked.Count -eq 0) {
   Write-Host 'Não dá para medir: nenhuma janela "Claude Island" visível. Suba a ilha com uma sessão na tela e rode de novo.'
   exit 2
 }
-if ($first.PillSource -eq 'palco') {
-  Write-Host 'Aviso: sem a janela DynamicIslandBackdrop (blur do mod desligado); a sobreposição usa o palco inteiro do mod.'
+if ($first.ModCount -gt 1) { Write-Host "Aviso: $($first.ModCount) janelas do mod; a medição usa a primeira na ordem de z." }
+if ($first.PillSource -eq 'estimada') {
+  Write-Host 'Aviso: sem a janela DynamicIslandBackdrop (blur do mod desligado); a pílula do mod é estimada pelo maior painel.'
 }
 
-# Relação inicial de cada janela nossa com o mod: acima (z menor) ou abaixo.
-$initialAbove = @{}
-foreach ($window in $tracked) { $initialAbove[$window.Hwnd] = $window.Z -lt $first.Mod.Z }
+# Relação de cada janela nossa com o mod: acima (z menor) ou abaixo. Uma inversão é uma troca dessa relação.
+$lastAbove = @{}
+foreach ($window in $tracked) { $lastAbove[$window.Hwnd] = $window.Z -lt $first.Mod.Z }
 
 $rows = New-Object System.Collections.Generic.List[string]
 $rows.Add('t_ms,mod_visible,mod_z,pill_source,pill_l,pill_t,pill_r,pill_b,ours_hwnd,ours_visible,ours_z,ours_above_mod,overlap_px2')
@@ -123,11 +138,11 @@ while ($clock.ElapsedMilliseconds -lt $DurationSec * 1000) {
     $current = $sample.Ours | Where-Object { $_.Hwnd -eq $window.Hwnd } | Select-Object -First 1
     $visible = [bool]($current -and $current.Visible)
     if (-not $visible) { $disappearances++ }
-    $above = $false; $overlap = 0; $z = -1
+    $above = $lastAbove[$window.Hwnd]; $overlap = 0; $z = -1
     if ($current -and $sample.Mod) {
       $z = $current.Z
       $above = $current.Z -lt $sample.Mod.Z
-      if ($above -ne $initialAbove[$window.Hwnd]) { $inversions++ }
+      if ($above -ne $lastAbove[$window.Hwnd]) { $inversions++; $lastAbove[$window.Hwnd] = $above }
       if ($visible -and $modVisible) { $overlap = Get-OverlapArea $current $sample.Pill }
     }
     $sampleOverlap = [Math]::Max($sampleOverlap, $overlap)
@@ -141,7 +156,7 @@ while ($clock.ElapsedMilliseconds -lt $DurationSec * 1000) {
 }
 
 [IO.File]::WriteAllLines($OutCsv, $rows, (New-Object Text.UTF8Encoding $false))
-$summary = 'amostras={0} duracao_s={1} janelas_nossas={2} inversoes={3} sumicos={4} amostras_com_sobreposicao={5} maior_sobreposicao_px2={6} pilula_do_mod={7}' -f `
+$summary = 'amostras={0} duracao_s={1} janelas_nossas={2} inversoes={3} amostras_com_sumico={4} amostras_com_sobreposicao={5} maior_sobreposicao_px2={6} pilula_do_mod={7}' -f `
   $samples, ($clock.ElapsedMilliseconds / 1000).ToString('0.0', $inv), $tracked.Count, $inversions, $disappearances, $overlapSamples, $maxOverlap, $first.PillSource
 Write-Host $summary
 Write-Host "CSV: $OutCsv"
