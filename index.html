@@ -103,9 +103,6 @@
 
   #pill {
     width: max-content; height: 46px; padding: 0 17px;
-    /* Nunca passa da largura da expandida, que é o que a conta do palco cobre; abaixo disso a largura
-       segue o conteúdo, e quem cede é o título (#pill.multi-session #title). */
-    max-width: 400px;
     /* Três camadas estáticas, de cima para baixo: lavagem do acento do estado no topo (reflexo), profundidade
        e o preenchimento do tema. O raio vertical da lavagem é 56 px fixos, nunca proporcional à altura: ela
        termina antes do detalhe e do bloco de permissão, que além disso tem fundo opaco (VIS-04). Gradiente não
@@ -137,6 +134,10 @@
      percentual ficavam a poucos pixels da curva. 24 px dão a mesma folga visual dos dois lados; o raio
      acompanha em PILL_MAX_RADIUS_PX. */
   #pill.expanded { width: 400px; height: 104px; padding-inline: 24px; }
+  /* A compacta nunca passa da largura da expandida, que é o que a conta do palco cobre; abaixo disso a
+     largura segue o conteúdo, e quem cede é o título (#pill.multi-session #title). Só na compacta: na
+     expandida o teto cortaria a passagem da mola ao crescer (ANIM-01), que a conta do palco já cobre. */
+  #pill:not(.expanded) { max-width: 400px; }
   #pill.expanded.has-window { height: 148px; }
   /* Com pedido de permissão a altura segue o texto do pedido (até o limite com rolagem). */
   #pill.expanded.has-permission { height: auto; padding-bottom: 16px; }

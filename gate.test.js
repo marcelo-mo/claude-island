@@ -1372,7 +1372,9 @@ test('sessionSwitchDirection dá a direção da troca e MAX_SESSION_DOTS é 8', 
 });
 
 test('a pílula compacta tem teto na largura da expandida e os pontos ficam na ponta direita da barra', () => {
-  assert.equal(cssDeclarations('#pill')['max-width'], cssDeclarations('#pill.expanded').width);
+  assert.equal(cssDeclarations('#pill:not(.expanded)')['max-width'], cssDeclarations('#pill.expanded').width);
+  // Na expandida não há teto: ele cortaria a passagem da mola ao crescer (ANIM-01).
+  assert.equal(cssDeclarations('#pill')['max-width'], undefined);
   for (const [, selector, body] of styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     if (selector.trim().startsWith('#pill.multi-session')) {
       assert.equal(/(?<![-\w])width\s*:/.test(body), false, `a regra ${selector.trim()} não pode fixar a largura da pílula`);
