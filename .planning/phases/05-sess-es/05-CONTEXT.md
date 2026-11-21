@@ -62,7 +62,12 @@ Fica de fora:
   - A sessão em `done` que está na tela fica na lista e na tela além dos 10 s de `DONE_VISIBLE_MS`, até o usuário trocar (roda ou ponto) ou um pedido novo fazer o snap. Ao deixar de ser exibida, ela expira na hora, se já passou do prazo.
   - Se ela for a única sessão, o prazo de 10 s vale como hoje e a ilha fica ociosa. Isso não é troca de sessão, e a ilha continua existindo só enquanto o Claude roda.
   - Assim, "concluído" e "voltou a trabalhar" nunca trocam a sessão sozinhos (ROADMAP SC3, SESS-06), nem pela expiração.
-  - Sair de fato da lista (`SessionEnd`, sessão morta, prazo de `running`/`waiting`) não é troca por estado. Aí a ilha vai ao pedido pendente mais antigo, se houver, ou à sessão mais urgente.
+  - Sair de fato da lista (`SessionEnd`, sessão morta, prazo de `running`/`waiting`) não é troca por estado. Ajustado na terceira revisão do plano, para não contrariar a D-13 ("uma vez por pedido"):
+    - a ilha vai à sessão do pedido pendente **nunca exibido** mais antigo, se houver;
+    - senão, à **vizinha na ordem estável** (a anterior, ou a seguinte se a que saiu era a primeira), nunca à "mais urgente".
+    - Um pedido que já foi exibido e que o usuário deixou nunca é alvo de troca automática, nem por essa saída.
+    - O estado dos pedidos no main distingue "nunca exibido" (entrou na fila sem snap) de "já exibido".
+    - Se a vizinha calhar de ter um pedido já deixado, ele reaparece por posição, não por urgência, e com rearme.
 
 ### Pontos e rótulo (SESS-01)
 - **D-07:** **Um ponto por sessão viva, no lugar de `#count`, só com 2 ou mais sessões.**
@@ -113,6 +118,11 @@ Fica de fora:
   - Com 2 ou mais pedidos pendentes, o bloco de pedido mostra "1 de N", em que o número é a posição do pedido exibido na fila.
   - **Ao sair o pedido exibido** (respondido na ilha ou no terminal), com outros pendentes, a ilha vai ao mais antigo restante, sem voltar à sessão anterior.
   - Se o usuário estava numa sessão sem pedido (rolou para longe), a saída de um pedido não o move.
+  - **Exceção registrada (terceira revisão do plano):** o avanço da fila ao sair o pedido exibido **não espera** os 400 ms do gesto de roda, ao contrário do snap.
+    - Adiar perderia o fato "o pedido exibido saiu": no ciclo seguinte o `shown.id` já é outro.
+    - Quem responde na ilha acabou de clicar, não de rolar.
+    - O avanço rearma como toda troca.
+    - Vai como item de "Testar manualmente": rolar a roda enquanto o terminal responde o pedido exibido; a ilha vai ao próximo pendente e Permitir/Negar só armam depois dos 800 ms.
   - Só um pedido de permissão troca a sessão sozinho: "concluído" e "voltou a trabalhar" nunca trocam (SESS-06, teste explícito).
 - **D-15:** **Toda troca passa por `refresh()`**, que segue sendo o único lugar que muda `shown`.
   - Troca para uma sessão com outro pedido muda o id e reinicia o armamento por `nextShownPermission`, com época nova.
