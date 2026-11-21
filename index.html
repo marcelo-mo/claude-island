@@ -222,6 +222,71 @@
   </div>
 
 <script>
+  // regras-do-gate:inicio
+  // Regras puras do gate no renderer: decidem se um clique pode virar decisão. Ficam inline porque
+  // a CSP não aceita script externo; o gate.test.js lê o texto entre os marcadores e o executa num
+  // contexto vazio, então o teste roda o mesmo código que a ilha roda, e um predicado que tocasse
+  // DOM ou relógio global quebraria lá. Aqui só entram constantes e funções que nunca lançam.
+  // ponytail: regras puras inline, testadas por extração em node:vm. Quando a Fase 3 validar script-src 'self' via file:// (spring.js), mover para um arquivo carregado por <script src> e por require.
+
+  // A ilha abre sozinha quando chega um pedido; os botões só valem depois deste tempo na tela,
+  // para um clique que já ia para outra janela não virar aprovação. O main.js aplica a mesma
+  // regra (PERMISSION_ARM_MS no state.js) e é quem de fato decide.
+  const PERMISSION_ARM_MS = 800;
+  // Retângulo parado por este tempo = transição assentada (vale para a transição CSS de hoje e
+  // para molas em JS depois): um botão que ainda anda é um botão no lugar errado.
+  const SETTLE_STABLE_MS = 100;
+  // Cursor parado sobre o botão por este tempo: o clique a caminho de outra janela não arma nada.
+  const PRESS_DWELL_MS = 200;
+
+  const RECT_SIDES = ['left', 'top', 'width', 'height'];
+
+  function isSameRect(a, b) {
+    return Boolean(a) && Boolean(b) && typeof a === 'object' && typeof b === 'object'
+      && RECT_SIDES.every((side) => Number.isFinite(a[side]) && a[side] === b[side]);
+  }
+
+  /**
+   * Um passo do detector de assentamento, chamado a cada quadro. Devolve { stableSince, settled }:
+   * settled só é true com o retângulo igual ao do quadro anterior há SETTLE_STABLE_MS e com
+   * #pill e #actions em opacidade computada exatamente '1' (translúcido não arma).
+   * Qualquer entrada inválida devolve { stableSince: null, settled: false }.
+   */
+  function settleStep(input) {
+    const { previousRect, rect, pillOpacity, actionsOpacity, stableSince, now } = input || {};
+    if (!Number.isFinite(now) || !isSameRect(previousRect, rect) || pillOpacity !== '1' || actionsOpacity !== '1') {
+      return { stableSince: null, settled: false };
+    }
+    const since = Number.isFinite(stableSince) ? stableSince : now;
+    return { stableSince: since, settled: now - since >= SETTLE_STABLE_MS };
+  }
+
+  /**
+   * Se o botão pode começar um clique agora: pedido na tela, armado e sem movimento do cursor
+   * nem armamento recente (o que for mais novo) nos últimos PRESS_DWELL_MS. Relógio para trás recusa.
+   */
+  function canPress(input) {
+    const { hasPermission, armed, armedAt, lastPointerMoveAt, now } = input || {};
+    return hasPermission === true && armed === true
+      && Number.isFinite(now) && Number.isFinite(armedAt) && Number.isFinite(lastPointerMoveAt)
+      && now - Math.max(armedAt, lastPointerMoveAt) >= PRESS_DWELL_MS;
+  }
+
+  /**
+   * Se o clique que terminou vale como decisão: precisa ter começado (pointerdown válido) e terminado
+   * no mesmo botão, no mesmo pedido, armado, e na mesma geração de armamento. Só 'armed' não basta:
+   * um rearme no meio do gesto pode voltar a armar antes de o botão ser solto.
+   */
+  function isValidRelease(input) {
+    const { pressedBehavior, releasedBehavior, pressedId, currentId, armed, pressedArmToken, currentArmToken } = input || {};
+    return (pressedBehavior === 'allow' || pressedBehavior === 'deny')
+      && releasedBehavior === pressedBehavior
+      && typeof pressedId === 'string' && pressedId !== '' && pressedId === currentId
+      && armed === true
+      && Number.isInteger(pressedArmToken) && pressedArmToken === currentArmToken;
+  }
+  // regras-do-gate:fim
+
   const pill = document.getElementById('pill');
   const title = document.getElementById('title');
   const count = document.getElementById('count');
@@ -236,17 +301,23 @@
   const permissionHint = document.getElementById('permission-hint');
   const allowButton = document.getElementById('allow');
   const denyButton = document.getElementById('deny');
+  const actions = document.getElementById('actions');
 
   const TITLES = { running: 'Trabalhando', waiting: 'Precisa de você', done: 'Concluído' };
-  // A ilha abre sozinha quando chega um pedido; os botões só valem depois deste tempo na tela,
-  // para um clique que já ia para outra janela não virar aprovação. O main.js aplica a mesma
-  // regra (PERMISSION_ARM_MS no state.js) e é quem de fato decide.
-  const PERMISSION_ARM_MS = 800;
   let current = { state: 'idle' };
   let hovering = false;
-  let armedPermissionId = null;
   let answeredPermissionId = null;
   let readPermissionId = null;
+  // Armamento dos botões. armToken é a geração: toda volta ao desarmado a muda, o que invalida
+  // timers, laços de quadro e um press que começou numa geração anterior.
+  let armed = false;
+  let armedAt = 0;
+  let armToken = 0;
+  let armTimer = null;
+  let lastArmEpoch = null;
+  let lastPointerMoveAt = 0;
+  // Gesto em andamento: null ou { behavior, id, armToken }, capturado no pointerdown.
+  let press = null;
 
   function render() {
     pill.dataset.state = current.state;
@@ -288,24 +359,94 @@
     permissionHint.hidden = wasRead;
     // Depois do clique os botões ficam travados até o pedido sair do estado. answeredId vem do
     // main e trava também a ilha que não recebeu o clique: o outro monitor já decidiu este pedido.
-    const locked = permission.id !== armedPermissionId || permission.id === answeredPermissionId
-      || permission.id === current.answeredId;
+    const locked = !armed || permission.id === answeredPermissionId || permission.id === current.answeredId;
     denyButton.disabled = locked;
     allowButton.disabled = locked || !wasRead;
   }
   permissionText.addEventListener('scroll', render);
 
-  function decide(behavior) {
-    if (!current.permission) return;
-    const permissionId = current.permission.id;
-    answeredPermissionId = permissionId;
-    // O id do pedido que está na tela vai como eco: o main decide qual pedido recebe a decisão
-    // e recusa se este não for o que ele está exibindo (o pedido pode ter mudado no clique).
-    window.island.decide(behavior, permissionId);
+  // Volta ao desarmado e só rearma depois de PERMISSION_ARM_MS com o layout assentado. Chamado
+  // por pedido novo, reexibição (armEpoch do main), mudança de tamanho e de visibilidade.
+  function restartArming() {
+    armToken += 1;
+    armed = false;
+    clearTimeout(armTimer);
+    const token = armToken;
+    armTimer = setTimeout(() => waitUntilSettled(token), PERMISSION_ARM_MS);
     render();
   }
-  allowButton.addEventListener('click', () => decide('allow'));
-  denyButton.addEventListener('click', () => decide('deny'));
+
+  // O laço de quadros só existe enquanto há pedido a armar: em repouso a ilha não anima nada.
+  function waitUntilSettled(token) {
+    let previousRect = null;
+    let stableSince = null;
+    function frame() {
+      if (token !== armToken || !current.permission) return;
+      const box = actions.getBoundingClientRect();
+      const rect = { left: box.left, top: box.top, width: box.width, height: box.height };
+      const now = performance.now();
+      const step = settleStep({
+        previousRect,
+        rect,
+        pillOpacity: getComputedStyle(pill).opacity,
+        actionsOpacity: getComputedStyle(actions).opacity,
+        stableSince,
+        now,
+      });
+      previousRect = rect;
+      stableSince = step.stableSince;
+      if (step.settled) {
+        armed = true;
+        armedAt = now;
+        render();
+        return;
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // Botões que mudam de lugar (pedido maior, dica "Role até o fim" que some) rearmam: é o lado seguro.
+  const layoutObserver = new ResizeObserver(() => { if (current.permission) restartArming(); });
+  layoutObserver.observe(pill);
+  layoutObserver.observe(actions);
+  document.addEventListener('visibilitychange', restartArming);
+  actions.addEventListener('pointermove', () => { lastPointerMoveAt = performance.now(); });
+
+  // Só vale o clique que começa (pointerdown válido) e termina no mesmo botão do mesmo pedido.
+  // Clique sem pointerdown (teclado, element.click()) é descartado; a janela é focusable: false, e a
+  // checagem do mesmo botão vale mesmo que o Chromium já não gere click entre elementos diferentes.
+  for (const [button, behavior] of [[allowButton, 'allow'], [denyButton, 'deny']]) {
+    button.addEventListener('pointerdown', (event) => {
+      const valid = event.button === 0 && canPress({
+        hasPermission: Boolean(current.permission), armed, armedAt, lastPointerMoveAt, now: performance.now(),
+      });
+      press = valid ? { behavior, id: current.permission.id, armToken } : null;
+    });
+    button.addEventListener('click', () => {
+      const pressed = press;
+      press = null;
+      if (!isValidRelease({
+        pressedBehavior: pressed?.behavior,
+        releasedBehavior: behavior,
+        pressedId: pressed?.id,
+        currentId: current.permission?.id,
+        armed,
+        pressedArmToken: pressed?.armToken,
+        currentArmToken: armToken,
+      })) return;
+      answeredPermissionId = pressed.id;
+      // O eco é o id capturado no pointerdown: o main recusa se o pedido exibido for outro.
+      window.island.decide(behavior, pressed.id);
+      render();
+    });
+  }
+  // Soltar fora do botão do gesto anula (o pointerup na bolha roda antes do click), e o sistema
+  // cancelar o gesto também.
+  window.addEventListener('pointerup', (event) => {
+    if (press && !event.target.closest?.(`#${press.behavior}`)) press = null;
+  });
+  window.addEventListener('pointercancel', () => { press = null; });
 
   // Notas diferentes para dar para saber, sem olhar, se é para responder ou se acabou.
   const CHIMES = { waiting: [880, 1175], done: [660, 880] };
@@ -332,8 +473,11 @@
     const previousPermissionId = current.permission ? current.permission.id : null;
     current = next;
     const permissionId = next.permission ? next.permission.id : null;
-    if (permissionId && permissionId !== previousPermissionId) {
-      setTimeout(() => { armedPermissionId = permissionId; render(); }, PERMISSION_ARM_MS);
+    // O main sobe armEpoch a cada troca, reexibição e mudança de monitor. O id novo também rearma,
+    // para o renderer não depender só do contador.
+    if (next.armEpoch !== lastArmEpoch || (permissionId && permissionId !== previousPermissionId)) {
+      lastArmEpoch = next.armEpoch;
+      restartArming();
     }
     render();
   });
