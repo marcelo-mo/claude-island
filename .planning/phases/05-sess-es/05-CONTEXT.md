@@ -140,6 +140,11 @@ Fica de fora:
   - **Só se move um invólucro sem nenhum botão** (título, detalhe e texto do pedido; ajustado na revisão do plano). Pontos, "Abrir", "Abrir sessão", Permitir e Negar nunca recebem a transformação da mola de troca. Uma trava de teste cobre todo `button` da pílula, não só `#actions`.
   - Largura: com 2 ou mais sessões, o título com o nome do projeto tem largura fixa e corta com reticências, para a troca não mexer a largura da pílula nem empurrar "Abrir".
   - Mudança no número de sessões ainda pode alterar a largura. Isso é aceito e registrado: não é causado pelo gesto, é raro, e Permitir/Negar seguem cobertos pelo rearme por retângulo.
+  - **Como ler "sem nunca mover um botão sob o cursor"** (objetivo da fase), na segunda revisão do plano:
+    - A garantia é sobre os botões que aprovam: Permitir e Negar nunca ficam armados num lugar diferente do que armaram, pelo rearme por retângulo das Fases 2 e 3. A mola de troca de sessão não move nenhum botão.
+    - Os botões que não aprovam (pontos, "Abrir", "Abrir sessão") podem mudar de lugar com o layout, o hover e o nudge, como já acontece desde as Fases 3 e 4 (precedente: "Abrir sessão" escala no hover, aceito na Fase 3). O pior caso é trocar de sessão, o que rearma, ou focar um terminal.
+    - Portanto **não** se fixa a pílula compacta na largura da expandida, e **não** se desliga o zoom do hover nem o nudge com 2 ou mais sessões. O comportamento visual das Fases 3 e 4 fica como está.
+    - O resíduo (a largura muda com o número de sessões, ou entre "concluído" compacto e sessão expandida no hover, e os pontos andam junto) fica registrado no modelo de ameaças e no PR.
   - O conteúdo é trocado **de forma atômica**: texto e id juntos, sem crossfade com duas camadas DOM. A camada antiga seria um alvo de clique que o main já descartou. Anima-se só o contêiner.
   - A mola nova entra em `allSpringsAtRest()`, então `canArm` não arma Permitir/Negar enquanto ela se move.
   - Com "reduzir movimento", a troca é sem deslocamento.
