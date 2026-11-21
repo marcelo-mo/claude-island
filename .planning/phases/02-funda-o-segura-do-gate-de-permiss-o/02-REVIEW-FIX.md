@@ -85,6 +85,33 @@ A scratch mutation harness (not committed) copied the test inputs and normalized
 
 IN-01, IN-02 and IN-03 remain open in 02-REVIEW.md (fix scope was Critical + Warning).
 
+## Travas da cola (pós-verificação)
+
+**Commit:** 48ef5cf (`gate.test.js`, só testes; nenhuma mudança de comportamento em tempo de execução)
+
+A verificação mostrou que a suíte provava as regras puras, mas não a cola que as chama. Foram acrescentadas sete travas de fonte em `gate.test.js`. Elas leem o texto e aceitam CRLF ou LF e espaços em volta:
+
+- **Mapeamento de `island:decide`:** o objeto passado a `acceptDecision` é comparado chave por chave, na ordem. O eco vem de `pressedId` (renderer); `shownId`, `shownSince` e `now: performance.now()` vêm do main; `windowVisible` e `withinVisibleArea` vêm de `isVisible`/`isMinimized`/`getBounds`. Também ficam travadas a assinatura do handler e o eco no `preload`. Uma chave duplicada também quebra o teste.
+- **Gravar e só depois marcar:** `writeDecision(verdict.permissionId, verdict.behavior)` precede `decidedPermissionId = verdict.permissionId`, e `decidedPermissionId` só é atribuído na declaração e ali.
+- **`refresh` e payload:** ficam travados o retorno antecipado que olha estado e época, o `reason === 'rearm'` repassado ao reducer e `answeredId`/`armEpoch` no `island:state`.
+- **Renderer:**
+  - nenhuma regra de botão ou de `:hover` com `transform`/`scale`/`translate`/`rotate`/`zoom`;
+  - a roda chama `stopPropagation` e `preventDefault` na janela de assentamento, com `passive: false`;
+  - a chamada a `canPress` no pointerdown e os argumentos de `isValidRelease` no clique estão travados;
+  - o eco enviado é o `pressed.id` capturado no pointerdown;
+  - as travas de `render` (`wasRead`, `answeredId`) e o rearme por época ou id estão travados.
+
+Avaliei extrair a cola para uma função pura em `state.js` e não fiz: um construtor puro ainda deixaria no `main.js` a chamada com os mesmos argumentos, que precisaria da mesma trava. Por isso ficou só a trava de fonte, o menor diff.
+
+**Mutações:** a bateria do verificador foi aplicada a uma cópia completa do repositório, com o `gate.test.js` atual, mais 9 mutações extras. Exemplos de extras: gravar o `behavior` cru ou o id do eco, chave duplicada que fixa um fato, hover que escala a pílula, `zoom` em Negar, roda passiva.
+
+| Bateria | Antes | Depois |
+|---------|-------|--------|
+| Verificador (26) | 3 mortas, 23 sobreviveram | 26 mortas, 0 sobreviveram |
+| Extras (9) | 1 morta, 8 sobreviveram | 9 mortas, 0 sobreviveram |
+
+Nos dois casos a linha de base, sem mutação, passou. A suíte tem 169 testes verdes e passa também com `index.html` em CRLF e `main.js` em LF. As travas fixam a ligação, mas não provam o comportamento real de DOM, que continua com os UAT.
+
 ---
 
 _Fixed: 2026-11-21T05:25:50Z_
