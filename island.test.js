@@ -901,3 +901,110 @@ test('o poll poda os pedidos que saíram, preserva os que ficam e nunca lança n
   assert.doesNotThrow(() => nextSelection(Object.freeze({ key: 'a', requests: frozenRequests }), frozenList, pollEvent(9000)));
   assert.deepEqual(requests.map((request) => request.id), [PEDIDO_A, PEDIDO_B]);
 });
+
+test('quando o pedido exibido sai a ilha vai ao mais antigo restante, nunca de volta à sessão anterior (SESS-05)', () => {
+  const requests = [
+    { id: PEDIDO_B, seenAt: 100, handled: true, shown: false },
+    { id: PEDIDO_C, seenAt: 200, handled: true, shown: false },
+  ];
+  const list = [waitingEntry('a'), waitingEntry('b', PEDIDO_B), waitingEntry('c', PEDIDO_C)];
+  const advanced = nextSelection({ key: 'a', requests }, list, pollEvent(9000, { shownPermissionId: PEDIDO_A }));
+  assert.deepEqual([advanced.key, advanced.snapped], ['b', true]);
+  assert.deepEqual(advanced.requests, [
+    { id: PEDIDO_B, seenAt: 100, handled: true, shown: true },
+    { id: PEDIDO_C, seenAt: 200, handled: true, shown: false },
+  ]);
+  // o avanço não espera o gesto da roda: perderia o fato de que o pedido exibido saiu
+  assert.deepEqual(
+    [nextSelection({ key: 'a', requests }, list, pollEvent(9000, { shownPermissionId: PEDIDO_A, lastWheelAt: 8999 })).key],
+    ['b'],
+  );
+  // só o terceiro pendente
+  const onlyThird = nextSelection({ key: 'a', requests: [requests[1]] }, [waitingEntry('a'), waitingEntry('c', PEDIDO_C)], pollEvent(9000, { shownPermissionId: PEDIDO_A }));
+  assert.deepEqual([onlyThird.key, onlyThird.snapped], ['c', true]);
+  // nenhum pendente: fica na mesma sessão
+  const none = nextSelection({ key: 'a', requests: [] }, [waitingEntry('a'), waitingEntry('b')], pollEvent(9000, { shownPermissionId: PEDIDO_A }));
+  assert.deepEqual([none.key, none.snapped, none.requests], ['a', false, []]);
+  // a sessão exibida saiu de fato: vale a regra de saída (a vizinha), não o avanço
+  const exit = nextSelection({ key: 'a', requests }, [waitingEntry('x'), waitingEntry('b', PEDIDO_B), waitingEntry('c', PEDIDO_C)],
+    pollEvent(9000, { shownPermissionId: PEDIDO_A, previousKeys: ['x', 'a', 'b', 'c'] }));
+  assert.deepEqual([exit.key, exit.snapped], ['x', false]);
+});
+
+test('quem estava numa sessão sem pedido não se move quando o pedido de outra sessão sai (D-14)', () => {
+  const requests = [{ id: PEDIDO_B, seenAt: 100, handled: true, shown: true }];
+  // o pedido de b some
+  const gone = nextSelection({ key: 'a', requests }, [waitingEntry('a'), waitingEntry('b')], pollEvent(9000));
+  assert.deepEqual([gone.key, gone.snapped, gone.requests], ['a', false, []]);
+  // o pedido de b some e outro continua pendente em c: ainda nada se move
+  const queued = [{ id: PEDIDO_C, seenAt: 200, handled: true, shown: false }];
+  const stay = nextSelection({ key: 'a', requests: [...requests, ...queued] }, [waitingEntry('a'), waitingEntry('b'), waitingEntry('c', PEDIDO_C)], pollEvent(9000));
+  assert.deepEqual([stay.key, stay.snapped], ['a', false]);
+  assert.deepEqual(stay.requests, queued);
+});
+
+test('a fila de ponta a ponta dá "N de M" por ordem de chegada ao main', () => {
+  const wall = 1_000_000_000;
+  const sessions = (...states) => states.map(([key, firstSeenAt, state, permissionId]) => ({
+    key, firstSeenAt, state, project: key, updatedAt: wall,
+    ...(permissionId ? { permission: pedidoValido(permissionId) } : {}),
+  }));
+  let selection = { key: 'a', requests: [] };
+  let previousKeys = [];
+  const cycle = (all, monotonic, shownPermissionId = null) => {
+    const list = sessionList(all, wall);
+    selection = nextSelection(selection, list, { type: 'poll', previousKeys, now: monotonic, lastWheelAt: null, shownPermissionId });
+    previousKeys = list.map((entry) => entry.key);
+    return pickState(all, wall, selection);
+  };
+  // R2 chega primeiro, com um pedido só: sem "N de M"
+  const first = cycle(sessions(['a', 1, 'running'], ['b', 2, 'waiting', PEDIDO_B], ['c', 3, 'running']), 100);
+  assert.equal(first.permission.id, PEDIDO_B);
+  assert.equal(first.queue, null);
+  // R3 chega com R2 na tela: entra na fila, sem snap
+  const both = sessions(['a', 1, 'running'], ['b', 2, 'waiting', PEDIDO_B], ['c', 3, 'waiting', PEDIDO_C]);
+  const second = cycle(both, 200, PEDIDO_B);
+  assert.equal(second.permission.id, PEDIDO_B);
+  assert.deepEqual(second.queue, { position: 1, total: 2 });
+  assert.deepEqual(second.sessions.map((dot) => dot.pending), [false, true, true]);
+  // o usuário vai à sessão de R3: segunda da fila
+  selection = nextSelection(selection, sessionList(both, wall), { type: 'select', index: 2 });
+  const third = cycle(both, 300, PEDIDO_B);
+  assert.equal(third.permission.id, PEDIDO_C);
+  assert.deepEqual(third.queue, { position: 2, total: 2 });
+  // R2 sai com R3 na tela: sobra um pedido, sem "N de M"
+  const last = cycle(sessions(['a', 1, 'running'], ['b', 2, 'running'], ['c', 3, 'waiting', PEDIDO_C]), 400, PEDIDO_C);
+  assert.equal(last.permission.id, PEDIDO_C);
+  assert.equal(last.queue, null);
+});
+
+test('só um pedido de permissão troca a sessão sozinho; concluir, voltar a trabalhar e aparecer não (SESS-06)', () => {
+  const wall = 1_000_000_000;
+  const session = (key, firstSeenAt, state, permissionId) => ({
+    key, firstSeenAt, state, project: key, updatedAt: wall,
+    ...(permissionId ? { permission: pedidoValido(permissionId) } : {}),
+  });
+  let selection = { key: null, requests: [] };
+  let previousKeys = [];
+  let monotonic = 0;
+  const cycle = (all, shownPermissionId = null) => {
+    monotonic += 400;
+    const list = sessionList(all, wall);
+    selection = nextSelection(selection, list, { type: 'poll', previousKeys, now: monotonic, lastWheelAt: null, shownPermissionId });
+    previousKeys = list.map((entry) => entry.key);
+    return selection.key;
+  };
+  assert.equal(cycle([session('A', 1, 'running')]), 'A');
+  assert.equal(cycle([session('A', 1, 'running'), session('B', 2, 'done')]), 'A');
+  assert.equal(cycle([session('A', 1, 'running'), session('B', 2, 'running')]), 'A');
+  assert.equal(cycle([session('A', 1, 'running'), session('B', 2, 'running'), session('C', 3, 'running')]), 'A');
+  assert.equal(cycle([session('A', 1, 'done'), session('B', 2, 'running'), session('C', 3, 'running')]), 'A');
+  // B faz um pedido novo: a chave vai a B, uma vez
+  const withRequest = [session('A', 1, 'done'), session('B', 2, 'waiting', PEDIDO_B), session('C', 3, 'running')];
+  assert.equal(cycle(withRequest), 'B');
+  assert.equal(selection.snapped, true);
+  // o usuário volta a A: no ciclo seguinte fica em A
+  selection = nextSelection(selection, sessionList(withRequest, wall), { type: 'select', index: 0 });
+  assert.equal(cycle(withRequest, PEDIDO_B), 'A');
+  assert.equal(selection.snapped, false);
+});

@@ -969,9 +969,11 @@ function toolLabelLines() {
     - horizontalPadding(cssDeclarations('#permission').padding, 'padding de #permission');
   const fontSize = cssPixels(cssDeclarations('#permission-tool')['font-size'], 'font-size de #permission-tool');
   // O cabeçalho é "projeto · ferramenta": o projeto ocupa no máximo o max-width dele (corta com reticências)
-  // e o separador " · " conta três caracteres.
+  // e o separador " · " conta três caracteres. Com fila, o "N de M" flutua à direita na mesma altura: no
+  // pior caso "99 de 99" (8 caracteres) mais a margem dele tiram essa largura da linha.
   const projectWidth = cssPixels(cssDeclarations('#permission-project')['max-width'], 'max-width de #permission-project');
-  return Math.ceil((PERMISSION_TOOL_LIMIT * TOOL_CHAR_WIDTH_EM * fontSize + projectWidth + 3 * TOOL_CHAR_WIDTH_EM * fontSize) / labelWidth);
+  const queueWidth = 8 * TOOL_CHAR_WIDTH_EM * fontSize + cssPixels(cssDeclarations('#permission-queue')['margin-left'], 'margin-left de #permission-queue');
+  return Math.ceil((PERMISSION_TOOL_LIMIT * TOOL_CHAR_WIDTH_EM * fontSize + projectWidth + 3 * TOOL_CHAR_WIDTH_EM * fontSize + queueWidth) / labelWidth);
 }
 
 // Altura da pílula com o pior pedido, somada das regras do CSS (hoje 46 + 15,6 + 194,2 + 40,9 + 16 ≈ 312,7):
@@ -1573,4 +1575,17 @@ test('o refresh leva os fatos ao poll, trava a roda depois do snap e nunca reexi
   const locked = handler.indexOf('if (now < wheelLockedUntil) return;');
   const stepped = handler.indexOf('wheelStep(');
   assert.ok(recorded >= 0 && locked > recorded && stepped > locked, 'lastWheelAt, trava e wheelStep, nesta ordem');
+});
+
+test('o "N de M" é o primeiro filho do cabeçalho do pedido, flutua à direita e só aparece com fila', () => {
+  const html = rendererLf;
+  const header = html.slice(html.indexOf('<span id="permission-tool">'), html.indexOf('</span>\n', html.indexOf('<span id="permission-tool">')));
+  assert.ok(header.startsWith('<span id="permission-tool"><span id="permission-queue" hidden></span><span id="permission-project">'), 'a fila é o primeiro filho do cabeçalho');
+  const queue = cssDeclarations('#permission-queue');
+  assert.equal(queue.float, 'right');
+  assert.match(queue['margin-left'], /^\d+px$/);
+  assert.equal(cssDeclarations('#permission-queue[hidden]').display, 'none');
+  assert.ok(html.includes("const permissionQueue = document.getElementById('permission-queue');"));
+  assert.ok(html.includes('permissionQueue.hidden = !current.queue;'));
+  assert.ok(html.includes('${current.queue.position} de ${current.queue.total}'));
 });
