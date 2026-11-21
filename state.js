@@ -348,20 +348,24 @@ function defaultIslandPosition(workArea, windowSize) {
 /**
  * Posição da janela nas âncoras ao lado da ilha do sistema, `{ x, y }`, ou null para as outras âncoras. A
  * borda interna da pílula (a que fica de frente para o mod) fica a BESIDE_GAP_PX do centro horizontal da
- * área útil e a janela começa STAGE_SHADOW_PX antes dela, para a sombra caber; a pílula encosta nessa borda
- * e cresce para fora (CSS). Com o mod expandido e com hover a janela invade a pílula dele em até ~5 px,
- * abaixo do limiar de 1/8 com que o mod se sobe sobre outra janela (.wh.cpp:4141). Vale em todo monitor,
- * como as outras âncoras.
+ * área útil (o mesmo centro que o mod usa, .wh.cpp:4041) e a janela começa STAGE_SHADOW_PX antes dela, para a
+ * sombra caber; a pílula encosta nessa borda e cresce para fora (CSS). Com o mod expandido e com hover a
+ * janela invade a pílula dele em até ~5 px, abaixo do limiar de 1/8 com que o mod se sobe sobre outra janela
+ * (.wh.cpp:4141). O centro é arredondado uma vez, para os dois lados ficarem à mesma distância.
+ * Limite conhecido: com a área útil abaixo de 1220 DIP (1366×768 a 125%, por exemplo) não cabe a pílula
+ * expandida ao lado do mod, e clampIslandPosition puxa a janela para o centro, por cima da pílula dele. O gate
+ * não vê outra janela cobrindo a nossa (isso já vale para a âncora padrão, que fica em cima do mod).
  * ponytail: sem âncora por monitor; quem usa o mod só no principal escolhe "Ilhas > Só no monitor
- * principal". Se isso não bastar, decidir a âncora efetiva por ilha no main.
+ * principal". Se isso não bastar, decidir a âncora efetiva por ilha no main. A forma Notch, colada no topo,
+ * fica 17 px abaixo dele aqui: com o mod, prefira Pílula ou Windows 11.
  */
 function besidePosition(anchor, workArea, windowSize) {
   if (anchor !== 'right-of-island' && anchor !== 'left-of-island') return null;
-  const center = workArea.x + workArea.width / 2;
+  const center = Math.round(workArea.x + workArea.width / 2);
   const x = anchor === 'right-of-island'
     ? center + BESIDE_GAP_PX - STAGE_SHADOW_PX
     : center - BESIDE_GAP_PX + STAGE_SHADOW_PX - windowSize.width;
-  return { x: Math.round(x), y: workArea.y + BESIDE_TOP_OFFSET_PX };
+  return { x, y: workArea.y + BESIDE_TOP_OFFSET_PX };
 }
 
 /**

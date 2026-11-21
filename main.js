@@ -443,10 +443,10 @@ function createIsland(display) {
   island.webContents.on('will-navigate', (event) => event.preventDefault());
   island.webContents.on('will-redirect', (event) => event.preventDefault());
   island.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  // Acima de apps em tela cheia. Só aqui, uma vez por janela (CONV-02): outro overlay que suba depois (a ilha do
-  // Windhawk sobe a dela quando se sobrepõe a nós) fica por cima, e repetir esta chamada ou usar moveTop
-  // num timer ou ao reexibir viraria disputa pelo topo. Medido no Electron 45.4.1: hide/showInactive, setBounds
-  // e setIgnoreMouseEvents não mexem na ordem. Travado em coexistence.test.js.
+  // Acima de apps em tela cheia. Só aqui, uma vez por janela (CONV-02): outro overlay que suba depois (a ilha
+  // do Windhawk sobe a dela quando se sobrepõe a nós) fica por cima, e repetir esta chamada ou puxar a janela
+  // para a frente num timer ou ao reexibir viraria disputa pelo topo. Medido no Electron 45.4.1:
+  // hide/showInactive, setBounds e setIgnoreMouseEvents não mexem na ordem. Travado em coexistence.test.js.
   island.setAlwaysOnTop(true, 'screen-saver');
   island.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   if (CAN_CLICK_THROUGH) island.setIgnoreMouseEvents(true);

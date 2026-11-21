@@ -12,8 +12,10 @@ const {
 // Os dois monitores do autor: o principal (onde fica o mod) e o de 125%, em DIP.
 const PRIMARY_WORK_AREA = { x: 0, y: 30, width: 2560, height: 990 };
 const SECONDARY_125_WORK_AREA = { x: -1536, y: 0, width: 1536, height: 824 };
+// Largura ímpar: o centro cai em meio pixel e os dois lados têm de continuar à mesma distância.
+const ODD_WORK_AREA = { x: 0, y: 0, width: 1919, height: 1040 };
 const BOTH_WORK_AREAS = [PRIMARY_WORK_AREA, SECONDARY_125_WORK_AREA];
-const centerOf = (workArea) => workArea.x + workArea.width / 2;
+const centerOf = (workArea) => Math.round(workArea.x + workArea.width / 2);
 
 // ---- Âncoras ao lado da ilha do sistema (CONV-01) ----
 
@@ -28,12 +30,12 @@ test('as âncoras ao lado entram depois das seis da Fase 4 e não têm sufixo de
 
 test('a borda interna da pílula fica a 210 px do centro da área útil, dos dois lados e nos dois monitores', () => {
   assert.equal(BESIDE_GAP_PX, 210);
-  for (const workArea of BOTH_WORK_AREAS) {
+  for (const workArea of [...BOTH_WORK_AREAS, ODD_WORK_AREA]) {
     const right = anchorPosition('right-of-island', workArea, WINDOW_SIZE);
     // À direita do mod a pílula encosta no lado esquerdo do palco, depois da margem da sombra.
-    assert.equal(right.x + STAGE_SHADOW_PX, Math.round(centerOf(workArea) + BESIDE_GAP_PX));
+    assert.equal(right.x + STAGE_SHADOW_PX, centerOf(workArea) + BESIDE_GAP_PX);
     const left = anchorPosition('left-of-island', workArea, WINDOW_SIZE);
-    assert.equal(left.x + WINDOW_SIZE.width - STAGE_SHADOW_PX, Math.round(centerOf(workArea) - BESIDE_GAP_PX));
+    assert.equal(left.x + WINDOW_SIZE.width - STAGE_SHADOW_PX, centerOf(workArea) - BESIDE_GAP_PX);
     // Espelho: as duas pílulas ficam à mesma distância do centro.
     assert.equal((right.x + STAGE_SHADOW_PX) - centerOf(workArea), centerOf(workArea) - (left.x + WINDOW_SIZE.width - STAGE_SHADOW_PX));
   }
@@ -77,6 +79,20 @@ test('ao lado, a janela está dentro da área útil e o clamp não a mexe, nos d
       assert.deepEqual(clampIslandPosition(position, workArea, WINDOW_SIZE, slack), position, anchor);
     }
   }
+});
+
+test('abaixo de 1220 DIP de área útil o clamp puxa a janela ao lado para o centro (limite conhecido)', () => {
+  // A janela à direita termina em centro + 190 + 520, e a folga de fora é de 100 px: cabe com largura/2 + 100 >= 710.
+  const pulled = (width) => {
+    const workArea = { x: 0, y: 0, width, height: 768 };
+    const position = anchorPosition('right-of-island', workArea, WINDOW_SIZE);
+    return clampIslandPosition(position, workArea, WINDOW_SIZE, horizontalSlackFor('right-of-island')).x - position.x;
+  };
+  assert.equal(pulled(1220), 0);
+  assert.ok(pulled(1218) < 0);
+  // 1366×768 a 125% (1093 DIP): a janela anda 64 px para o centro e a borda interna da pílula fica a 146 px dele,
+  // dentro da pílula expandida do mod (meia-largura de ~195 com hover).
+  assert.equal(pulled(1093), -64);
 });
 
 test('o deslocamento do arraste soma à posição ao lado: é o ajuste fino do encaixe', () => {
@@ -133,27 +149,43 @@ const functionBody = (opening) => {
   return mainSource.slice(start, mainSource.indexOf('\n}', start));
 };
 
-test('a ilha nunca reafirma o topo: um único setAlwaysOnTop, dentro de createIsland, e nenhum moveTop', () => {
-  assert.equal(mainSource.includes('moveTop('), false);
-  assert.equal((mainSource.match(/setAlwaysOnTop\(/g) || []).length, 1);
-  assert.ok(functionBody('function createIsland(').includes('setAlwaysOnTop('));
+test('o topo só é pedido ao criar a janela: um único setAlwaysOnTop, dentro de createIsland, e nenhum moveTop', () => {
+  // \b também pega espaço antes do parêntese e acesso por colchete ('setAlwaysOnTop' entre aspas).
+  assert.equal(/moveTop\b/.test(mainSource), false);
+  assert.equal((mainSource.match(/setAlwaysOnTop\b/g) || []).length, 1);
+  assert.ok(/setAlwaysOnTop\s*\(/.test(functionBody('function createIsland(')));
+  // createIsland só é chamado pela reconciliação de monitores: uma janela nova (monitor plugado, ou o monitor do
+  // cursor no modo 'cursor') sobe ao nascer, o que é criação e não reafirmação de uma janela que já existe.
+  assert.equal((mainSource.match(/createIsland\(/g) || []).length, 2, 'a definição e uma chamada');
+  assert.ok(functionBody('function syncIslands(').includes('createIsland('));
 });
 
-test('nenhum timer do main mexe na ordem das janelas', () => {
-  const timers = [...mainSource.matchAll(/set(?:Interval|Timeout)\(/g)];
+// Argumentos de uma chamada, do parêntese de abertura ao que fecha, contando parênteses: pega corpo em bloco.
+const callArguments = (openIndex) => {
+  let depth = 0;
+  for (let index = openIndex; index < mainSource.length; index += 1) {
+    if (mainSource[index] === '(') depth += 1;
+    if (mainSource[index] === ')') depth -= 1;
+    if (depth === 0) return mainSource.slice(openIndex + 1, index);
+  }
+  return mainSource.slice(openIndex + 1);
+};
+
+test('nenhum timer do main mostra, restaura ou foca a janela', () => {
+  // setAlwaysOnTop e moveTop já estão travados acima; aqui ficam as outras chamadas que um timer usaria para
+  // trazer a janela de volta à frente.
+  const forbidden = ['.focus(', 'showInactive(', '.show(', '.restore('];
+  const timers = [...mainSource.matchAll(/set(?:Interval|Timeout)\s*\(/g)];
+  assert.ok(timers.length >= 3, 'cursor, batimento e polling');
   for (const match of timers) {
-    // Do timer até o fim da instrução: corpo inline ou nome da função agendada.
-    const call = mainSource.slice(match.index, mainSource.indexOf(';', match.index));
-    for (const forbidden of ['setAlwaysOnTop', 'moveTop', '.focus(', 'showInactive', '.show(']) {
-      assert.equal(call.includes(forbidden), false, `timer com ${forbidden}: ${call}`);
-    }
-    // Função agendada por nome: o corpo dela também não pode mexer no z.
-    const named = call.match(/set(?:Interval|Timeout)\((\w+)\s*,/);
-    if (named) {
-      const body = functionBody(`function ${named[1]}(`);
-      for (const forbidden of ['setAlwaysOnTop', 'moveTop', '.focus(']) {
-        assert.equal(body.includes(forbidden), false, `${named[1]} com ${forbidden}`);
-      }
-    }
+    const args = callArguments(match.index + match[0].length - 1);
+    for (const call of forbidden) assert.equal(args.includes(call), false, `timer com ${call}: ${args}`);
+    // Função agendada por nome (declarada com function ou const): o corpo dela também não pode.
+    const named = args.match(/^\s*(\w+)\s*,/);
+    if (!named) continue;
+    const opening = [`function ${named[1]}(`, `const ${named[1]} =`].find((candidate) => mainSource.includes(candidate));
+    assert.ok(opening, `declaração de ${named[1]}`);
+    const body = functionBody(opening);
+    for (const call of forbidden) assert.equal(body.includes(call), false, `${named[1]} com ${call}`);
   }
 });
