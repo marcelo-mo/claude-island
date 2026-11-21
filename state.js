@@ -352,7 +352,8 @@ function keyAfterPoll(key, list, previousKeys) {
  * Qual sessão a ilha exibe depois de um evento. `selection` é `{ key, requests }`, `list` é o que
  * sessionList devolveu e `event` é `{ type: 'poll', previousKeys }` (um ciclo de leitura; `previousKeys`
  * são as chaves da lista do ciclo anterior, na mesma ordem) ou `{ type: 'select', index }` (clique num
- * ponto: só um índice inteiro dentro da lista vale). A sessão exibida só muda por um evento do usuário
+ * ponto: só um índice inteiro dentro da lista vale) ou `{ type: 'scroll', step }` (roda: `step` exatamente
+ * -1 ou 1 vai ao vizinho; no começo ou no fim da lista, ou com a chave fora dela, mantém). A sessão exibida só muda por um evento do usuário
  * ou quando sai da lista, e então a ilha vai à vizinha dela, nunca à mais urgente: por isso "concluído"
  * e "voltou a trabalhar" não trocam a sessão (SESS-06). A urgência só decide sem sessão exibida.
  * Devolve sempre um objeto novo `{ key, requests, snapped }` (`requests` é cópia; `snapped` ainda é
@@ -371,9 +372,60 @@ function nextSelection(selection, list, event) {
       const { index } = event;
       return result(Number.isInteger(index) && index >= 0 && index < entries.length ? entries[index].key : key);
     }
+    case 'scroll': {
+      const at = entries.findIndex((entry) => entry.key === key);
+      const { step } = event;
+      const target = at + step;
+      return result((step === 1 || step === -1) && at >= 0 && target >= 0 && target < entries.length ? entries[target].key : key);
+    }
     default:
       return result(key);
   }
+}
+
+// Regras de gesto da roda portadas do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90;
+// ver THIRD_PARTY_NOTICES.md): acumula até um entalhe, o gesto recomeça depois de 220 ms sem roda ou na
+// inversão de direção, o intervalo entre passos é de 85 ms com roda e 200 ms com touchpad (delta menor que
+// um entalhe) e no máximo um entalhe fica pendente.
+const WHEEL_NOTCH_DELTA = 120;
+const WHEEL_GESTURE_PAUSE_MS = 220;
+const WHEEL_STEP_MS = 85;
+const WHEEL_PRECISE_STEP_MS = 200;
+// Escolha do projeto, não do mod: o teto do número aceito do renderer. Dez entalhes num só evento já é roda
+// solta; acima disso é dado fora do contrato e o main ignora.
+const WHEEL_DELTA_MAX = 10 * WHEEL_NOTCH_DELTA;
+
+/**
+ * Um evento de roda no acumulador do gesto. `gesture` é `{ accumulated, lastEventAt, lastStepAt }` (os
+ * instantes são do relógio monotônico e `null` quer dizer nunca); `delta` é o número bruto da roda (120
+ * por entalhe, menos no touchpad) e `now` o instante do evento. Devolve `{ gesture, step }`, com `step`
+ * -1 (roda para cima: sessão anterior), 0 ou 1 (roda para baixo: a seguinte). Delta ou `now` que não
+ * sejam números finitos, e delta 0, devolvem uma cópia do gesto e step 0; gesto inválido conta como o
+ * inicial. Nunca lança nem muta.
+ */
+function wheelStep(gesture, delta, now) {
+  const isInstant = (value) => value === null || Number.isFinite(value);
+  const valid = gesture && typeof gesture === 'object' && Number.isFinite(gesture.accumulated)
+    && isInstant(gesture.lastEventAt) && isInstant(gesture.lastStepAt);
+  const current = valid
+    ? { accumulated: gesture.accumulated, lastEventAt: gesture.lastEventAt, lastStepAt: gesture.lastStepAt }
+    : { accumulated: 0, lastEventAt: null, lastStepAt: null };
+  if (!Number.isFinite(delta) || !Number.isFinite(now) || delta === 0) return { gesture: current, step: 0 };
+
+  const paused = current.lastEventAt !== null && now - current.lastEventAt > WHEEL_GESTURE_PAUSE_MS;
+  const reversed = current.accumulated !== 0 && (delta > 0) !== (current.accumulated > 0);
+  const accumulated = (paused || reversed ? 0 : current.accumulated) + delta;
+  const next = { accumulated, lastEventAt: now, lastStepAt: current.lastStepAt };
+  if (Math.abs(accumulated) < WHEEL_NOTCH_DELTA) return { gesture: next, step: 0 };
+
+  const interval = Math.abs(delta) < WHEEL_NOTCH_DELTA ? WHEEL_PRECISE_STEP_MS : WHEEL_STEP_MS;
+  if (next.lastStepAt !== null && now - next.lastStepAt < interval) {
+    next.accumulated = accumulated > 0 ? WHEEL_NOTCH_DELTA : -WHEEL_NOTCH_DELTA;
+    return { gesture: next, step: 0 };
+  }
+  next.lastStepAt = now;
+  next.accumulated = 0;
+  return { gesture: next, step: accumulated > 0 ? -1 : 1 };
 }
 
 // getBounds() arredonda com escala de DPI fracionária (como 125%), e a janela pode medir 1 ou 2 px
@@ -835,6 +887,7 @@ module.exports = {
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
   sessionList, nextSelection,
+  wheelStep, WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
   BESIDE_GAP_PX, BESIDE_TOP_OFFSET_PX,

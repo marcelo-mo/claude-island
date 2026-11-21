@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('island', {
   setCapture: (capture) => ipcRenderer.send('island:capture', capture),
   focusSession: () => ipcRenderer.send('island:focus'),
   selectSession: (index) => ipcRenderer.send('island:select', index),
+  wheel: (delta) => ipcRenderer.send('island:wheel', delta),
   decide: (behavior, pressedId) => ipcRenderer.send('island:decide', behavior, pressedId),
   drag: (deltaX, deltaY) => ipcRenderer.send('island:drag', deltaX, deltaY),
   endDrag: () => ipcRenderer.send('island:drag-end'),

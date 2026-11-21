@@ -5,7 +5,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, sessionList, nextSelection, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  pickState, sessionList, nextSelection, wheelStep, WHEEL_DELTA_MAX, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
   effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem,
@@ -50,6 +50,8 @@ let selection = { key: null, requests: [] };
 // A lista viva do último refresh, na ordem dos pontos e com as chaves de sessão. O clique no ponto
 // anda nela; ela nunca vai ao renderer.
 let lastSessionList = [];
+// O gesto da roda em curso, nos instantes do relógio monotônico (performance.now).
+let wheelGesture = { accumulated: 0, lastEventAt: null, lastStepAt: null };
 // Último estado serializado enviado às ilhas; refresh só reenvia quando algo mudou.
 let lastSent = JSON.stringify(lastPickedState);
 // Último pedido cuja decisão foi gravada. Primeiro clique vence: só o main enxerga as duas ilhas
@@ -647,6 +649,21 @@ function registerIpcHandlers() {
     if (lastPickedState.state === 'idle') return;
     selection = nextSelection(selection, lastSessionList, { type: 'select', index });
     refresh('select');
+  });
+
+  // A roda só troca de sessão: o renderer manda o número bruto e o main acumula com as regras do mod. Número
+  // fora da faixa, de outro tipo ou com a ilha ociosa é ignorado; o passo anda na lista que os pontos
+  // mostram, sem dar a volta.
+  ipcMain.on('island:wheel', (event, delta) => {
+    const island = islandOf(event);
+    if (!island || !Number.isFinite(delta) || Math.abs(delta) > WHEEL_DELTA_MAX) return;
+    if (lastPickedState.state === 'idle') return;
+    const now = performance.now();
+    const { gesture, step } = wheelStep(wheelGesture, delta, now);
+    wheelGesture = gesture;
+    if (step === 0) return;
+    selection = nextSelection(selection, lastSessionList, { type: 'scroll', step });
+    refresh('wheel');
   });
 
   // Fronteira de confiança: isto aprova a execução de um comando. O renderer envia a intenção

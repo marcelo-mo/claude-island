@@ -237,12 +237,12 @@ test('nenhum canal escapa pela IPC por webContents', () => {
 
 const RENDERER_CHANNELS = [
   'island:state', 'island:cursor', 'island:capture', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end',
-  'island:reset-position', 'island:menu', 'island:select',
+  'island:reset-position', 'island:menu', 'island:select', 'island:wheel',
 ];
 // Canais que o main envia e o renderer só escuta: o main não registra handler para eles.
 const MAIN_TO_RENDERER_CHANNELS = ['island:state', 'island:cursor'];
 
-test('o preload usa só send e on, nos dez canais conhecidos', () => {
+test('o preload usa só send e on, nos onze canais conhecidos', () => {
   const { methods, channels } = collectChannels(preloadSource, 'ipcRenderer');
   assert.deepEqual([...methods].sort(), ['on', 'send']);
   assert.deepEqual([...channels].sort(), [...RENDERER_CHANNELS].sort());
@@ -263,7 +263,7 @@ test('a janela da ilha não navega nem abre janela, e todo canal confere o remet
   assert.equal(mainSource.includes('loadFile('), false, 'a ilha carrega pela mesma URL que confere');
   assert.match(mainSource, /const islandOf = \(event\) => \{[^}]*isIslandSender\(/);
   const handlers = mainSource.split('ipcMain.on(').slice(1);
-  assert.equal(handlers.length, 8);
+  assert.equal(handlers.length, 9);
   for (const handler of handlers) {
     const body = handler.slice(0, handler.indexOf('\n  });'));
     assert.match(body, /islandOf\(event\)/, `canal sem conferir o remetente: ${body.split(',')[0]}`);
@@ -294,7 +294,7 @@ test('o armamento acompanha o retângulo dos próprios botões', () => {
   assert.ok(pointerdown.indexOf(moved) < pointerdown.indexOf('canPress('), 'a conferência vem antes de canPress');
 });
 
-test('o main escuta só com ipcMain.on, nos oito canais do renderer', () => {
+test('o main escuta só com ipcMain.on, nos nove canais do renderer', () => {
   const { methods, channels } = collectChannels(mainSource, 'ipcMain');
   assert.deepEqual([...methods], ['on']);
   assert.deepEqual(
@@ -1458,7 +1458,7 @@ test('wheelStep: mais de 220 ms de pausa ou a inversão de direção recomeçam 
   const pause = wheelStep(wheelStep(WHEEL_START, 60, 1000).gesture, 60, 1300);
   assert.deepEqual(pause, { gesture: { accumulated: 60, lastEventAt: 1300, lastStepAt: null }, step: 0 });
   const stillSame = wheelStep(wheelStep(WHEEL_START, 60, 1000).gesture, 60, 1220);
-  assert.equal(stillSame.gesture.accumulated, 120, '220 ms exatos ainda é o mesmo gesto');
+  assert.equal(stillSame.step, -1, '220 ms exatos ainda é o mesmo gesto: 60 + 60 fecha um entalhe');
   const reverse = wheelStep(wheelStep(WHEEL_START, 60, 1000).gesture, -60, 1010);
   assert.deepEqual(reverse, { gesture: { accumulated: -60, lastEventAt: 1010, lastStepAt: null }, step: 0 });
 });

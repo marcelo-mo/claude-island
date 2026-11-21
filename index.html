@@ -1230,6 +1230,18 @@
     // A janela sai de baixo do ponteiro: o próximo tique do cursor (até 33 ms) recolhe a pílula e solta
     // a captura.
   });
+
+  // A roda sobre a pílula troca de sessão (SESS-02). Só o número bruto vai ao main, que acumula com as regras
+  // do mod. O wheelDeltaY do Chromium vale ±120 por entalhe, como o WM_MOUSEWHEEL, e menos no touchpad; sem
+  // ele (propriedade fora do padrão), o deltaY padrão vezes 1,2 leva os 100 px por entalhe do Chromium a 120.
+  // Sobre o bloco do pedido a roda é do texto: o #permission segura o evento e a conferência de baixo é a
+  // segunda trava. passive: true porque a pílula nunca segura a rolagem.
+  const WHEEL_PIXELS_TO_DELTA = 1.2;
+  pill.addEventListener('wheel', (event) => {
+    if (event.target.closest('#permission')) return;
+    const delta = event.wheelDeltaY || -event.deltaY * WHEEL_PIXELS_TO_DELTA;
+    if (delta) window.island.wheel(delta);
+  }, { passive: true });
 </script>
 </body>
 </html>
