@@ -120,6 +120,27 @@ function decisionOutput(behavior) {
   return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } });
 }
 
+const refuseDecision = (reason) => ({ accept: false, reason });
+
+/**
+ * Decide se um clique em Permitir/Negar vira uma decisão gravada. Nunca lança. Devolve
+ * { accept: true, permissionId, behavior }, em que permissionId é sempre o pedido exibido
+ * (`shownId`): o eco enviado pelo renderer (`echoedId`) só pode recusar, nunca escolher o
+ * alvo. Ou devolve { accept: false, reason }. A ordem das checagens é contrato, fixada pelos
+ * vetores de fixtures/permission-vectors.json.
+ */
+function acceptDecision({ behavior, echoedId, shownId, shownSince, now }) {
+  if (decisionOutput(behavior) === null) return refuseDecision('invalid-behavior');
+  if (typeof shownId !== 'string' || shownId === '') return refuseDecision('nothing-shown');
+  // Igualdade estrita: eco ausente, de outro tipo, de outro pedido ou com outra caixa recusa.
+  if (echoedId !== shownId) return refuseDecision('echo-mismatch');
+  // Cobre também o relógio que andou para trás (delta negativo) e dado que não é número.
+  if (!Number.isFinite(now) || !Number.isFinite(shownSince) || now - shownSince < PERMISSION_ARM_MS) {
+    return refuseDecision('not-armed');
+  }
+  return { accept: true, permissionId: shownId, behavior };
+}
+
 /** A ilha está no ar se o batimento dela é recente (e não veio do futuro). */
 function isHeartbeatFresh(heartbeatAt, now) {
   return Number.isFinite(heartbeatAt) && heartbeatAt <= now + HEARTBEAT_STALE_MS && now - heartbeatAt <= HEARTBEAT_STALE_MS;
@@ -191,6 +212,6 @@ function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
 
 module.exports = {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
-  eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh,
+  eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
 };

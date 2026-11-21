@@ -3,8 +3,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {
-  STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS,
-  pickState, decisionOutput, defaultIslandPosition, clampIslandPosition,
+  STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
+  pickState, acceptDecision, defaultIslandPosition, clampIslandPosition,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -33,7 +33,7 @@ let savedOffsets = {};
 let lastPickedState = { state: 'idle', count: 0 };
 let shownWindowPid = null;
 // Pedido de permissão em exibição e desde quando: é a este id que um clique em "Permitir"
-// ou "Negar" se refere. O renderer nunca informa o id.
+// ou "Negar" se refere. O renderer só devolve o id como eco, que apenas pode recusar.
 let shownPermissionId = null;
 let shownPermissionSince = 0;
 
@@ -245,15 +245,21 @@ function registerIpcHandlers() {
     });
   });
 
-  // Fronteira de confiança: isto aprova a execução de um comando. O renderer só diz
-  // 'allow' ou 'deny'; o pedido é o que está em exibição, guardado aqui.
-  ipcMain.on('island:decide', (event, behavior) => {
+  // Fronteira de confiança: isto aprova a execução de um comando. O renderer envia a intenção
+  // ('allow' ou 'deny') e o eco do id que ele estava mostrando; o eco só serve para recusar
+  // (o pedido mudou entre ver e clicar). O alvo é sempre o pedido em exibição, guardado aqui.
+  ipcMain.on('island:decide', (event, behavior, pressedId) => {
     if (![...islands.values()].includes(islandOf(event))) return;
-    if (!shownPermissionId || !decisionOutput(behavior)) return;
-    // Pedido recém-trocado: o clique foi dado olhando para o anterior (ver PERMISSION_ARM_MS).
-    if (Date.now() - shownPermissionSince < PERMISSION_ARM_MS) return;
+    const verdict = acceptDecision({
+      behavior,
+      echoedId: pressedId,
+      shownId: shownPermissionId,
+      shownSince: shownPermissionSince,
+      now: performance.now(),
+    });
+    if (!verdict.accept) return;
     try {
-      writeDecision(shownPermissionId, behavior);
+      writeDecision(verdict.permissionId, verdict.behavior);
     } catch (error) {
       console.error('Não foi possível gravar a decisão do pedido de permissão:', error.message);
     }
@@ -285,7 +291,9 @@ function start() {
     const permissionId = picked.permission ? picked.permission.id : null;
     if (permissionId !== shownPermissionId) {
       shownPermissionId = permissionId;
-      shownPermissionSince = Date.now();
+      // Relógio monotônico: o de parede salta com NTP e suspensão, o que armaria os botões
+      // antes da hora (ou nunca). Só a regra do armamento usa este instante.
+      shownPermissionSince = performance.now();
     }
     for (const island of islands.values()) sendState(island);
   }, POLL_MS);

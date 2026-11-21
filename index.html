@@ -295,8 +295,11 @@
 
   function decide(behavior) {
     if (!current.permission) return;
-    answeredPermissionId = current.permission.id;
-    window.island.decide(behavior);
+    const permissionId = current.permission.id;
+    answeredPermissionId = permissionId;
+    // O id do pedido que está na tela vai como eco: o main decide qual pedido recebe a decisão
+    // e recusa se este não for o que ele está exibindo (o pedido pode ter mudado no clique).
+    window.island.decide(behavior, permissionId);
     render();
   }
   allowButton.addEventListener('click', () => decide('allow'));
