@@ -567,3 +567,64 @@ test('snapSpring leva ao alvo parada e isSpringAtRest só vale com posição no 
   assert.equal(spring.isSpringAtRest({ ...snapped, velocity: 0.001 }), false);
   assert.equal(spring.isSpringAtRest(movingSpring(200, 400)), false);
 });
+
+// Travas da cola das molas de tamanho (texto): a física tem simulação, mas a ligação dela à tela não.
+// Aqui se garante que o laço só abre com algo em movimento, que o alvo vem do layout medido, que os
+// botões só armam com as molas paradas e que movimento reduzido e janela escondida pulam a animação.
+const rendererLf = rendererSource.replace(/\r\n/g, '\n');
+
+// Corpo de uma função do renderer: do `function nome(` até o fecha-chaves recuado de 2 espaços.
+function functionBody(name) {
+  const start = rendererLf.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `função ausente: ${name}`);
+  return rendererLf.slice(start, rendererLf.indexOf('\n  }\n', start));
+}
+
+test('o tamanho da pílula sai da transição CSS: a regra base e a ociosa não animam width, height nem transform', () => {
+  const base = rendererLf.match(/\n\s*#pill \{([^}]*)\}/)[1];
+  assert.equal(/transition:[^;]*\b(?:width|height|transform)\b/.test(base), false, 'a transição base ainda anima o tamanho');
+  const idle = rendererLf.match(/#pill\[data-state="idle"\] \{([^}]*)\}/)[1];
+  assert.ok(idle.includes('scale: .6;') && idle.includes('translate: 0 -12px;'), 'o idle usa as propriedades individuais');
+  assert.equal(/\btransform\s*:/.test(idle), false, 'o idle não pode disputar o transform com as molas');
+  assert.equal(rendererLf.includes('interpolate-size'), false);
+});
+
+test('o laço das molas só abre com algo em movimento e movimento reduzido ou janela escondida pulam ao alvo', () => {
+  const body = functionBody('startSpringLoop');
+  const guard = 'if (springLoopRunning || allSpringsAtRest()) return;';
+  assert.equal(rendererLf.split(guard).length - 1, 1);
+  const skip = body.indexOf('if (reducedMotion.matches || document.hidden) {');
+  assert.ok(skip >= 0 && skip < body.indexOf(guard), 'o salto direto vem antes do laço');
+  assert.match(body.slice(skip, body.indexOf(guard)), /snapAllSprings\(\);\s*return;/);
+  assert.match(body, /requestAnimationFrame\(springFrame\)/);
+  assert.match(rendererLf, /matchMedia\('\(prefers-reduced-motion: reduce\)'\)/);
+  assert.match(rendererLf, /reducedMotion\.addEventListener\('change', \(\) => \{\s*if \(reducedMotion\.matches\) snapAllSprings\(\);\s*\}\);/);
+  assert.ok(rendererLf.includes("document.addEventListener('visibilitychange', () => { if (document.hidden) snapAllSprings(); });"));
+  // O listener que grava data-hidden e o que rearma continuam, cada um no seu lugar.
+  assert.equal(rendererLf.split("addEventListener('visibilitychange'").length - 1, 3);
+});
+
+test('o quadro da mola lê estilo e velocidade das preferências e para quando tudo repousa', () => {
+  const body = functionBody('springFrame');
+  assert.match(body, /current\.preferences/);
+  assert.match(body, /springStep\(/);
+  assert.match(body, /if \(allSpringsAtRest\(\)\) \{\s*springLoopRunning = false;\s*return;\s*\}/);
+});
+
+test('render mede o alvo no DOM com o conteúdo final e liga as molas', () => {
+  const body = functionBody('render');
+  assert.match(body, /renderContent\(\);/);
+  assert.match(body, /setSizeTarget\(measurePillTarget\(\), !pillVisible\);/);
+  assert.match(body, /startSpringLoop\(\);/);
+  assert.match(body, /current\.state === 'idle'[^]*?snapAllSprings\(\);/);
+  const measure = functionBody('measurePillTarget');
+  assert.ok(measure.includes('pill.offsetWidth') && measure.includes('pill.offsetHeight'), 'o alvo é o tamanho de layout');
+  assert.match(rendererLf, /--content-width/);
+});
+
+test('os botões só armam com o retângulo assentado e todas as molas paradas (T-03-01)', () => {
+  const wait = functionBody('waitUntilSettled');
+  assert.ok(wait.includes('if (canArm({ settled: step.settled, springsAtRest: allSpringsAtRest() })) {'));
+  assert.equal(wait.includes('if (step.settled) {'), false, 'armar só pelo retângulo deixa botão recortado armar');
+  assert.match(wait, /armed = true;\s*armedAt = now;\s*armedRect = rect;\s*render\(\);\s*return;/);
+});
