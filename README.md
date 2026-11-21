@@ -114,7 +114,9 @@ deixa sempre à vista de qual projeto é a sessão na tela.
 - **Com a ilha escondida ou em tela cheia, um pedido novo não a faz reaparecer.** Só a seleção muda.
 - **O projeto fica à vista.** O nome da pasta da sessão é o título da pílula compacta e abre o
   cabeçalho do pedido ("projeto · ferramenta"). Dois projetos com a mesma pasta final mostram o
-  mesmo nome; a posição do ponto diz qual é qual.
+  mesmo nome; a posição do ponto diz qual é qual. Nomes longos são cortados no fim (140 px), então
+  dois projetos que começam igual podem parecer iguais; o nome inteiro está no tooltip do título e do
+  cabeçalho do pedido.
 - **O "concluído" na tela fica até você trocar.** Com outra sessão aberta, o "concluído" da sessão na
   tela fica até você trocar (roda ou ponto) ou chegar um pedido novo; sozinho, ele some em 10 s como
   antes. Se a sessão na tela é encerrada ou o terminal fecha, a ilha vai a um pedido que você ainda

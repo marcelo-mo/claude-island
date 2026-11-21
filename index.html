@@ -922,6 +922,10 @@
     // Com várias sessões o título diz qual é a sessão e o estado segue pela cor e pelos pontos; expandida,
     // o #detail já começa pelo projeto.
     title.textContent = multiSession && !pill.classList.contains('expanded') && current.project ? current.project : TITLES[current.state];
+    // ponytail: o corte no fim (140px) segue; dois projetos de prefixo comprido igual se leem iguais aqui, e o nome
+    // inteiro fica no tooltip nativo, que na janela sem foco só aparece se o sistema o desenhar. Truncar no meio
+    // pediria medir o texto em JS; fazer isso se o tooltip não bastar.
+    title.title = title.textContent === current.project ? current.project : '';
     // Até MAX_SESSION_DOTS sessões o número cede lugar aos pontos; acima disso ele volta.
     count.textContent = current.count > MAX_SESSION_DOTS ? current.count : '';
     renderSessions();
@@ -948,6 +952,9 @@
     if (current.queue) permissionQueue.textContent = `${current.queue.position} de ${current.queue.total}`;
     const permissionProjectName = multiSession && current.project ? current.project : '';
     permissionProject.textContent = permissionProjectName;
+    // Nome inteiro no tooltip nativo (o CSS corta no fim; ver o ponytail do título): com prefixo comprido igual,
+    // é por ele que se distingue o projeto do pedido.
+    permissionProject.title = permissionProjectName;
     permissionToolName.textContent = permissionProjectName ? ` · ${permission.tool}` : permission.tool;
     // Regravar o mesmo texto devolveria a rolagem ao topo a cada atualização de estado.
     if (permissionText.textContent !== permission.text) {

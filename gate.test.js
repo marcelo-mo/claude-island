@@ -1823,6 +1823,14 @@ for (const vector of vectors.nextSelection) {
   });
 }
 
+test('o nome inteiro do projeto vai no tooltip do título e do cabeçalho do pedido, onde o CSS o corta no fim', () => {
+  assert.ok(rendererLf.includes('permissionProject.title = permissionProjectName;'));
+  assert.ok(rendererLf.includes("title.title = title.textContent === current.project ? current.project : '';"));
+  // o tooltip não pode virar texto da página nem mexer na largura reservada ao nome
+  assert.match(rendererLf, /#permission-project \{[^}]*max-width: 140px;/);
+  assert.match(rendererLf, /#pill\.multi-session #title \{ flex: 0 1 140px;/);
+});
+
 test('as constantes de gesto e de snap do state.js são as do fixture', () => {
   assert.equal(SNAP_GESTURE_GAP_MS, vectors.snapGestureGapMs);
   assert.equal(SNAP_WHEEL_LOCK_MS, vectors.snapWheelLockMs);
