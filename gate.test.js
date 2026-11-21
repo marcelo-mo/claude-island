@@ -967,19 +967,22 @@ function toolLabelLines() {
   const labelWidth = cssPixels(expanded.width, 'largura da expandida') - pillPadding
     - horizontalPadding(cssDeclarations('#permission').padding, 'padding de #permission');
   const fontSize = cssPixels(cssDeclarations('#permission-tool')['font-size'], 'font-size de #permission-tool');
-  return Math.ceil((PERMISSION_TOOL_LIMIT * TOOL_CHAR_WIDTH_EM * fontSize) / labelWidth);
+  // O cabeçalho é "projeto · ferramenta": o projeto ocupa no máximo o max-width dele (corta com reticências)
+  // e o separador " · " conta três caracteres.
+  const projectWidth = cssPixels(cssDeclarations('#permission-project')['max-width'], 'max-width de #permission-project');
+  return Math.ceil((PERMISSION_TOOL_LIMIT * TOOL_CHAR_WIDTH_EM * fontSize + projectWidth + 3 * TOOL_CHAR_WIDTH_EM * fontSize) / labelWidth);
 }
 
-// Altura da pílula com o pior pedido, somada das regras do CSS (hoje 46 + 31,2 + 179,9 + 40,9 + 16 ≈ 314):
+// Altura da pílula com o pior pedido, somada das regras do CSS (hoje 46 + 15,6 + 194,2 + 40,9 + 16 ≈ 312,7):
 //   barra (#bar) ........................ 46
-//   detalhe (#detail): 2 linhas de 12 px . 12 × 1,3 × 2 = 31,2
-//   pedido (#permission) ................ margem 8 + padding 16 + título (2 linhas de 11 × 1,3, + 3) + texto com
-//                                         max-height 105 + dica (5 + 11 × 1,3) = 179,9
+//   detalhe (#detail): 1 linha de 12 px .. 12 × 1,3 = 15,6 (com pedido na tela, #pill.has-permission #detail)
+//   pedido (#permission) ................ margem 8 + padding 16 + título (3 linhas de 11 × 1,3, + 3) + texto com
+//                                         max-height 105 + dica (5 + 11 × 1,3) = 194,2
 //   ações (#actions) .................... margem 8 + botão (13 × 1,3 + 8 × 2) = 40,9
 //   respiro de baixo (has-permission) ... 16
 function pillMaxHeight() {
   const bar = cssPixels(cssDeclarations('#bar').height, 'altura de #bar');
-  const detail = textLine('#detail') * Number(cssDeclarations('#detail')['-webkit-line-clamp']);
+  const detail = textLine('#detail') * Number(cssDeclarations('#pill.has-permission #detail')['-webkit-line-clamp']);
   const permission = cssDeclarations('#permission');
   const tool = cssDeclarations('#permission-tool');
   const hint = cssDeclarations('#permission-hint');

@@ -84,6 +84,21 @@ de estado da sessão e espera até 5 minutos pelo arquivo de decisão que a ilha
 `~/.claude/island/decisions/`. Ele só participa se a ilha estiver no ar (ela grava um batimento
 em `~/.claude/island/.heartbeat` a cada 2 s); senão, sai na hora e nada muda no Claude Code.
 
+### Várias sessões
+
+Com duas ou mais sessões do Claude Code abertas, a ilha troca o contador por um ponto por sessão e
+deixa sempre à vista de qual projeto é a sessão na tela.
+
+- **Um ponto por sessão.** A cor é a do estado, o ponto da sessão exibida é maior e o de quem pede
+  permissão pulsa (parado, com um anel, se o sistema pedir para reduzir movimento).
+- **Ordem estável.** Da sessão mais antiga, à esquerda, para a mais nova. Acima de 8 sessões os
+  pontos somem e volta o número.
+- **Clique num ponto para ver aquela sessão.** A ilha não troca sozinha quando outra sessão conclui
+  ou volta a trabalhar; só troca se a sessão exibida terminar, e então vai à vizinha dela.
+- **O projeto fica à vista.** O nome da pasta da sessão é o título da pílula compacta e abre o
+  cabeçalho do pedido ("projeto · ferramenta"). Dois projetos com a mesma pasta final mostram o
+  mesmo nome; a posição do ponto diz qual é qual.
+
 ### Menu, atalho e tela cheia
 
 **Clique direito na pílula** abre o menu: tema, forma, estilo e velocidade da animação, expandir (ao

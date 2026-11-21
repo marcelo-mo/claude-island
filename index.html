@@ -188,7 +188,7 @@
   /* Dois grupos: quem é a sessão (ícone e título) à esquerda, como ela está (reticências,
      contexto, contador) à direita. O gap é o respiro mínimo entre eles na pílula compacta. */
   #bar { display: flex; justify-content: space-between; align-items: center; gap: 38px; height: 46px; }
-  #lead { display: flex; align-items: center; gap: 11px; }
+  #lead { display: flex; align-items: center; gap: 11px; min-width: 0; }
   #dot {
     flex: none; display: grid; place-items: center; width: 14px; height: 14px;
     border-radius: 50%; background: var(--accent); color: var(--icon-ink);
@@ -200,6 +200,11 @@
   #pill[data-state="done"] #dot .icon-done, #pill[data-state="waiting"] #dot .icon-waiting { display: block; }
 
   #title { white-space: nowrap; font-weight: 600; }
+  /* Com várias sessões o título tem largura fixa e corta com reticências: o nome do projeto, longo ou curto,
+     nunca muda a largura da pílula nem empurra o "Abrir". Ele só encolhe abaixo de 140 px quando a barra
+     não cabe (muitos pontos com "Abrir" e anel de contexto).
+     ponytail: limite aceito; se incomodar, tirar o anel de contexto da compacta com muitas sessões. */
+  #pill.multi-session #title { flex: 0 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   #side { display: flex; align-items: center; gap: 11px; }
   #side:not(:has(> :not([hidden]):not(:empty))) { display: none; }
   #dots { display: none; gap: 3px; }
@@ -255,6 +260,9 @@
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     opacity: 0; transition: opacity .2s;
   }
+  /* Com pedido na tela o detalhe repete projeto e ferramenta, que já estão no cabeçalho do pedido: uma
+     linha paga a linha a mais do cabeçalho e mantém a conta do palco. */
+  #pill.has-permission #detail { -webkit-line-clamp: 1; }
   /* Pedido de permissão: o texto aparece inteiro, quebrando linha e rolando se preciso.
      Nada de reticências: não se aprova um comando cortado. */
   #permission {
@@ -263,6 +271,8 @@
   }
   #permission[hidden] { display: none; }
   #permission-tool { display: block; font-size: 11px; font-weight: 600; color: var(--perm-label); margin-bottom: 3px; overflow-wrap: anywhere; }
+  /* Só o projeto pode ser cortado; a ferramenta nunca: é o que diz o que se está aprovando. */
+  #permission-project { display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   #permission-text {
     font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--perm-text);
     white-space: pre-wrap; overflow-wrap: anywhere; max-height: 105px; overflow-y: auto; padding-right: 6px;
@@ -302,9 +312,16 @@
   @keyframes glow {
     50% { opacity: 1; }
   }
+  @keyframes session-pulse { 50% { opacity: .35; } }
+  /* Quem pede permissão pulsa no ritmo do "precisa de você". */
+  #sessions [data-pending="true"] i { animation: session-pulse 1.4s ease-in-out infinite; }
   /* Janela escondida (hide() ou minimizada): a página fica hidden e nada deve animar. */
   html[data-hidden="true"] *, html[data-hidden="true"] ::before { animation-play-state: paused !important; }
-  @media (prefers-reduced-motion: reduce) { #pill, #pill::before, #dot, #dots i { animation: none !important; transition: opacity .2s; } }
+  @media (prefers-reduced-motion: reduce) {
+    #pill, #pill::before, #dot, #dots i, #sessions i { animation: none !important; transition: opacity .2s; }
+    /* Parado, o ponto de quem pede permissão ganha um anel no lugar do pulso. */
+    #sessions [data-pending="true"] i { box-shadow: 0 0 0 2px color-mix(in srgb, var(--waiting) 55%, transparent); }
+  }
 </style>
 </head>
 <body>
@@ -333,7 +350,7 @@
     </div>
     <span id="detail"></span>
     <div id="permission" hidden>
-      <span id="permission-tool"></span>
+      <span id="permission-tool"><span id="permission-project"></span><span id="permission-tool-name"></span></span>
       <pre id="permission-text" tabindex="0" aria-label="Pedido de permissão"></pre>
       <span id="permission-hint" hidden>Role até o fim para poder permitir</span>
     </div>
@@ -669,7 +686,8 @@
   const contextValue = context.querySelector('.value');
 
   const permissionBox = document.getElementById('permission');
-  const permissionTool = document.getElementById('permission-tool');
+  const permissionProject = document.getElementById('permission-project');
+  const permissionToolName = document.getElementById('permission-tool-name');
   const permissionText = document.getElementById('permission-text');
   const permissionHint = document.getElementById('permission-hint');
   const allowButton = document.getElementById('allow');
@@ -846,14 +864,17 @@
   }
 
   function renderContent() {
+    const multiSession = Array.isArray(current.sessions) && current.sessions.length >= 2;
     pill.dataset.state = current.state;
     // "Precisa de você" abre sozinho; "Concluído" não expande (o botão "Abrir" tem de ficar parado sob o
     // mouse); o resto segue a preferência (hover ou clique, e fixar aberta).
     pill.classList.toggle('expanded', shouldExpand({ state: current.state, hovering, clickExpanded, expandOn: current.preferences?.expandOn, pinExpanded: current.preferences?.pinExpanded }));
-    pill.classList.toggle('multi-session', Array.isArray(current.sessions) && current.sessions.length >= 2);
+    pill.classList.toggle('multi-session', multiSession);
     if (current.state === 'idle') return; // mantém o texto durante o fade de saída
     pill.classList.toggle('has-window', Boolean(current.windowPid));
-    title.textContent = TITLES[current.state];
+    // Com várias sessões o título diz qual é a sessão e o estado segue pela cor e pelos pontos; expandida,
+    // o #detail já começa pelo projeto.
+    title.textContent = multiSession && !pill.classList.contains('expanded') && current.project ? current.project : TITLES[current.state];
     // Até MAX_SESSION_DOTS sessões o número cede lugar aos pontos; acima disso ele volta.
     count.textContent = current.count > MAX_SESSION_DOTS ? current.count : '';
     renderSessions();
@@ -873,7 +894,11 @@
     pill.classList.toggle('has-permission', Boolean(permission));
     permissionBox.hidden = allowButton.hidden = denyButton.hidden = !permission;
     if (!permission) return;
-    permissionTool.textContent = permission.tool;
+    // Saber de qual projeto é o pedido que se aprova é regra de segurança: só o projeto pode ser cortado
+    // (reticências no CSS), a ferramenta nunca.
+    const permissionProjectName = multiSession && current.project ? current.project : '';
+    permissionProject.textContent = permissionProjectName;
+    permissionToolName.textContent = permissionProjectName ? ` · ${permission.tool}` : permission.tool;
     // Regravar o mesmo texto devolveria a rolagem ao topo a cada atualização de estado.
     if (permissionText.textContent !== permission.text) {
       permissionText.textContent = permission.text;
