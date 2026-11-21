@@ -17,7 +17,17 @@
     --icon-ink: #000; /* traço do check e da exclamação sobre o selo colorido */
     --text: #fff;
     --muted: #a1a1a6;
+    --border: rgb(255 255 255 / .12);
     --shadow: 0 4px 14px rgba(0, 0, 0, .35);
+    /* Bloco de permissão: tokens próprios e opacos, para o que o usuário lê antes de aprovar não depender
+       do tema (o visual.test.js mede o contraste deles nos 10 casos). Cava o bloco nos temas escuros. */
+    --perm-bg: color-mix(in srgb, #000 55%, var(--surface));
+    --perm-text: var(--text);
+    /* O bloco só existe em "precisa de você" (pickState), então o acento ali é sempre o âmbar; e um token
+       declarado no :root é resolvido no :root, onde o acento seria sempre o laranja de "trabalhando". */
+    --perm-label: var(--waiting);
+    --perm-hint: var(--muted);
+    --perm-deny-border: color-mix(in srgb, var(--text) 60%, var(--surface));
     /* Botão no padrão do quaint-money: --primary mais escuro com --primary-foreground,
        fixo em todos os estados para o rótulo claro não cair sobre âmbar ou verde. */
     --button: oklch(0.646 0.222 41.116);
@@ -29,9 +39,11 @@
     /* Respiro entre o topo do palco (a janela) e a pílula; o notch o zera e cola a pílula na borda. */
     --stage-top: 8px;
   }
-  /* O Electron segue o tema do sistema em tempo real; a ilha acompanha sem reiniciar. */
+  /* O Electron segue o tema do sistema em tempo real; a ilha acompanha sem reiniciar. Só o tema auto
+     (ou sem atributo, antes do primeiro estado) segue o sistema: um tema escuro escolhido num sistema
+     claro não herda as cores de estado claras. */
   @media (prefers-color-scheme: light) {
-    :root {
+    :root:not([data-theme]), :root[data-theme="auto"] {
       --running: oklch(0.646 0.222 41.116); /* --primary do tema claro do quaint-money */
       --waiting: #f08c00;
       --done: #248a3d;
@@ -41,9 +53,38 @@
       --icon-ink: #fff;
       --text: #1d1d1f;
       --muted: #6e6e73;
+      --border: rgb(0 0 0 / .10);
       /* Sobre janelas claras a pílula branca some sem um contorno. */
       --shadow: 0 0 0 1px rgba(0, 0, 0, .1), 0 4px 14px rgba(0, 0, 0, .18);
+      --perm-bg: color-mix(in srgb, var(--text) 4%, var(--surface));
+      /* Nos claros a cor de estado não chega a 4,5:1 como texto; o rótulo usa o texto (a cor de estado não muda). */
+      --perm-label: var(--text);
     }
+  }
+  /* Temas escuros: só fundo, superfície, texto, secundário e borda mudam (as cores de estado são fixas).
+     Valores do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md);
+     o Nord usa também a paleta Nord (MIT, Copyright (c) 2016-present Sven Greb), creditada no mesmo arquivo. */
+  :root[data-theme="obsidian"] { --surface: #08080A; --text: #FFFFFF; --muted: #9B9BA5; --border: #1E1E22; }
+  :root[data-theme="graphite"] { --surface: #1C1C1E; --text: #FFFFFF; --muted: #A8A8AE; --border: #323236; }
+  :root[data-theme="slate"] { --surface: #111721; --text: #E9EEF6; --muted: #92A2B8; --border: #232C3A; }
+  :root[data-theme="nord"] { --surface: #2E3440; --text: #ECEFF4; --muted: #A7B0C0; --border: #3B4252; }
+  :root[data-theme="evergreen"] { --surface: #0C1512; --text: #E4F1EA; --muted: #8CAE9D; --border: #1A2A23; }
+  :root[data-theme="espresso"] { --surface: #1A1512; --text: #F6EEE7; --muted: #B7A395; --border: #2E2420; }
+  :root[data-theme="plum"] { --surface: #16111C; --text: #F1EAF6; --muted: #AC9BB9; --border: #281F33; }
+  /* Porcelain, o tema claro do mod (MIT; ver THIRD_PARTY_NOTICES.md): usa o membro claro de cada par de
+     estado. O bloco repete o do @media claro porque o CSS não junta os dois seletores; o teste trava que
+     os dois casos claros têm as mesmas cores de estado. */
+  :root[data-theme="porcelain"] {
+    --running: oklch(0.646 0.222 41.116);
+    --waiting: #f08c00;
+    --done: #248a3d;
+    --context-warn: #c79200;
+    --context-critical: #d70015;
+    --icon-ink: #fff;
+    --surface: #F5F6F8; --text: #14161A; --muted: #5B6270; --border: #D8DBE1;
+    --shadow: 0 0 0 1px rgba(0, 0, 0, .1), 0 4px 14px rgba(0, 0, 0, .18);
+    --perm-bg: color-mix(in srgb, var(--text) 4%, var(--surface));
+    --perm-label: var(--text);
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; background: transparent; overflow: hidden; user-select: none; }
@@ -162,19 +203,19 @@
      Nada de reticências: não se aprova um comando cortado. */
   #permission {
     width: 0; min-width: 100%; grid-column: 1 / -1; margin-top: 8px; text-align: left;
-    background: color-mix(in srgb, var(--text) 9%, transparent); border-radius: 12px; padding: 8px 6px 8px 12px;
+    background: var(--perm-bg); border-radius: 12px; padding: 8px 6px 8px 12px;
   }
   #permission[hidden] { display: none; }
-  #permission-tool { display: block; font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+  #permission-tool { display: block; font-size: 11px; font-weight: 700; color: var(--perm-label); margin-bottom: 3px; }
   #permission-text {
-    font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text);
+    font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--perm-text);
     white-space: pre-wrap; overflow-wrap: anywhere; max-height: 105px; overflow-y: auto; padding-right: 6px;
     cursor: default; scrollbar-width: thin; scrollbar-color: var(--muted) transparent;
     /* A rolagem do texto não vaza para fora dele ao chegar no fim. */
     overscroll-behavior: contain;
   }
   #permission-text:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-  #permission-hint { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
+  #permission-hint { display: block; margin-top: 5px; font-size: 11px; color: var(--perm-hint); }
   #permission-hint[hidden] { display: none; }
   #actions {
     width: 0; min-width: 100%; grid-column: 1 / -1; margin-top: 8px;
@@ -192,7 +233,7 @@
   /* "Negar" e, havendo pedido, "Abrir sessão" são secundários: só "Permitir" fica preenchido. */
   #actions #deny, #pill.has-permission #open {
     color: var(--text); background: transparent;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 35%, transparent);
+    box-shadow: inset 0 0 0 1px var(--perm-deny-border);
   }
   #pill.has-permission #open { margin-right: auto; box-shadow: none; color: var(--muted); padding-inline: 4px; }
   /* Fora do estado expandido o botão não existe para o mouse nem para leitor de tela. */
