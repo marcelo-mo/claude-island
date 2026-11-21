@@ -88,6 +88,7 @@ trocar de janela — sem nunca aprovar algo que o usuário não viu.
 | Scroll entre sessões no lugar do contador, voltando à sessão que pede permissão | Mostrar uma sessão por vez sem esconder pedidos pendentes | — Pending |
 | Integração com a ilha do sistema por encaixe lateral, não por fork | Única forma sob nosso controle; o mod não aceita conteúdo externo | — Pending |
 | `.planning/` versionado no repositório público | Processo aberto junto com o código | ✓ Good |
+| Cores de estado fixas, nunca substituídas pelas do mod (2026-11-21, pedido do autor). Laranja de trabalhando e do botão, herdado do quaint-money: escuro `oklch(0.705 0.213 47.604)`, claro `oklch(0.646 0.222 41.116)`. Verde de concluído: `#30d158` / `#248a3d`. Âmbar de precisa de você: `#ff9f0a` / `#f08c00` | Identidade da ilha. Vale para a cor de destaque dos estados, o brilho tingido e o botão; os 8 temas do mod podem mudar só o fundo e a superfície da pílula, nunca a cor do estado. A Fase 3 herda | ✓ Locked |
 
 ## Evolution
 
