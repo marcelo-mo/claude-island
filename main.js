@@ -198,6 +198,11 @@ function createIsland(display) {
       autoplayPolicy: 'no-user-gesture-required', // o aviso sonoro toca sem clique
     },
   });
+  // Reexibir ou restaurar de minimizada põe os botões sob o cursor de novo, então o main reinicia
+  // os 0,8 s. Nada esconde nem minimiza a ilha de propósito antes da Fase 4: a prova ponta a ponta
+  // fica para lá (Assumption A9).
+  island.on('show', () => refresh('rearm'));
+  island.on('restore', () => refresh('rearm'));
   island.setAlwaysOnTop(true, 'screen-saver'); // acima de apps em tela cheia
   island.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   if (CAN_CLICK_THROUGH) island.setIgnoreMouseEvents(true, { forward: true });
@@ -318,6 +323,9 @@ function start() {
   screen.on('display-added', syncIslands);
   screen.on('display-removed', syncIslands);
   screen.on('display-metrics-changed', syncIslands);
+  // A janela muda de lugar e os botões andam sob o cursor; rearmar a mais é o lado seguro. Os
+  // listeners rodam na ordem de registro, então syncIslands reposiciona antes do rearme.
+  for (const eventName of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(eventName, () => refresh('rearm'));
 
   // ponytail: polling em vez de fs.watch — são poucos arquivos minúsculos, e o timer
   // é necessário de qualquer jeito para o "concluído" expirar. Trocar por fs.watch
