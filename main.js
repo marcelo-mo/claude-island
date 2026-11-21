@@ -447,11 +447,14 @@ function savedPosition(display) {
   return positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id], preferences.anchor);
 }
 
-// Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.
-function sendState(island) {
+// Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo. `userSwitched` é a troca
+// feita pela roda ou pelo clique no ponto: quem rolou ou clicou já sabe que a sessão pede resposta, então o
+// aviso fica para a chegada do pedido (snap, ou pedido novo na sessão exibida). O main é quem sabe a origem da
+// troca; o renderer só vê a lista de sessões mudar.
+function sendState(island, userSwitched = false) {
   // O estado leva o texto do pedido: só vai para a página da ilha, nunca para uma que a substituísse.
   if (!isIslandSender({ isMainFrame: true, url: island.webContents.getURL(), islandUrl: ISLAND_URL })) return;
-  const isFirstIsland = island === islands.values().next().value;
+  const shouldChime = island === islands.values().next().value && !userSwitched;
   // answeredId faz a outra ilha travar os botões do pedido que uma ilha já decidiu; armEpoch
   // sobe a cada troca, reexibição ou mudança de monitor, e o renderer rearma quando ele muda.
   // fitsWorkArea é a mesma conferência que o gate faz no clique: com o palco maior que a área útil
@@ -462,7 +465,7 @@ function sendState(island) {
   island.webContents.send(
     'island:state',
     { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea },
-    isFirstIsland,
+    shouldChime,
   );
 }
 
@@ -479,13 +482,14 @@ function refresh(reason) {
   // A lista do refresh anterior serve para achar a vizinha da sessão que saiu. O pedido na tela (shown.id,
   // ainda o de antes deste refresh) diz se um pedido novo entra na fila ou leva a ilha até ele. Um snap só
   // muda a seleção: a ilha escondida ou em tela cheia não reaparece.
+  const userSwitched = reason === 'wheel' || reason === 'select';
   selection = nextSelection(selection, list, {
     type: 'poll',
     previousKeys: lastSessionList.map((entry) => entry.key),
     now: monotonicNow,
     lastWheelAt,
     shownPermissionId: shown.id,
-    userSwitched: reason === 'wheel' || reason === 'select',
+    userSwitched,
   });
   if (selection.snapped) wheelLockedUntil = monotonicNow + SNAP_WHEEL_LOCK_MS;
   // Recalculada com a chave nova: depois de uma troca o "concluído" que ficou para trás vence na hora, e a lista
@@ -504,7 +508,7 @@ function refresh(reason) {
   shown = nextShown;
   for (const island of islands.values()) {
     applyOpacity(island);
-    sendState(island);
+    sendState(island, userSwitched);
   }
   updateCursorTick();
 }

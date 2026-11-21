@@ -1157,7 +1157,13 @@
     // que com "reduzir movimento" ou a janela escondida vai direto ao alvo, sem deslocamento.
     if (switchDirection !== 0) springs.tab = { ...springs.tab, position: switchDirection * TAB_SWITCH_OFFSET_PX, velocity: 0, target: 0 };
     if (shouldChime && next.state !== current.state && CHIMES[next.state] && (switchDirection === 0 || next.state === 'waiting')) {
-      chime(CHIMES[next.state]);
+      // O aviso é um complemento: sem áudio (contexto bloqueado, saída ausente) a pílula já mostra o estado, e uma
+      // falha aqui não pode abortar o resto da função, que deixaria a tela no pedido anterior com o main já no novo.
+      try {
+        chime(CHIMES[next.state]);
+      } catch {
+        // sem aviso sonoro neste estado
+      }
     }
     const previousPermissionId = current.permission ? current.permission.id : null;
     const previousText = current.permission ? current.permission.text : null;

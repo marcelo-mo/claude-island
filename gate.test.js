@@ -1193,7 +1193,7 @@ test('a transparência sai do mesmo passo do refresh e nunca vale com pedido na 
   assert.match(bodyOf('function applyOpacity('), /^function applyOpacity\(island\) \{\s*island\.setOpacity\(/);
   assert.match(
     bodyOf('function refresh('),
-    /for \(const island of islands\.values\(\)\) \{\s*applyOpacity\(island\);\s*sendState\(island\);\s*\}/,
+    /for \(const island of islands\.values\(\)\) \{\s*applyOpacity\(island\);\s*sendState\(island, userSwitched\);\s*\}/,
   );
   assert.ok(bodyOf('function createIsland(').includes('applyOpacity(island);'), 'a ilha nova já nasce com a opacidade efetiva');
 });
@@ -1560,7 +1560,7 @@ test('o refresh leva os fatos ao poll, trava a roda depois do snap e nunca reexi
   const body = mainFunctionBody('refresh');
   for (const piece of [
     'shownPermissionId: shown.id',
-    "userSwitched: reason === 'wheel' || reason === 'select'",
+    "const userSwitched = reason === 'wheel' || reason === 'select';",
     'lastWheelAt',
     'if (selection.snapped) wheelLockedUntil =',
     'SNAP_WHEEL_LOCK_MS',
@@ -1829,6 +1829,31 @@ test('o nome inteiro do projeto vai no tooltip do título e do cabeçalho do ped
   // o tooltip não pode virar texto da página nem mexer na largura reservada ao nome
   assert.match(rendererLf, /#permission-project \{[^}]*max-width: 140px;/);
   assert.match(rendererLf, /#pill\.multi-session #title \{ flex: 0 1 140px;/);
+});
+
+test('sendState: o aviso sonoro é da primeira ilha e nunca de uma troca feita pela roda ou pelo clique', () => {
+  const sent = [];
+  const makeIsland = (name) => ({ webContents: { getURL: () => 'file:///ilha', send: (...args) => sent.push([name, args[2]]) } });
+  const first = makeIsland('primeira');
+  const second = makeIsland('segunda');
+  const sendState = vm.runInNewContext(`${mainFunctionBody('sendState')}\n}\nsendState`, {
+    isIslandSender: () => true, ISLAND_URL: 'file:///ilha', islands: new Map([[1, first], [2, second]]),
+    displayOf: () => ({}), fitsVisibleArea: () => true, lastPickedState: {}, decidedPermissionId: null,
+    shown: { epoch: 1 }, preferences: {},
+  });
+  sendState(first);
+  sendState(second);
+  sendState(first, false);
+  sendState(first, true);
+  sendState(second, true);
+  assert.deepEqual(sent, [
+    ['primeira', true], ['segunda', false], ['primeira', true], ['primeira', false], ['segunda', false],
+  ]);
+  // o aviso que falha não pode impedir o renderer de aplicar o estado novo
+  const onState = rendererLf.slice(rendererLf.indexOf('window.island.onState('));
+  const guarded = onState.indexOf('chime(CHIMES[next.state]);');
+  assert.ok(guarded >= 0 && onState.lastIndexOf('try {', guarded) > onState.indexOf('if (shouldChime'), 'o chime roda dentro de try');
+  assert.ok(onState.indexOf('} catch {', guarded) < onState.indexOf('current = next;'), 'o catch fecha antes de current = next');
 });
 
 test('as constantes de gesto e de snap do state.js são as do fixture', () => {
