@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Fundação segura do gate de permissão
-current_plan: 2
+current_plan: 3
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-11-21T04:56:22.748Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-11-21T04:59:36.418Z"
 last_activity: 2026-11-21
 last_activity_desc: Roadmap criado (6 fases, 46/46 requisitos mapeados)
-state_head: 8c20073534d985f7b76a579a565436272c21bc36
+state_head: eb95d964aabf1450b6004c9435c2c6cbb2761728
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 2 (Fundação segura do gate de permissão) — READY TO EXECUTE
-Current Plan: 2
+Current Plan: 3
 Total Plans in Phase: 4
 Status: Ready to execute
 Last activity: 2026-11-21 — Roadmap criado (6 fases, 46/46 requisitos mapeados)
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 02 P01 | 3min | 2 tasks | 6 files |
+| Phase 02 P02 | 4min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,7 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Roadmap]: Convivência com o Windhawk (Fase 6) é a única cortável; plano B é âncora e deslocamento manuais da Fase 4
 - [Phase 02]: 02-01: o alvo da decisão é sempre o pedido exibido no main; o eco do renderer só pode recusar (echo-mismatch)
 - [Phase 02]: 02-01: decidedPermissionId só é marcado depois de writeDecision; coveredByFullscreen é constante false até a Fase 4 (TELA-01)
+- [Phase 02]: O pedido exibido (id, since, epoch) só é atribuído dentro de refresh(reason); retorno antecipado compara estado e época para não engolir o rearme
 
 ### Pending Todos
 
@@ -97,6 +99,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T04:56:22.713Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-11-21T04:59:36.378Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None

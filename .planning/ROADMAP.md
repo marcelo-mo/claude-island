@@ -66,9 +66,9 @@ Esta fase **não existe agora**. Ela só é criada se a Fase 1 decidir por Tauri
   3. Com um pedido na tela a ilha está 100% opaca, a roda sobre o texto só rola o texto, "lido até o fim" zera a cada pedido novo e a inércia da roda nos 300–400 ms após uma troca não conta como leitura; ilha escondida, em tela cheia ou fora da área visível não aceita decisão, esconder nunca aprova e reexibir rearma
   4. A regra de aceite da decisão é uma função pura coberta por `node:test` com vetores compartilháveis (`fixtures/permission-vectors.json`), o caminho `island:decide` deixa de ser o único ponto sem teste, as janelas abrem com `contextIsolation` e `sandbox` ligados e sem `nodeIntegration`, e não existe canal do renderer para gravar preferências
   5. `THIRD_PARTY_NOTICES.md` credita o mod com o texto MIT completo, a versão 1.4.0 e o titular conferido no `LICENSE` do repositório do autor, e existe antes do primeiro commit com constantes portadas
-**Plans**: 1/4 plans executed (sequenciais: todos a partir do 02-02 editam `gate.test.js` e o fixture)
+**Plans**: 2/4 plans executed (sequenciais: todos a partir do 02-02 editam `gate.test.js` e o fixture)
 - [x] 02-01-PLAN.md — eco do id ponta a ponta com `acceptDecision` pura e vetores; primeiro clique vence; janela invisível/fora da área não decide
-- [ ] 02-02-PLAN.md — funil único `refresh(reason)` com reducer puro; reexibir/restaurar/trocar de monitor rearma o relógio do main
+- [x] 02-02-PLAN.md — funil único `refresh(reason)` com reducer puro; reexibir/restaurar/trocar de monitor rearma o relógio do main
 - [ ] 02-03-PLAN.md — armamento do renderer (0,8 s, layout assentado, cursor parado, mesma geração), roda e inércia com predicados puros testados
 - [ ] 02-04-PLAN.md — `THIRD_PARTY_NOTICES.md`, `webPreferences` explícitas com canais travados por teste, `effectiveOpacity`
 **Research flag**: não. Código do próprio repositório; exige apenas testes primeiro. O CONV-04 mora aqui, e não na Fase 6, porque a Fase 3 é a primeira a portar constantes (molas) e o aviso de licença precisa existir antes.
@@ -138,7 +138,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 (condicional) → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Spike de medição e decisão de base | 0/TBD | Not started | - |
-| 2. Fundação segura do gate de permissão | 1/4 | In Progress | - |
+| 2. Fundação segura do gate de permissão | 2/4 | In Progress | - |
 | 3. Palco fixo, animação e visual | 0/TBD | Not started | - |
 | 4. Entrada, preferências e comportamento no sistema | 0/TBD | Not started | - |
 | 5. Sessões | 0/TBD | Not started | - |
