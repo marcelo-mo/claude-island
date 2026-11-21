@@ -84,6 +84,50 @@ de estado da sessão e espera até 5 minutos pelo arquivo de decisão que a ilha
 `~/.claude/island/decisions/`. Ele só participa se a ilha estiver no ar (ela grava um batimento
 em `~/.claude/island/.heartbeat` a cada 2 s); senão, sai na hora e nada muda no Claude Code.
 
+### Várias sessões
+
+Com duas ou mais sessões do Claude Code abertas, a ilha troca o contador por um ponto por sessão e
+deixa sempre à vista de qual projeto é a sessão na tela.
+
+- **Um ponto por sessão.** A cor é a do estado, o ponto da sessão exibida é maior e o de quem pede
+  permissão pulsa (parado, com um anel, se o sistema pedir para reduzir movimento).
+- **Ordem estável.** Da sessão mais antiga, à esquerda, para a mais nova. Acima de 8 sessões os
+  pontos somem e volta o número.
+- **Clique num ponto para ver aquela sessão.** A ilha não troca sozinha quando outra sessão conclui
+  ou volta a trabalhar; só troca se a sessão exibida terminar, e então vai à vizinha dela.
+- **A roda do mouse sobre a pílula troca de sessão.** Para cima vai à sessão anterior, para baixo à
+  próxima, sem dar a volta no fim da lista. Cada entalhe conta, e o touchpad, que manda passos
+  menores, é mais lento (as regras de gesto são as do mod Dynamic Island for Windows). Sobre o
+  texto de um pedido a roda só rola o texto e nunca troca de sessão. No Windows a roda chega à ilha
+  por "Rolar janelas inativas ao passar o mouse sobre elas" (Configurações > Bluetooth e
+  dispositivos > Mouse), ligado por padrão, porque a ilha nunca recebe o foco; sem isso, clique no
+  ponto.
+- **Um pedido de permissão novo leva a ilha até a sessão que pediu, uma vez por pedido.** Se você
+  rolar ou clicar para longe, ela não puxa de novo e o ponto da sessão segue pulsando. Ela espera a
+  roda parar antes de trocar e, depois da troca, ignora a roda por 0,4 s.
+- **Pedidos simultâneos entram numa fila por ordem de chegada.** Com mais de um pendente, o pedido
+  mostra a posição ("1 de N") e um pedido novo nunca toma o lugar do que está na tela.
+- **Ao responder, na ilha ou no terminal, a ilha vai ao próximo pendente.** Sem outro pendente, fica
+  onde está; se você estava numa sessão sem pedido, nada se move.
+- **Toda troca reinicia os 0,8 s dos botões e a exigência de rolar o texto até o fim**, para uma
+  troca automática nunca deixar Permitir ou Negar atingir um pedido que você não viu.
+- **Com a ilha escondida ou em tela cheia, um pedido novo não a faz reaparecer.** Só a seleção muda.
+- **O projeto fica à vista.** O nome da pasta da sessão é o título da pílula compacta e abre o
+  cabeçalho do pedido ("projeto · ferramenta"). Dois projetos com a mesma pasta final mostram o
+  mesmo nome; a posição do ponto diz qual é qual. Nomes longos são cortados no fim (140 px), então
+  dois projetos que começam igual podem parecer iguais; o nome inteiro está no tooltip do título e do
+  cabeçalho do pedido.
+- **O "concluído" na tela fica até você trocar.** Com outra sessão aberta, o "concluído" da sessão na
+  tela fica até você trocar (roda ou ponto) ou chegar um pedido novo; sozinho, ele some em 10 s como
+  antes. Se a sessão na tela é encerrada ou o terminal fecha, a ilha vai a um pedido que você ainda
+  não viu, se houver, e senão à sessão vizinha (a da esquerda; se a encerrada era a primeira, a da
+  direita), pulando a que tem um pedido que você já viu e deixou.
+- **Sessão morta sai da lista.** Se o terminal de uma sessão foi fechado sem encerrar o Claude Code,
+  o ponto dela some e o arquivo de estado é apagado. Fechar só uma aba do Windows Terminal não fecha
+  a janela, e aí a sessão sai pelo prazo (2 h trabalhando, 12 h esperando). Arquivos de sessão com
+  mais de 12 h também são apagados: um terminal parado por mais de 12 h sai da lista e, quando a
+  sessão voltar a trabalhar, o ponto dela entra no fim da ordem.
+
 ### Menu, atalho e tela cheia
 
 **Clique direito na pílula** abre o menu: tema, forma, estilo e velocidade da animação, expandir (ao
@@ -103,8 +147,11 @@ ociosa, a pílula fica invisível e sem `pointer-events`, e os cliques passam pa
   responda no terminal ou mostre a ilha pelo atalho.
 - **Ao lado da ilha do Windhawk.** Com o mod "Dynamic Island for Windows" no topo da tela, escolha
   *Âncora > Ao lado da ilha do sistema, à direita* (ou *à esquerda*): a nossa pílula fica ao lado da dele,
-  cresce para fora sem cobri-la e o arraste ajusta o lugar. Precisa de 1220 DIP de área útil (abaixo disso não
-  cabe ao lado e fica por cima do mod) e combina com as formas Pílula e Windows 11. A ilha nunca reafirma o
+  cresce para fora sem cobri-la e o arraste ajusta o lugar. Precisa de 1220 DIP de área útil: abaixo disso a pílula
+  não cabe ao lado e fica por cima da do mod, então, com um pedido de permissão na tela, os botões ficam
+  desabilitados com "Responda no terminal" (a pílula do mod cobriria o começo do pedido). Vale em qualquer
+  monitor abaixo desse limite, mesmo sem o mod aberto nele, porque a ilha não enxerga o mod. Combina com as
+  formas Pílula e Windows 11. A ilha nunca reafirma o
   "sempre no topo" por timer. O que foi verificado dessa convivência, do toast do Windows e dos apps de notch está em
   [`docs/INTEGRACOES.md`](docs/INTEGRACOES.md); `scripts/measure-coexistence.ps1` mede as duas ilhas juntas
   por 5 minutos, só lendo as janelas.

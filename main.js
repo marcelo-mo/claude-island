@@ -5,10 +5,10 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, acceptDecision, anchorPosition, horizontalSlackFor, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  pickState, sessionList, nextSelection, wheelStep, WHEEL_DELTA_MAX, SNAP_WHEEL_LOCK_MS, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
-  effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem,
+  effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem, isSessionDead,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -43,6 +43,21 @@ let shownWindowPid = null;
 // id que um clique em "Permitir" ou "Negar" se refere. O renderer só devolve o id como eco, que
 // apenas pode recusar. Só muda dentro de refresh (invariante I2), para toda troca rearmar.
 let shown = { id: null, since: 0, epoch: 0 };
+// Qual sessão está exibida e os pedidos que a ilha já viu. Uma seleção só para todas as ilhas, que
+// espelham a mesma sessão; só muda por nextSelection, no refresh e no handler do clique no ponto,
+// que termina em refresh.
+let selection = { key: null, requests: [] };
+// A lista viva do último refresh, na ordem dos pontos e com as chaves de sessão. O clique no ponto
+// anda nela; ela nunca vai ao renderer.
+let lastSessionList = [];
+// O gesto da roda em curso, nos instantes do relógio monotônico (performance.now).
+let wheelGesture = { accumulated: 0, lastEventAt: null, lastStepAt: null };
+// Instante da última roda sobre a pílula, no relógio monotônico: o snap para um pedido novo não acontece
+// no meio do gesto. Conta também a roda ignorada pela trava abaixo.
+let lastWheelAt = null;
+// Até quando a roda fica ignorada depois de um snap, para a inércia não afastar o usuário do pedido que
+// acabou de aparecer.
+let wheelLockedUntil = 0;
 // Último estado serializado enviado às ilhas; refresh só reenvia quando algo mudou.
 let lastSent = JSON.stringify(lastPickedState);
 // Último pedido cuja decisão foi gravada. Primeiro clique vence: só o main enxerga as duas ilhas
@@ -315,23 +330,92 @@ function updateCursorTick() {
   }
 }
 
+// Primeira aparição de cada sessão, que dá a ordem estável dos pontos. Vem do birthtime do arquivo, então
+// a ordem sobrevive a reiniciar a ilha; é um statSync por sessão nova, não por ciclo.
+const firstSeenAtByKey = new Map();
+
+// Última leitura boa de cada sessão. O hook grava o arquivo no lugar (abre, trunca, escreve), então a ilha pode
+// ler um JSON vazio ou pela metade; sem isto a sessão sumiria da lista por um ciclo, e a seleção trataria isso
+// como a sessão ter saído e andaria sozinha para outra.
+const lastGoodSessionByKey = new Map();
+
+// O sinal 0 não envia nada: só pergunta ao sistema se o processo existe. ESRCH quer dizer que não existe;
+// EPERM (existe, é de outro usuário) e qualquer outro erro contam como vivo, porque apagar a sessão de um
+// terminal aberto perderia o estado dela.
+// ponytail: o windowPid é o dono da janela do terminal. Fechar uma aba do Windows Terminal sem fechar a janela
+// não mata esse processo, e a sessão sai pela idade; um PID reaproveitado por outro programa mantém a sessão até
+// o prazo, que é o lado seguro. Identificar pelo PID do próprio Claude exigiria mudar o contrato do hook.
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== 'ESRCH';
+  }
+}
+
 function readSessions() {
+  const now = Date.now();
   let files;
   try {
     files = fs.readdirSync(STATE_DIR);
   } catch {
+    firstSeenAtByKey.clear();
+    lastGoodSessionByKey.clear();
     return []; // pasta ainda não existe: nenhum hook rodou
   }
   const sessions = [];
+  const presentKeys = new Set();
   for (const file of files) {
     if (!isSessionFile(file)) continue;
+    const key = path.basename(file, '.json');
+    presentKeys.add(key);
     try {
       const session = JSON.parse(fs.readFileSync(path.join(STATE_DIR, file), 'utf8'));
-      session.contextPercent = readContextPercent(path.basename(file, '.json'));
+      if (!session || typeof session !== 'object') continue;
+      // A sessão morta sai da lista e o arquivo dela vai junto. O "concluído" recente de terminal vivo fica,
+      // porque o hook reaproveita o windowPid guardado nele. O nome vem do readdir da pasta e já passou por
+      // isSessionFile, então o rmSync não sai de STATE_DIR.
+      if (isSessionDead(session, now, isPidAlive)) {
+        try {
+          fs.rmSync(path.join(STATE_DIR, file), { force: true });
+        } catch {
+          // preso por outro processo agora: o próximo ciclo tenta de novo
+        }
+        continue;
+      }
+      if (!firstSeenAtByKey.has(key)) {
+        let firstSeenAt = Date.now();
+        try {
+          const birthtime = fs.statSync(path.join(STATE_DIR, file)).birthtimeMs;
+          if (birthtime > 0) firstSeenAt = birthtime;
+        } catch {
+          // arquivo sumiu entre ler e medir, ou sistema sem birthtime: vale o instante em que a ilha viu a sessão
+        }
+        firstSeenAtByKey.set(key, firstSeenAt);
+      }
+      // A chave e a ordem vêm do nome do arquivo e da ilha, depois do parse de propósito: o arquivo é
+      // escrito por outro processo e não escolhe a própria chave nem a própria ordem.
+      session.key = key;
+      session.firstSeenAt = firstSeenAtByKey.get(key);
+      session.contextPercent = readContextPercent(key);
+      lastGoodSessionByKey.set(key, session);
       sessions.push(session);
     } catch {
-      // arquivo pela metade (hook gravando agora): o próximo ciclo pega
+      // Arquivo pela metade (hook gravando agora): vale o último estado lido, desde que a sessão ainda esteja
+      // viva. Arquivo que sumiu nem chega aqui, e o que continua ilegível é a sessão morta ou vencida saindo
+      // pela mesma regra do caminho normal.
+      const previous = lastGoodSessionByKey.get(key);
+      if (previous && !isSessionDead(previous, now, isPidAlive)) sessions.push(previous);
     }
+  }
+  // A chave sai quando o arquivo some; podar pela lista viva faria um statSync por ciclo para cada
+  // "concluído" que já expirou.
+  for (const key of firstSeenAtByKey.keys()) {
+    if (!presentKeys.has(key)) firstSeenAtByKey.delete(key);
+  }
+  for (const key of lastGoodSessionByKey.keys()) {
+    if (!presentKeys.has(key)) lastGoodSessionByKey.delete(key);
   }
   return sessions;
 }
@@ -341,6 +425,16 @@ function displayOf(island) {
     if (candidate === island) return screen.getAllDisplays().find((display) => display.id === displayId);
   }
   return undefined;
+}
+
+// A única conferência de "a janela inteira está à vista", para o renderer (fitsWorkArea) e para o gate
+// (withinVisibleArea): por isso os dois nunca divergem. Ao lado da ilha do sistema, numa área útil estreita, a
+// pílula do mod fica por cima da nossa e cobre o começo do pedido, então isso conta como fora da área visível
+// (SEG-06).
+function fitsVisibleArea(island, display) {
+  return Boolean(display)
+    && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor))
+    && besideFits(preferences.anchor, display.workArea);
 }
 
 function moveIsland(island, position, workArea) {
@@ -353,22 +447,25 @@ function savedPosition(display) {
   return positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id], preferences.anchor);
 }
 
-// Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.
-function sendState(island) {
+// Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo. `userSwitched` é a troca
+// feita pela roda ou pelo clique no ponto: quem rolou ou clicou já sabe que a sessão pede resposta, então o
+// aviso fica para a chegada do pedido (snap, ou pedido novo na sessão exibida). O main é quem sabe a origem da
+// troca; o renderer só vê a lista de sessões mudar.
+function sendState(island, userSwitched = false) {
   // O estado leva o texto do pedido: só vai para a página da ilha, nunca para uma que a substituísse.
   if (!isIslandSender({ isMainFrame: true, url: island.webContents.getURL(), islandUrl: ISLAND_URL })) return;
-  const isFirstIsland = island === islands.values().next().value;
+  const shouldChime = island === islands.values().next().value && !userSwitched;
   // answeredId faz a outra ilha travar os botões do pedido que uma ilha já decidiu; armEpoch
   // sobe a cada troca, reexibição ou mudança de monitor, e o renderer rearma quando ele muda.
   // fitsWorkArea é a mesma conferência que o gate faz no clique: com o palco maior que a área útil
   // (monitor baixo, DPI alto) toda decisão seria recusada, então o renderer nem oferece os botões.
   // Só pode desabilitar: o gate continua sendo quem decide.
   const display = displayOf(island);
-  const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor));
+  const fitsWorkArea = fitsVisibleArea(island, display);
   island.webContents.send(
     'island:state',
     { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea },
-    isFirstIsland,
+    shouldChime,
   );
 }
 
@@ -378,7 +475,27 @@ function sendState(island) {
  * e a época separados: olhar só o estado engoliria o rearme.
  */
 function refresh(reason) {
-  const picked = pickState(readSessions(), Date.now());
+  const now = Date.now();
+  const monotonicNow = performance.now();
+  const sessions = readSessions();
+  const list = sessionList(sessions, now, selection.key);
+  // A lista do refresh anterior serve para achar a vizinha da sessão que saiu. O pedido na tela (shown.id,
+  // ainda o de antes deste refresh) diz se um pedido novo entra na fila ou leva a ilha até ele. Um snap só
+  // muda a seleção: a ilha escondida ou em tela cheia não reaparece.
+  const userSwitched = reason === 'wheel' || reason === 'select';
+  selection = nextSelection(selection, list, {
+    type: 'poll',
+    previousKeys: lastSessionList.map((entry) => entry.key),
+    now: monotonicNow,
+    lastWheelAt,
+    shownPermissionId: shown.id,
+    userSwitched,
+  });
+  if (selection.snapped) wheelLockedUntil = monotonicNow + SNAP_WHEEL_LOCK_MS;
+  // Recalculada com a chave nova: depois de uma troca o "concluído" que ficou para trás vence na hora, e a lista
+  // guardada tem de ser a mesma que os pontos mostram, porque o clique e a roda andam nela.
+  lastSessionList = sessionList(sessions, now, selection.key);
+  const picked = pickState(sessions, now, selection);
   const serialized = JSON.stringify(picked);
   const permissionId = picked.permission ? picked.permission.id : null;
   // Relógio monotônico: o de parede salta com NTP e suspensão, o que armaria os botões antes da
@@ -391,7 +508,7 @@ function refresh(reason) {
   shown = nextShown;
   for (const island of islands.values()) {
     applyOpacity(island);
-    sendState(island);
+    sendState(island, userSwitched);
   }
   updateCursorTick();
 }
@@ -587,6 +704,35 @@ function registerIpcHandlers() {
     });
   });
 
+  // O renderer manda só o índice do ponto clicado; o main confere que ele existe na lista que os pontos
+  // mostram e o traduz para a sessão. Chave de sessão e id de pedido nunca vêm do renderer; ociosa, não
+  // há pontos.
+  ipcMain.on('island:select', (event, index) => {
+    const island = islandOf(event);
+    if (!island || !Number.isInteger(index)) return;
+    if (lastPickedState.state === 'idle') return;
+    selection = nextSelection(selection, lastSessionList, { type: 'select', index });
+    refresh('select');
+  });
+
+  // A roda só troca de sessão: o renderer manda o número bruto e o main acumula com as regras do mod. Número
+  // fora da faixa, de outro tipo ou com a ilha ociosa é ignorado; o passo anda na lista que os pontos
+  // mostram, sem dar a volta.
+  ipcMain.on('island:wheel', (event, delta) => {
+    const island = islandOf(event);
+    if (!island || !Number.isFinite(delta) || Math.abs(delta) > WHEEL_DELTA_MAX) return;
+    if (lastPickedState.state === 'idle') return;
+    const now = performance.now();
+    // A roda ignorada pela trava ainda é gesto: um pedido que chega na inércia espera o fim dela.
+    lastWheelAt = now;
+    if (now < wheelLockedUntil) return;
+    const { gesture, step } = wheelStep(wheelGesture, delta, now);
+    wheelGesture = gesture;
+    if (step === 0) return;
+    selection = nextSelection(selection, lastSessionList, { type: 'scroll', step });
+    refresh('wheel');
+  });
+
   // Fronteira de confiança: isto aprova a execução de um comando. O renderer envia a intenção
   // ('allow' ou 'deny') e o eco do id que ele estava mostrando; o eco só serve para recusar
   // (o pedido mudou entre ver e clicar). O alvo é sempre o pedido em exibição, guardado aqui.
@@ -604,7 +750,7 @@ function registerIpcHandlers() {
       windowVisible: island.isVisible() && !island.isMinimized(),
       // Fail-safe (D-19): monitor desconhecido conta como coberto.
       coveredByFullscreen: display ? fullscreenByDisplay.has(display.id) : true,
-      withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor)),
+      withinVisibleArea: fitsVisibleArea(island, display),
     });
     // Recusa e falha de gravação reenviam o estado a quem clicou: o renderer trava os botões ao enviar
     // e só os solta quando o main responde. Ele nunca reenvia sozinho; o próximo clique é do usuário.

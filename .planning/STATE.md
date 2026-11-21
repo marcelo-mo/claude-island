@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 6
-current_phase_name: Convivência com a ilha do sistema
-current_plan: 2
+current_phase: 5
+current_phase_name: Sessões
+current_plan: 7
 status: human_needed
-stopped_at: "Fase 6 executada, revisada e auditada; PR aberto sem merge"
-last_updated: "2026-11-21T17:20:01.260Z"
+stopped_at: Fase 5 executada, revisada e auditada; PR aberto sem merge
+last_updated: "2026-11-21T20:44:29.175Z"
 last_activity: 2026-11-21
-last_activity_desc: "Fase 6 executada (2 planos), revisão com 11 correções, verificação human_needed (mod escondido; issue pendente do autor), segurança 7/7; PR aberto"
-state_head: f3549f7d07ffe368b80756d0f6d3824d528f8585
+last_activity_desc: "Fase 5 executada (7 planos, com a main da Fase 6 integrada), revisão com 4 correções, verificação human_needed (14/16), segurança 31/31; PR aberto"
+state_head: feaf8d2bc4df2590b346a41e6f8b4497f7ee6736
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 26
+  completed_plans: 26
   percent: 33
 ---
 
@@ -24,15 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-21)
 
 **Core value:** Saber de relance o que cada sessão do Claude Code está fazendo e responder ao que ela pede sem trocar de janela, sem nunca aprovar algo que o usuário não viu.
-**Current focus:** Phase 6 — Convivência com a ilha do sistema (a Fase 5 corre em paralelo noutra branch)
+**Current focus:** Phase 4 — Entrada, preferências e comportamento no sistema
 
 ## Current Position
 
-Phase: 6 (Convivência com a ilha do sistema) — AGUARDANDO REVISÃO DO PR
-Current Plan: 2
-Total Plans in Phase: 2
-Status: 2/2 planos executados; verificação human_needed (9 itens em 06-UAT.md com a ilha do mod na tela; issue ao autor do mod pendente do Marcelo; CR-01 da revisão levado ao autor); segurança threats_open 0
-Last activity: 2026-11-21 — Fase 6 entregue em PR, sem merge
+Phase: 5 (Sessões) — READY TO EXECUTE
+Current Plan: 6
+Total Plans in Phase: 7
+Status: 6/6 planos executados; verificação gaps_found só pelo TELA-01 parcial (D-20, koffi não autorizado; sensor pendente da escolha do autor) e 15 itens de tela em 04-UAT.md; segurança threats_open 0
+Last activity: 2026-11-21 — Fase 4 entregue em PR, sem merge
 
 Progress: [███░░░░░░░] 33%
 
@@ -135,6 +135,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T17:20:00.921Z
-Stopped at: Completed 04-06-PLAN.md
-Resume file: None
+Last session: 2026-11-21T20:44:28.371Z
+Stopped at: Fase 5 executada, revisada e auditada; PR aberto sem merge
+Resume file: .planning/phases/05-sess-es/05-UAT.md

@@ -242,32 +242,316 @@ function contextUsage(usedPercent) {
 
 const PRIORITY = { waiting: 3, running: 2, done: 1 };
 
+// Uma sessão só aparece enquanto o último evento dela é recente o bastante para o estado dela.
+function isAliveSession(session, now) {
+  if (!session || typeof session !== 'object') return false;
+  const age = now - session.updatedAt;
+  if (session.state === 'done') return age < DONE_VISIBLE_MS;
+  if (session.state === 'running') return age < RUNNING_STALE_MS;
+  if (session.state === 'waiting') return age < WAITING_STALE_MS;
+  return false;
+}
+
+// As sessões vivas pelo filtro de hoje e, com `keptKey`, também o "concluído" que está na tela depois do prazo,
+// se houver outra sessão viva: ele não vence enquanto exibido, para a ilha nunca trocar de sessão sozinha por
+// causa dele (SESS-06). Sozinho ele vence aos 10 s como antes e a ilha fica ociosa, o que não é troca; quando
+// deixa de ser exibido, a chave exibida é outra e ele vence na hora.
+function aliveSessions(sessions, now, keptKey) {
+  const alive = sessions.filter((session) => isAliveSession(session, now));
+  if (typeof keptKey !== 'string' || alive.length === 0) return alive;
+  const kept = sessions.find((session) => session && typeof session === 'object' && session.key === keptKey
+    && session.state === 'done' && Number.isFinite(session.updatedAt) && !isAliveSession(session, now));
+  return kept ? [...alive, kept] : alive;
+}
+
+const byUrgency = (a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt;
+
+// Ordem dos pontos: quem apareceu primeiro vem primeiro. Sem primeira aparição válida a sessão vai
+// para o fim (Infinity - Infinity dá NaN, que cai no desempate pela chave).
+const firstSeenOf = (session) => (Number.isFinite(session.firstSeenAt) ? session.firstSeenAt : Infinity);
+
+function byFirstSeen(a, b) {
+  const difference = firstSeenOf(a) - firstSeenOf(b);
+  if (difference) return difference;
+  const keyA = String(a.key ?? '');
+  const keyB = String(b.key ?? '');
+  return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+}
+
+// Posição do pedido exibido entre os pedidos que a seleção conhece, do mais antigo ao mais novo.
+function queuePosition(permissionId, requests) {
+  if (!permissionId || !Array.isArray(requests)) return null;
+  const known = requests.filter((request) => request && typeof request === 'object');
+  if (known.length < 2) return null;
+  const ordered = [...known].sort((a, b) => (a.seenAt - b.seenAt) || (String(a.id) < String(b.id) ? -1 : 1));
+  const index = ordered.findIndex((request) => request.id === permissionId);
+  return index < 0 ? null : { position: index + 1, total: ordered.length };
+}
+
 /**
- * Escolhe o que a ilha mostra entre todas as sessões: a mais urgente e, no empate,
- * a mais recente. `count` é quantas sessões estão ativas (para o contador da ilha) e
- * `windowPid` é o processo dono da janela do terminal dela (null se desconhecido).
- * `permission` é o pedido de permissão que a ilha pode responder (null se não houver).
+ * Escolhe o que a ilha mostra entre todas as sessões. `selection` (opcional, vem de nextSelection)
+ * diz qual sessão está exibida; sem ela, ou com uma chave que não está entre as vivas, vale a mais
+ * urgente e, no empate, a mais recente. `count` é quantas sessões estão ativas e `windowPid` é o
+ * processo dono da janela do terminal da exibida (null se desconhecido). `permission` é o pedido de
+ * permissão que a ilha pode responder (null se não houver). `sessions` descreve os pontos, na ordem
+ * estável de primeira aparição: `{ state, pending, current }`, com `pending` para quem tem pedido
+ * válido e `current` só na exibida; nenhuma chave, PID ou texto de outra sessão sai daqui. `queue`
+ * é `{ position, total }` quando o pedido exibido está entre dois ou mais de `selection.requests`,
+ * senão null. Sem sessão viva devolve `{ state: 'idle', count: 0 }`. O "concluído" exibido (`selection.key`)
+ * continua vivo depois dos 10 s enquanto houver outra sessão viva; sozinho vence no prazo de sempre.
  */
-function pickState(sessions, now) {
-  const alive = sessions.filter((session) => {
-    const age = now - session.updatedAt;
-    if (session.state === 'done') return age < DONE_VISIBLE_MS;
-    if (session.state === 'running') return age < RUNNING_STALE_MS;
-    if (session.state === 'waiting') return age < WAITING_STALE_MS;
-    return false;
-  });
+function pickState(sessions, now, selection) {
+  const selectedKey = selection && typeof selection.key === 'string' ? selection.key : null;
+  const alive = aliveSessions(sessions, now, selectedKey);
   if (alive.length === 0) return { state: 'idle', count: 0 };
-  alive.sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt);
-  const { state, detail, project, windowPid, contextPercent, permission } = alive[0];
+  const shownSession = (selectedKey !== null && alive.find((session) => session.key === selectedKey))
+    || [...alive].sort(byUrgency)[0];
+  const { state, detail, project, windowPid, contextPercent, permission } = shownSession;
   // windowPid vem de um arquivo em disco: só sai daqui se for um PID plausível.
   const hasWindow = Number.isInteger(windowPid) && windowPid > 0;
+  // Só quem está esperando resposta tem pedido pendente.
+  const shownPermission = state === 'waiting' ? validPermission(permission) : null;
   return {
     state, detail, project, count: alive.length,
     windowPid: hasWindow ? windowPid : null,
     context: contextUsage(contextPercent),
-    // Só quem está esperando resposta tem pedido pendente.
-    permission: state === 'waiting' ? validPermission(permission) : null,
+    permission: shownPermission,
+    sessions: [...alive].sort(byFirstSeen).map((session) => ({
+      state: session.state,
+      pending: session.state === 'waiting' && validPermission(session.permission) !== null,
+      current: session === shownSession,
+    })),
+    queue: queuePosition(shownPermission?.id, selection?.requests),
   };
+}
+
+/**
+ * Lista das sessões vivas, pelos mesmos prazos de pickState, na ordem dos pontos: primeira aparição
+ * crescente e, no empate, a chave. A ordem nunca segue urgência nem recência, para um ponto não mudar
+ * de lugar no meio de um gesto. Cada item é `{ key, state, updatedAt, permissionId }`, com o id do
+ * pedido válido só em `waiting` (senão null). Leva chaves de sessão: só o main usa. Entrada que não
+ * é array dá []. `selectedKey` (opcional, a chave exibida) segura o "concluído" exibido depois dos 10 s
+ * enquanto houver outra sessão viva, como pickState; sem ele, ou com outra chave, o vencido fica fora.
+ */
+function sessionList(sessions, now, selectedKey) {
+  if (!Array.isArray(sessions)) return [];
+  return aliveSessions(sessions, now, selectedKey)
+    .sort(byFirstSeen)
+    .map((session) => ({
+      key: session.key,
+      state: session.state,
+      updatedAt: session.updatedAt,
+      permissionId: session.state === 'waiting' ? (validPermission(session.permission)?.id ?? null) : null,
+    }));
+}
+
+// Chave da sessão exibida depois de um ciclo de leitura. Com sessão exibida ela fica; saindo da lista,
+// vai à vizinha dela na ordem estável (a anterior mais próxima que sobrou, ou a seguinte) que não tenha
+// pedido já deixado (`leftKeys`); só se todas as restantes tiverem, pousa na vizinha mais próxima, porque
+// não há outro lugar (exceção registrada). Só sem sessão exibida a escolha é por urgência.
+function keyAfterPoll(key, list, previousKeys, leftKeys) {
+  if (list.length === 0) return null;
+  if (key === null) return [...list].sort(byUrgency)[0].key;
+  const remaining = new Set(list.map((entry) => entry.key));
+  if (remaining.has(key)) return key;
+  const previous = Array.isArray(previousKeys) ? previousKeys : [];
+  const at = previous.indexOf(key);
+  const near = at < 0 ? [] : [...previous.slice(0, at).reverse(), ...previous.slice(at + 1)].filter((candidate) => remaining.has(candidate));
+  const candidates = [...near, ...list.map((entry) => entry.key).filter((candidate) => !near.includes(candidate))];
+  return candidates.find((candidate) => !leftKeys.has(candidate)) ?? candidates[0];
+}
+
+// Quanto tempo sem roda para o gesto ter acabado e o snap poder acontecer, e por quanto tempo a roda fica
+// ignorada depois de um snap. Escolha do projeto, pela pesquisa de UX: a inércia do touchpad continua
+// entregando roda por 300 a 400 ms depois do último toque, e um snap no meio dela, ou a inércia logo depois,
+// afastaria o usuário do pedido que acabou de aparecer.
+const SNAP_GESTURE_GAP_MS = 400;
+const SNAP_WHEEL_LOCK_MS = 400;
+
+const byRequestOrder = (a, b) => (a.seenAt - b.seenAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+// O poll de nextSelection: reconstrói os pedidos pendentes, decide se a ilha vai a um deles e marca o que
+// já esteve na tela. Ver o JSDoc de nextSelection para as regras.
+function pollSelection(key, previous, entries, event) {
+  const { now, lastWheelAt, shownPermissionId, previousKeys } = event;
+  // A roda ou o clique que acabou de trocar a sessão: a escolha do usuário vale neste ciclo, e o pedido novo
+  // ou o que sobrou da fila espera o próximo (a exibição já mudou e o poll seguinte parte dela).
+  const userSwitched = event.userSwitched === true;
+  const known = new Map(previous.filter((request) => request && typeof request.id === 'string').map((request) => [request.id, request]));
+  const sessionOf = new Map();
+  const requests = [];
+  for (const entry of entries) {
+    const id = entry && entry.permissionId;
+    if (typeof id !== 'string' || sessionOf.has(id)) continue;
+    const old = known.get(id);
+    // Sem um instante válido não há como datar a chegada: o pedido novo espera o próximo ciclo.
+    if (!old && !Number.isFinite(now)) continue;
+    sessionOf.set(id, entry.key);
+    requests.push(old
+      ? { id, seenAt: old.seenAt, handled: old.handled === true, shown: old.shown === true }
+      : { id, seenAt: now, handled: false, shown: false });
+  }
+  requests.sort(byRequestOrder);
+
+  // Sessões com um pedido pendente que já esteve na tela e foi deixado: a vizinha da saída de fato as pula.
+  const leftKeys = new Set(requests.filter((request) => request.shown).map((request) => sessionOf.get(request.id)));
+  let chosen = keyAfterPoll(key, entries, previousKeys, leftKeys);
+  let snapped = false;
+  const markAllHandled = () => requests.forEach((request) => { request.handled = true; });
+  const hasShownRequest = typeof shownPermissionId === 'string';
+  const shownIsPending = hasShownRequest && sessionOf.has(shownPermissionId);
+  const inGesture = Number.isFinite(lastWheelAt) && Number.isFinite(now) && now - lastWheelAt < SNAP_GESTURE_GAP_MS;
+  const unhandled = requests.filter((request) => !request.handled);
+  // A sessão exibida saiu de fato da lista (e ainda há sessões).
+  const exited = key !== null && entries.length > 0 && !entries.some((entry) => entry.key === key);
+  const neverShown = requests.find((request) => !request.shown);
+
+  if (exited) {
+    // Vai ao pedido nunca exibido mais antigo, se o gesto da roda acabou; senão fica na vizinha de keyAfterPoll
+    // e o pedido espera. Um pedido já exibido e deixado nunca é alvo (uma vez por pedido).
+    if (!inGesture) markAllHandled();
+    if (neverShown && !inGesture) {
+      chosen = sessionOf.get(neverShown.id);
+      snapped = true;
+    }
+  } else if (userSwitched) {
+    // Nada a fazer: o usuário saiu da sessão do pedido exibido de propósito, e `shownPermissionId` ainda é o
+    // de antes do gesto, então puxá-lo de volta (ou ao pedido seguinte) desfaria a escolha dele.
+  } else if (key !== null && entries.some((entry) => entry.key === key) && hasShownRequest && !shownIsPending && requests.length > 0) {
+    // O pedido exibido saiu e a sessão dele continua viva: vai ao mais antigo restante. Não espera o gesto
+    // (quem respondeu na ilha acabou de clicar, não de rolar) e rearma como toda troca.
+    markAllHandled();
+    chosen = sessionOf.get(requests[0].id);
+    snapped = true;
+  } else if (unhandled.length > 0 && !inGesture) {
+    markAllHandled();
+    if (!shownIsPending) {
+      chosen = sessionOf.get(unhandled[0].id);
+      snapped = true;
+    }
+  }
+
+  for (const request of requests) {
+    if (request.id === shownPermissionId || sessionOf.get(request.id) === chosen) request.shown = true;
+  }
+  return { key: chosen, requests, snapped };
+}
+
+/**
+ * Qual sessão a ilha exibe depois de um evento. `selection` é `{ key, requests }`, `list` é o que
+ * sessionList devolveu e `event` é `{ type: 'poll', previousKeys, now, lastWheelAt, shownPermissionId }`
+ * (um ciclo de leitura; `previousKeys` são as chaves da lista do ciclo anterior, na mesma ordem; `now`,
+ * `lastWheelAt` e o instante de chegada de cada pedido são do relógio monotônico, `lastWheelAt` null sem
+ * roda e `shownPermissionId` o pedido que estava na tela antes deste ciclo) ou `{ type: 'select', index }`
+ * (clique num ponto: só um índice inteiro dentro da lista vale) ou `{ type: 'scroll', step }` (roda: `step`
+ * exatamente -1 ou 1 vai ao vizinho; no começo ou no fim da lista, ou com a chave fora dela, mantém).
+ * A sessão exibida só muda por um evento do usuário, por um pedido de permissão ou quando sai da lista, e
+ * então a ilha vai à vizinha dela, nunca à mais urgente: por isso "concluído" e "voltou a trabalhar" não
+ * trocam a sessão (SESS-06). A urgência só decide sem sessão exibida.
+ * No poll, `requests` é reconstruída a cada ciclo, um `{ id, seenAt, handled, shown }` por pedido pendente
+ * da lista, por ordem de chegada (empate pelo id). `handled` diz que a decisão de puxar ou enfileirar o
+ * pedido já foi tomada; `shown` diz que ele já esteve na tela e nunca volta a false. Um pedido novo leva a
+ * ilha à sessão dele uma só vez, nunca no meio de um gesto de roda (fica para o primeiro ciclo depois dele)
+ * e nunca por cima de um pedido que está na tela (entra na fila, sem snap). Quando o pedido exibido sai
+ * (respondido na ilha ou no terminal), a ilha vai ao mais antigo restante, sem esperar o gesto; se o
+ * usuário estava numa sessão sem pedido, nada se move. O poll que roda logo depois de um gesto do usuário (roda
+ * ou clique no ponto) leva `userSwitched: true`: nele nem a fila avança nem o pedido novo faz snap, para a escolha
+ * do usuário não ser desfeita pelo pedido que saiu no mesmo instante; o ciclo seguinte decide.
+ * Sair de fato da lista (SessionEnd, terminal fechado, prazo de "trabalhando" ou "precisa de você") não é troca
+ * por estado: a ilha vai à sessão do pedido nunca exibido (`shown: false`) mais antigo, se o gesto da roda
+ * acabou, e senão à vizinha na ordem estável, nunca à mais urgente. A vizinha pula as sessões com pedido já
+ * exibido e deixado; só se todas as restantes o tiverem, pousa na mais próxima (exceção registrada, o refresh
+ * rearma). Um pedido já exibido e deixado nunca é alvo dessa saída (uma vez por pedido).
+ * Devolve sempre um objeto novo `{ key, requests, snapped }` (`requests` é cópia; `snapped` é true só
+ * quando o poll levou a seleção a um pedido). Evento ausente, desconhecido ou índice inválido mantém a
+ * chave. Nunca lança nem muta.
+ */
+function nextSelection(selection, list, event) {
+  const valid = selection && typeof selection === 'object';
+  const key = valid && typeof selection.key === 'string' ? selection.key : null;
+  const requests = valid && Array.isArray(selection.requests) ? selection.requests.map((request) => ({ ...request })) : [];
+  const entries = Array.isArray(list) ? list : [];
+  const result = (chosen) => ({ key: chosen, requests, snapped: false });
+  switch (event?.type) {
+    case 'poll':
+      return pollSelection(key, requests, entries, event);
+    case 'select': {
+      const { index } = event;
+      return result(Number.isInteger(index) && index >= 0 && index < entries.length ? entries[index].key : key);
+    }
+    case 'scroll': {
+      const at = entries.findIndex((entry) => entry.key === key);
+      const { step } = event;
+      const target = at + step;
+      return result((step === 1 || step === -1) && at >= 0 && target >= 0 && target < entries.length ? entries[target].key : key);
+    }
+    default:
+      return result(key);
+  }
+}
+
+/**
+ * A sessão é lixo de terminal fechado sem SessionEnd? Morta é a de arquivo com mais de `WAITING_STALE_MS`
+ * sem atualização, de qualquer estado (nenhum hook espera tanto), ou a de `windowPid` válido (inteiro maior
+ * que 0) cujo processo não existe mais, o que `isPidAlive(windowPid)` decide: ele é injetado e só o valor
+ * exatamente false conta, então fato desconhecido (outro valor, ou `isPidAlive` que não é função) mantém a
+ * sessão, porque apagar a de um terminal aberto perderia o estado dela. Sem `windowPid` válido o PID nem é
+ * consultado, e `updatedAt` ou `now` que não são números finitos tiram a regra da idade. O "concluído"
+ * recente de terminal vivo nunca é morto: o hook reaproveita o windowPid guardado nele e evita a busca de 0,4 s.
+ * Nunca lança nem muta; sessão que não é objeto devolve false.
+ * ponytail: um terminal vivo mas parado por mais de 12 h também perde o arquivo e sai da lista; quando a sessão
+ * volta a ter um evento o hook recria o arquivo, que nasce com birthtime novo, e o ponto entra no fim da ordem.
+ */
+function isSessionDead(session, now, isPidAlive) {
+  if (!session || typeof session !== 'object') return false;
+  if (Number.isFinite(session.updatedAt) && Number.isFinite(now) && now - session.updatedAt > WAITING_STALE_MS) return true;
+  const { windowPid } = session;
+  return Number.isInteger(windowPid) && windowPid > 0 && typeof isPidAlive === 'function' && isPidAlive(windowPid) === false;
+}
+
+// Regras de gesto da roda portadas do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90;
+// ver THIRD_PARTY_NOTICES.md): acumula até um entalhe, o gesto recomeça depois de 220 ms sem roda ou na
+// inversão de direção, o intervalo entre passos é de 85 ms com roda e 200 ms com touchpad (delta menor que
+// um entalhe) e no máximo um entalhe fica pendente.
+const WHEEL_NOTCH_DELTA = 120;
+const WHEEL_GESTURE_PAUSE_MS = 220;
+const WHEEL_STEP_MS = 85;
+const WHEEL_PRECISE_STEP_MS = 200;
+// Escolha do projeto, não do mod: o teto do número aceito do renderer. Dez entalhes num só evento já é roda
+// solta; acima disso é dado fora do contrato e o main ignora.
+const WHEEL_DELTA_MAX = 10 * WHEEL_NOTCH_DELTA;
+
+/**
+ * Um evento de roda no acumulador do gesto. `gesture` é `{ accumulated, lastEventAt, lastStepAt }` (os
+ * instantes são do relógio monotônico e `null` quer dizer nunca); `delta` é o número bruto da roda (120
+ * por entalhe, menos no touchpad) e `now` o instante do evento. Devolve `{ gesture, step }`, com `step`
+ * -1 (roda para cima: sessão anterior), 0 ou 1 (roda para baixo: a seguinte). Delta ou `now` que não
+ * sejam números finitos, e delta 0, devolvem uma cópia do gesto e step 0; gesto inválido conta como o
+ * inicial. Nunca lança nem muta.
+ */
+function wheelStep(gesture, delta, now) {
+  const isInstant = (value) => value === null || Number.isFinite(value);
+  const valid = gesture && typeof gesture === 'object' && Number.isFinite(gesture.accumulated)
+    && isInstant(gesture.lastEventAt) && isInstant(gesture.lastStepAt);
+  const current = valid
+    ? { accumulated: gesture.accumulated, lastEventAt: gesture.lastEventAt, lastStepAt: gesture.lastStepAt }
+    : { accumulated: 0, lastEventAt: null, lastStepAt: null };
+  if (!Number.isFinite(delta) || !Number.isFinite(now) || delta === 0) return { gesture: current, step: 0 };
+
+  const paused = current.lastEventAt !== null && now - current.lastEventAt > WHEEL_GESTURE_PAUSE_MS;
+  const reversed = current.accumulated !== 0 && (delta > 0) !== (current.accumulated > 0);
+  const accumulated = (paused || reversed ? 0 : current.accumulated) + delta;
+  const next = { accumulated, lastEventAt: now, lastStepAt: current.lastStepAt };
+  if (Math.abs(accumulated) < WHEEL_NOTCH_DELTA) return { gesture: next, step: 0 };
+
+  const interval = Math.abs(delta) < WHEEL_NOTCH_DELTA ? WHEEL_PRECISE_STEP_MS : WHEEL_STEP_MS;
+  if (next.lastStepAt !== null && now - next.lastStepAt < interval) {
+    next.accumulated = accumulated > 0 ? WHEEL_NOTCH_DELTA : -WHEEL_NOTCH_DELTA;
+    return { gesture: next, step: 0 };
+  }
+  next.lastStepAt = now;
+  next.accumulated = 0;
+  return { gesture: next, step: accumulated > 0 ? -1 : 1 };
 }
 
 // getBounds() arredonda com escala de DPI fracionária (como 125%), e a janela pode medir 1 ou 2 px
@@ -404,6 +688,23 @@ function horizontalSlackFor(anchor) {
   if (valid.endsWith('-left')) return { left: STAGE_SHADOW_PX, right: free };
   if (valid.endsWith('-right')) return { left: free, right: STAGE_SHADOW_PX };
   return { left: HORIZONTAL_SLACK, right: HORIZONTAL_SLACK };
+}
+
+// A borda interna da pílula fica a BESIDE_GAP_PX do centro da área útil, dos dois lados, e a pílula expandida
+// mede EXPANDED_PILL_WIDTH_PX. Abaixo disso o clamp puxa a janela para cima da pílula do mod, que sobe por
+// cima da nossa e cobre o começo das linhas do pedido. Fica depois das duas constantes que usa.
+const BESIDE_MIN_WORK_AREA_WIDTH_PX = 2 * (BESIDE_GAP_PX + EXPANDED_PILL_WIDTH_PX);
+
+/**
+ * A área útil comporta a pílula expandida ao lado da ilha do sistema? Devolve true quando `anchor` não é
+ * 'right-of-island' nem 'left-of-island' (inclusive valor desconhecido ou ausente): a regra não se aplica e
+ * quem confere a área útil é isWithinWorkArea. Nas duas âncoras ao lado devolve false com área útil ausente
+ * ou sem largura numérica (dado que não confere não decide) e quando ela é mais estreita que
+ * BESIDE_MIN_WORK_AREA_WIDTH_PX. Nunca lança.
+ */
+function besideFits(anchor, workArea) {
+  if (anchor !== 'right-of-island' && anchor !== 'left-of-island') return true;
+  return Number.isFinite(workArea?.width) && workArea.width >= BESIDE_MIN_WORK_AREA_WIDTH_PX;
 }
 
 /**
@@ -711,9 +1012,13 @@ module.exports = {
   PERMISSION_TOOL_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
+  sessionList, nextSelection, isSessionDead,
+  wheelStep, WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX,
+  SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
   BESIDE_GAP_PX, BESIDE_TOP_OFFSET_PX,
+  BESIDE_MIN_WORK_AREA_WIDTH_PX, besideFits,
   islandDisplays, nextShownPermission, isIslandVisible, nextUserHidden,
   FULLSCREEN_TOLERANCE_PX, SHELL_WINDOW_CLASSES, WS_EX_TRANSPARENT, nextFullscreen,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,

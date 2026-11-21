@@ -6,7 +6,10 @@ const vm = require('node:vm');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
   effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES, WINDOW_SIZE, HORIZONTAL_SLACK,
-  PERMISSION_TOOL_LIMIT, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
+  PERMISSION_TOOL_LIMIT, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, besideFits, anchorPosition, clampIslandPosition,
+  horizontalSlackFor, BESIDE_GAP_PX, BESIDE_MIN_WORK_AREA_WIDTH_PX,
+  nextSelection, wheelStep, WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX,
+  SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -235,12 +238,12 @@ test('nenhum canal escapa pela IPC por webContents', () => {
 
 const RENDERER_CHANNELS = [
   'island:state', 'island:cursor', 'island:capture', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end',
-  'island:reset-position', 'island:menu',
+  'island:reset-position', 'island:menu', 'island:select', 'island:wheel',
 ];
 // Canais que o main envia e o renderer só escuta: o main não registra handler para eles.
 const MAIN_TO_RENDERER_CHANNELS = ['island:state', 'island:cursor'];
 
-test('o preload usa só send e on, nos nove canais conhecidos', () => {
+test('o preload usa só send e on, nos onze canais conhecidos', () => {
   const { methods, channels } = collectChannels(preloadSource, 'ipcRenderer');
   assert.deepEqual([...methods].sort(), ['on', 'send']);
   assert.deepEqual([...channels].sort(), [...RENDERER_CHANNELS].sort());
@@ -261,7 +264,7 @@ test('a janela da ilha não navega nem abre janela, e todo canal confere o remet
   assert.equal(mainSource.includes('loadFile('), false, 'a ilha carrega pela mesma URL que confere');
   assert.match(mainSource, /const islandOf = \(event\) => \{[^}]*isIslandSender\(/);
   const handlers = mainSource.split('ipcMain.on(').slice(1);
-  assert.equal(handlers.length, 7);
+  assert.equal(handlers.length, 9);
   for (const handler of handlers) {
     const body = handler.slice(0, handler.indexOf('\n  });'));
     assert.match(body, /islandOf\(event\)/, `canal sem conferir o remetente: ${body.split(',')[0]}`);
@@ -292,7 +295,7 @@ test('o armamento acompanha o retângulo dos próprios botões', () => {
   assert.ok(pointerdown.indexOf(moved) < pointerdown.indexOf('canPress('), 'a conferência vem antes de canPress');
 });
 
-test('o main escuta só com ipcMain.on, nos sete canais do renderer', () => {
+test('o main escuta só com ipcMain.on, nos nove canais do renderer', () => {
   const { methods, channels } = collectChannels(mainSource, 'ipcMain');
   assert.deepEqual([...methods], ['on']);
   assert.deepEqual(
@@ -420,7 +423,7 @@ test('island:decide: o eco vem do renderer, o alvo e o relógio do main, os fato
     ['decidedId', 'decidedPermissionId'],
     ['windowVisible', 'island.isVisible() && !island.isMinimized()'],
     ['coveredByFullscreen', 'display ? fullscreenByDisplay.has(display.id) : true'],
-    ['withinVisibleArea', 'Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor))'],
+    ['withinVisibleArea', 'fitsVisibleArea(island, display)'],
   ]);
   // O renderer manda o eco como o segundo argumento do preload; sem ele toda decisão seria recusada.
   assert.ok(preloadSource.includes("decide: (behavior, pressedId) => ipcRenderer.send('island:decide', behavior, pressedId),"));
@@ -441,8 +444,8 @@ test('refresh não engole o rearme e o estado enviado leva answeredId, armEpoch 
     "nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm')",
     'if (serialized === lastSent && nextShown.epoch === shown.epoch) return;',
     '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea }',
-    // a mesma conferência do gate (isWithinWorkArea com a folga da âncora), nunca uma mais frouxa
-    'const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor));',
+    // a mesma conferência do gate (fitsVisibleArea), nunca uma mais frouxa
+    'const fitsWorkArea = fitsVisibleArea(island, display);',
   ]) {
     assert.ok(mainSource.includes(glue), `main.js sem a cola: ${glue}`);
   }
@@ -460,8 +463,8 @@ test('botões e hover sem transform, scale, translate, rotate ou zoom', () => {
   }
 });
 
-test('a roda sobre o texto não vaza e não rola na janela depois da troca', () => {
-  assert.match(rendererSource, /permissionText\.addEventListener\('wheel', \(event\) => \{\s*event\.stopPropagation\(\);\s*if \(!isWheelSettled\(contentChangedAt, performance\.now\(\)\)\) event\.preventDefault\(\);\s*\}, \{ passive: false \}\);/);
+test('a roda sobre o bloco do pedido não vaza e não rola na janela depois da troca', () => {
+  assert.match(rendererSource, /permissionBox\.addEventListener\('wheel', \(event\) => \{\s*event\.stopPropagation\(\);\s*if \(!isWheelSettled\(contentChangedAt, performance\.now\(\)\)\) event\.preventDefault\(\);\s*\}, \{ passive: false \}\);/);
 });
 
 test('o clique só decide com o press validado e ecoa o id capturado no pointerdown', () => {
@@ -966,19 +969,24 @@ function toolLabelLines() {
   const labelWidth = cssPixels(expanded.width, 'largura da expandida') - pillPadding
     - horizontalPadding(cssDeclarations('#permission').padding, 'padding de #permission');
   const fontSize = cssPixels(cssDeclarations('#permission-tool')['font-size'], 'font-size de #permission-tool');
-  return Math.ceil((PERMISSION_TOOL_LIMIT * TOOL_CHAR_WIDTH_EM * fontSize) / labelWidth);
+  // O cabeçalho é "projeto · ferramenta": o projeto ocupa no máximo o max-width dele (corta com reticências)
+  // e o separador " · " conta três caracteres. Com fila, o "N de M" flutua à direita na mesma altura: no
+  // pior caso "99 de 99" (8 caracteres) mais a margem dele tiram essa largura da linha.
+  const projectWidth = cssPixels(cssDeclarations('#permission-project')['max-width'], 'max-width de #permission-project');
+  const queueWidth = 8 * TOOL_CHAR_WIDTH_EM * fontSize + cssPixels(cssDeclarations('#permission-queue')['margin-left'], 'margin-left de #permission-queue');
+  return Math.ceil((PERMISSION_TOOL_LIMIT * TOOL_CHAR_WIDTH_EM * fontSize + projectWidth + 3 * TOOL_CHAR_WIDTH_EM * fontSize + queueWidth) / labelWidth);
 }
 
-// Altura da pílula com o pior pedido, somada das regras do CSS (hoje 46 + 31,2 + 179,9 + 40,9 + 16 ≈ 314):
+// Altura da pílula com o pior pedido, somada das regras do CSS (hoje 46 + 15,6 + 194,2 + 40,9 + 16 ≈ 312,7):
 //   barra (#bar) ........................ 46
-//   detalhe (#detail): 2 linhas de 12 px . 12 × 1,3 × 2 = 31,2
-//   pedido (#permission) ................ margem 8 + padding 16 + título (2 linhas de 11 × 1,3, + 3) + texto com
-//                                         max-height 105 + dica (5 + 11 × 1,3) = 179,9
+//   detalhe (#detail): 1 linha de 12 px .. 12 × 1,3 = 15,6 (com pedido na tela, #pill.has-permission #detail)
+//   pedido (#permission) ................ margem 8 + padding 16 + título (3 linhas de 11 × 1,3, + 3) + texto com
+//                                         max-height 105 + dica (5 + 11 × 1,3) = 194,2
 //   ações (#actions) .................... margem 8 + botão (13 × 1,3 + 8 × 2) = 40,9
 //   respiro de baixo (has-permission) ... 16
 function pillMaxHeight() {
   const bar = cssPixels(cssDeclarations('#bar').height, 'altura de #bar');
-  const detail = textLine('#detail') * Number(cssDeclarations('#detail')['-webkit-line-clamp']);
+  const detail = textLine('#detail') * Number(cssDeclarations('#pill.has-permission #detail')['-webkit-line-clamp']);
   const permission = cssDeclarations('#permission');
   const tool = cssDeclarations('#permission-tool');
   const hint = cssDeclarations('#permission-hint');
@@ -1185,7 +1193,7 @@ test('a transparência sai do mesmo passo do refresh e nunca vale com pedido na 
   assert.match(bodyOf('function applyOpacity('), /^function applyOpacity\(island\) \{\s*island\.setOpacity\(/);
   assert.match(
     bodyOf('function refresh('),
-    /for \(const island of islands\.values\(\)\) \{\s*applyOpacity\(island\);\s*sendState\(island\);\s*\}/,
+    /for \(const island of islands\.values\(\)\) \{\s*applyOpacity\(island\);\s*sendState\(island, userSwitched\);\s*\}/,
   );
   assert.ok(bodyOf('function createIsland(').includes('applyOpacity(island);'), 'a ilha nova já nasce com a opacidade efetiva');
 });
@@ -1230,4 +1238,630 @@ test('sem sensor nem dependência nativa, e os hooks continuam leves', () => {
   for (const needle of ['ponytail:', 'nextFullscreen', 'applyVisibility', 'PowerShell']) {
     assert.ok(comment.includes(needle), `o comentário do ponto de entrada do sensor não cita ${needle}`);
   }
+});
+
+// Ao lado da ilha do sistema, numa área útil estreita, o clamp põe a nossa janela sob a pílula do mod: a janela
+// ainda cabe na área útil, então só besideFits recusa. Reproduz a conta do main com as funções puras.
+for (const vector of vectors.besideDecision) {
+  test(`besideDecision: ${vector.name}`, () => {
+    const { anchor, workArea } = vector.input;
+    const slack = horizontalSlackFor(anchor);
+    const position = clampIslandPosition(anchorPosition(anchor, workArea, WINDOW_SIZE), workArea, WINDOW_SIZE, slack);
+    const bounds = { ...position, ...WINDOW_SIZE };
+    const verdict = acceptDecision({
+      behavior: 'allow',
+      echoedId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      shownId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      shownSince: 1000,
+      now: 1800,
+      decidedId: null,
+      windowVisible: true,
+      coveredByFullscreen: false,
+      withinVisibleArea: isWithinWorkArea(bounds, workArea, slack) && besideFits(anchor, workArea),
+    });
+    assert.deepEqual(verdict, vector.expect);
+  });
+}
+
+test('o renderer e o gate conferem a área visível pela mesma função, com a âncora ao lado', () => {
+  const mainLf = mainSource.replace(/\r\n/g, '\n');
+  const start = mainLf.indexOf('function fitsVisibleArea(');
+  assert.ok(start >= 0, 'função ausente: fitsVisibleArea');
+  const body = mainLf.slice(start, mainLf.indexOf('\n}\n', start));
+  assert.ok(body.includes('isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor))'));
+  assert.ok(body.includes('besideFits(preferences.anchor, display.workArea)'));
+  // definição e as duas chamadas (sendState e island:decide); comentário não conta
+  const code = mainLf.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  assert.equal(code.split('fitsVisibleArea(island, display)').length - 1, 3);
+});
+
+for (const vector of vectors.besideFits) {
+  test(`besideFits: ${vector.name}`, () => {
+    assert.equal(besideFits(vector.input.anchor, vector.input.workArea), vector.expect);
+  });
+}
+
+test('a largura mínima ao lado é a soma das duas distâncias ao centro e é a do fixture', () => {
+  assert.equal(BESIDE_MIN_WORK_AREA_WIDTH_PX, 2 * (BESIDE_GAP_PX + EXPANDED_PILL_WIDTH_PX));
+  assert.equal(BESIDE_MIN_WORK_AREA_WIDTH_PX, 1220);
+  assert.equal(BESIDE_MIN_WORK_AREA_WIDTH_PX, vectors.besideMinWorkAreaWidthPx);
+});
+
+// --- Fase 5: várias sessões (travas de texto, baratas e frágeis de propósito) ---
+
+const mainLf = mainSource.replace(/\r\n/g, '\n');
+const preloadLf = preloadSource.replace(/\r\n/g, '\n');
+
+// Corpo de uma função do main: do `function nome(` até o fecha-chaves da coluna 0.
+function mainFunctionBody(name) {
+  const start = mainLf.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `função ausente no main.js: ${name}`);
+  return mainLf.slice(start, mainLf.indexOf('\n}\n', start));
+}
+
+test('o canal island:select só leva um índice, conferido no main, e passa por refresh', () => {
+  const start = mainLf.indexOf("ipcMain.on('island:select', (event, index) => {");
+  assert.ok(start >= 0, 'handler de island:select ausente');
+  const handler = mainLf.slice(start, mainLf.indexOf('\n  });', start));
+  for (const piece of [
+    'islandOf(event)',
+    'Number.isInteger(index)',
+    "lastPickedState.state === 'idle'",
+    "nextSelection(selection, lastSessionList, { type: 'select', index })",
+    "refresh('select')",
+  ]) {
+    assert.ok(handler.includes(piece), `handler sem: ${piece}`);
+  }
+  assert.ok(preloadLf.includes("selectSession: (index) => ipcRenderer.send('island:select', index),"));
+});
+
+test('a seleção só muda por nextSelection e o refresh a calcula antes de escolher a sessão', () => {
+  const body = mainFunctionBody('refresh');
+  const order = [
+    'sessionList(sessions, now, selection.key)',
+    "nextSelection(selection, list, {\n    type: 'poll'",
+    'lastSessionList = sessionList(sessions, now, selection.key);',
+    'pickState(sessions, now, selection)',
+  ].map((piece) => {
+    const at = body.indexOf(piece);
+    assert.ok(at >= 0, `refresh sem: ${piece}`);
+    return at;
+  });
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'ordem do refresh');
+  assert.match(mainLf, /^let selection = \{ key: null, requests: \[\] \};/m);
+  const code = mainLf.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  const assignments = [...code.matchAll(/(?<![\w.])(let\s+)?selection\s*=(?!=)([^;]*);/g)].filter((match) => !match[1]);
+  assert.ok(assignments.length >= 2, 'refresh e island:select atribuem a seleção');
+  for (const [, , right] of assignments) assert.ok(right.includes('nextSelection('), `selection recebe algo que não é nextSelection: ${right}`);
+});
+
+test('readSessions sobrescreve a chave e a ordem depois do parse e guarda o statSync por sessão nova', () => {
+  const body = mainFunctionBody('readSessions');
+  const parse = body.indexOf('JSON.parse(');
+  assert.ok(parse >= 0);
+  assert.ok(body.indexOf('session.key = key;') > parse, 'a chave vem do nome do arquivo, depois do parse');
+  assert.ok(body.indexOf('session.firstSeenAt =') > parse, 'a ordem vem da ilha, depois do parse');
+  assert.ok(body.includes('birthtimeMs'));
+  const guard = body.indexOf('firstSeenAtByKey.has(key)');
+  assert.ok(guard >= 0 && guard < body.indexOf('statSync('), 'um statSync por sessão nova, não por ciclo');
+  assert.ok(body.includes('firstSeenAtByKey.delete('), 'a chave sai do mapa quando o arquivo some');
+});
+
+test('o clique no ponto manda só o índice, o pedido novo zera a leitura e a pílula não ganha botão fora do lugar', () => {
+  assert.equal(rendererLf.split('window.island.selectSession(').length - 1, 1);
+  assert.ok(rendererLf.includes('window.island.selectSession(Number(button.dataset.index))'));
+  const click = rendererLf.slice(rendererLf.indexOf("sessionsStrip.addEventListener('click'"));
+  assert.ok(click.slice(0, click.indexOf('\n  });')).includes('aria-current'), 'o ponto da exibida não faz nada');
+  assert.ok(rendererLf.includes('id="sessions"'));
+  const onState = rendererLf.slice(rendererLf.indexOf('window.island.onState('));
+  assert.match(onState, /if \(permissionId !== previousPermissionId\) \{[^}]*readPermissionId = null;[^}]*permissionText\.scrollTop = 0;[^}]*\}/);
+});
+
+test('sessionSwitchDirection dá a direção da troca e MAX_SESSION_DOTS é 8', () => {
+  const block = loadInlineBlock('// sessoes:inicio', '// sessoes:fim', ['MAX_SESSION_DOTS', 'sessionSwitchDirection']);
+  assert.equal(block.MAX_SESSION_DOTS, 8);
+  const at = (index, size) => Array.from({ length: size }, (_, position) => ({ current: position === index }));
+  assert.equal(block.sessionSwitchDirection(at(0, 2), at(1, 2)), 1);
+  assert.equal(block.sessionSwitchDirection(at(1, 2), at(0, 2)), -1);
+  assert.equal(block.sessionSwitchDirection(at(0, 4), at(3, 4)), 1);
+  assert.equal(block.sessionSwitchDirection(at(2, 3), at(2, 3)), 0);
+  assert.equal(block.sessionSwitchDirection(at(0, 2), at(0, 3)), 0);
+  assert.equal(block.sessionSwitchDirection(at(0, 1), at(0, 1)), 0);
+  assert.equal(block.sessionSwitchDirection([{}, {}], [{}, {}]), 0);
+  assert.equal(block.sessionSwitchDirection([{ current: true }, {}], [{}, {}]), 0);
+  for (const value of [undefined, null, 'ab', {}, 3]) {
+    assert.equal(block.sessionSwitchDirection(value, at(1, 2)), 0);
+    assert.equal(block.sessionSwitchDirection(at(0, 2), value), 0);
+  }
+});
+
+test('a pílula compacta tem teto na largura da expandida e os pontos ficam na ponta direita da barra', () => {
+  assert.equal(cssDeclarations('#pill:not(.expanded)')['max-width'], cssDeclarations('#pill.expanded').width);
+  // Na expandida não há teto: ele cortaria a passagem da mola ao crescer (ANIM-01).
+  assert.equal(cssDeclarations('#pill')['max-width'], undefined);
+  for (const [, selector, body] of styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (selector.trim().startsWith('#pill.multi-session')) {
+      assert.equal(/(?<![-\w])width\s*:/.test(body), false, `a regra ${selector.trim()} não pode fixar a largura da pílula`);
+    }
+  }
+  const side = rendererLf.slice(rendererLf.indexOf('<span id="side">'), rendererLf.indexOf('\n    </span>\n    </div>'));
+  assert.ok(side.indexOf('id="open-compact"') > 0 && side.indexOf('id="sessions"') > side.indexOf('id="open-compact"'));
+  const lines = side.split('\n').filter((line) => line.trim() !== '');
+  assert.ok(lines[lines.length - 1].includes('id="sessions"'), '#sessions é o último filho de #side');
+  const render = functionBody('renderContent');
+  assert.ok(render.includes("pill.classList.toggle('multi-session', "));
+  assert.ok(render.includes('current.sessions.length >= 2'));
+});
+
+test('com várias sessões o título tem largura fixa e corta com reticências, então o projeto não muda a largura da pílula', () => {
+  const title = cssDeclarations('#pill.multi-session #title');
+  assert.equal(title.flex, '0 1 140px');
+  assert.equal(title['min-width'], '0');
+  assert.equal(title['text-overflow'], 'ellipsis');
+  assert.equal(title.overflow, 'hidden');
+  assert.equal(cssDeclarations('#lead')['min-width'], '0');
+  assert.ok(functionBody('renderContent').includes("pill.classList.toggle('multi-session', "));
+});
+
+test('o cabeçalho do pedido corta só o projeto: a ferramenta quebra em qualquer ponto e nunca leva reticências', () => {
+  assert.equal(cssDeclarations('#permission-tool')['overflow-wrap'], 'anywhere');
+  for (const [, selector, body] of styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (['#permission-tool', '#permission-tool-name'].includes(selector.trim())) {
+      assert.equal(body.includes('text-overflow'), false, `a regra ${selector.trim()} não pode cortar com reticências`);
+    }
+  }
+  const project = cssDeclarations('#permission-project');
+  assert.equal(project['text-overflow'], 'ellipsis');
+  assert.equal(project['white-space'], 'nowrap');
+  cssPixels(project['max-width'], 'max-width de #permission-project');
+  const render = functionBody('renderContent');
+  assert.match(render, /permissionToolName\.textContent = [^\n]*permission\.tool[^\n]*;/);
+  assert.equal(render.includes('.slice('), false, 'o nome da ferramenta não pode ser fatiado');
+  assert.ok(rendererLf.includes('id="permission-project"') && rendererLf.includes('id="permission-tool-name"'));
+});
+
+test('o título é o projeto só com várias sessões e a pílula compacta, senão o do estado', () => {
+  const render = functionBody('renderContent');
+  assert.ok(render.includes("const multiSession = Array.isArray(current.sessions) && current.sessions.length >= 2;"));
+  assert.ok(render.includes("title.textContent = multiSession && !pill.classList.contains('expanded') && current.project ? current.project : TITLES[current.state];"));
+  assert.equal(render.split('current.project').length - 1 >= 3, true, 'título, cabeçalho do pedido e detalhe usam o projeto');
+});
+
+test('o ponto de quem pede permissão pulsa por opacidade e para com movimento reduzido', () => {
+  assert.match(rendererLf, /@keyframes session-pulse \{[^{}]*\{[^{}]*\}\s*\}/);
+  assert.equal(cssDeclarations('#sessions [data-pending="true"] i').animation.includes('session-pulse'), true);
+  const reduced = rendererLf.match(/@media \(prefers-reduced-motion: reduce\) \{([^{}]*)\{/);
+  assert.ok(reduced, 'regra de movimento reduzido não encontrada');
+  assert.ok(reduced[1].includes('#sessions i'));
+  // o anel parado vive dentro do @media de movimento reduzido, que é o último bloco do CSS
+  const media = rendererLf.slice(rendererLf.indexOf('@media (prefers-reduced-motion: reduce) {'), rendererLf.indexOf('</style>'));
+  assert.ok(media.includes('#sessions [data-pending="true"] i { box-shadow: 0 0 0 2px '));
+});
+
+// --- Fase 5: roda do mouse (acumulador do mod, passo na lista e canal island:wheel) ---
+
+const WHEEL_START = Object.freeze({ accumulated: 0, lastEventAt: null, lastStepAt: null });
+
+test('wheelStep: um entalhe anda uma sessão, para cima a anterior e para baixo a seguinte', () => {
+  assert.deepEqual(wheelStep(WHEEL_START, 120, 1000), { gesture: { accumulated: 0, lastEventAt: 1000, lastStepAt: 1000 }, step: -1 });
+  assert.deepEqual(wheelStep(WHEEL_START, -120, 1000), { gesture: { accumulated: 0, lastEventAt: 1000, lastStepAt: 1000 }, step: 1 });
+  assert.equal(wheelStep(WHEEL_START, 119, 1000).step, 0);
+});
+
+test('wheelStep: o touchpad soma deltas menores que um entalhe e anda quando o gesto chega a 120', () => {
+  const first = wheelStep(WHEEL_START, 40, 1000);
+  const second = wheelStep(first.gesture, 40, 1016);
+  const third = wheelStep(second.gesture, 40, 1032);
+  assert.deepEqual([first.step, second.step, third.step], [0, 0, -1]);
+  assert.equal(second.gesture.accumulated, 80);
+  assert.equal(third.gesture.accumulated, 0);
+});
+
+test('wheelStep: mais de 220 ms de pausa ou a inversão de direção recomeçam o gesto', () => {
+  const pause = wheelStep(wheelStep(WHEEL_START, 60, 1000).gesture, 60, 1300);
+  assert.deepEqual(pause, { gesture: { accumulated: 60, lastEventAt: 1300, lastStepAt: null }, step: 0 });
+  const stillSame = wheelStep(wheelStep(WHEEL_START, 60, 1000).gesture, 60, 1220);
+  assert.equal(stillSame.step, -1, '220 ms exatos ainda é o mesmo gesto: 60 + 60 fecha um entalhe');
+  const reverse = wheelStep(wheelStep(WHEEL_START, 60, 1000).gesture, -60, 1010);
+  assert.deepEqual(reverse, { gesture: { accumulated: -60, lastEventAt: 1010, lastStepAt: null }, step: 0 });
+});
+
+test('wheelStep: o intervalo entre passos é 85 ms com roda e 200 ms com touchpad, e só um entalhe fica pendente', () => {
+  const stepped = wheelStep(WHEEL_START, 120, 1000).gesture;
+  const held = wheelStep(stepped, 120, 1050);
+  assert.deepEqual([held.step, held.gesture.accumulated], [0, 120]);
+  assert.equal(wheelStep(held.gesture, 120, 1090).step, -1);
+  const burst = wheelStep(stepped, 360, 1050);
+  assert.deepEqual([burst.step, burst.gesture.accumulated], [0, 120]);
+  const burstDown = wheelStep(stepped, -360, 1050);
+  assert.deepEqual([burstDown.step, burstDown.gesture.accumulated], [0, -120]);
+  assert.equal(wheelStep(stepped, 120, 1085).step, -1, 'com roda, 85 ms já bastam');
+  // touchpad: o delta menor que um entalhe que fecha os 120 espera 200 ms do passo anterior
+  const slow = wheelStep(stepped, 60, 1100);
+  const slowSecond = wheelStep(slow.gesture, 60, 1150);
+  assert.deepEqual([slowSecond.step, slowSecond.gesture.accumulated], [0, 120], 'a 150 ms do passo, dentro dos 200 ms');
+  assert.equal(wheelStep(slowSecond.gesture, 60, 1210).step, -1, 'a 210 ms do passo anda');
+});
+
+test('wheelStep nunca lança nem muta, ignora entrada inválida e as constantes são as do mod', () => {
+  const gesture = Object.freeze({ accumulated: 40, lastEventAt: 500, lastStepAt: 100 });
+  for (const delta of [0, NaN, Infinity, -Infinity, '120', null, undefined, {}]) {
+    const result = wheelStep(gesture, delta, 600);
+    assert.deepEqual(result, { gesture, step: 0 });
+    assert.notEqual(result.gesture, gesture, 'devolve cópia');
+  }
+  for (const now of [NaN, Infinity, '600', null, undefined]) assert.deepEqual(wheelStep(gesture, 120, now), { gesture, step: 0 });
+  for (const bad of [null, undefined, 'x', 3, {}, { accumulated: 'a', lastEventAt: null, lastStepAt: null },
+    { accumulated: 0, lastEventAt: 'x', lastStepAt: null }, { accumulated: 0, lastEventAt: null }]) {
+    assert.deepEqual(wheelStep(bad, 120, 1000), wheelStep(WHEEL_START, 120, 1000));
+  }
+  assert.deepEqual(WHEEL_START, { accumulated: 0, lastEventAt: null, lastStepAt: null });
+  assert.deepEqual(
+    [WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX],
+    [120, 220, 85, 200, 1200],
+  );
+});
+
+test('nextSelection scroll anda um vizinho na lista, sem dar a volta', () => {
+  const list = [{ key: 'a' }, { key: 'b' }, { key: 'c' }];
+  const at = (key) => ({ key, requests: [] });
+  assert.equal(nextSelection(at('b'), list, { type: 'scroll', step: 1 }).key, 'c');
+  assert.equal(nextSelection(at('b'), list, { type: 'scroll', step: -1 }).key, 'a');
+  assert.equal(nextSelection(at('c'), list, { type: 'scroll', step: 1 }).key, 'c', 'sem volta no fim');
+  assert.equal(nextSelection(at('a'), list, { type: 'scroll', step: -1 }).key, 'a', 'sem volta no começo');
+  for (const step of [2, 0, '1', -2, NaN, undefined, null]) assert.equal(nextSelection(at('b'), list, { type: 'scroll', step }).key, 'b');
+  assert.equal(nextSelection(at('z'), list, { type: 'scroll', step: 1 }).key, 'z', 'chave fora da lista mantém');
+  assert.equal(nextSelection(at('b'), list, { type: 'scroll', step: 1 }).snapped, false);
+});
+
+test('o canal island:wheel só leva um número finito e limitado, acumula no main e passa por refresh', () => {
+  const start = mainLf.indexOf("ipcMain.on('island:wheel', (event, delta) => {");
+  assert.ok(start >= 0, 'handler de island:wheel ausente');
+  const handler = mainLf.slice(start, mainLf.indexOf('\n  });', start));
+  for (const piece of [
+    'islandOf(event)',
+    'Number.isFinite(delta)',
+    'Math.abs(delta) > WHEEL_DELTA_MAX',
+    "lastPickedState.state === 'idle'",
+    'const now = performance.now();',
+    'wheelStep(wheelGesture, delta, now)',
+    "{ type: 'scroll', step }",
+    "refresh('wheel')",
+  ]) {
+    assert.ok(handler.includes(piece), `handler sem: ${piece}`);
+  }
+  assert.ok(preloadLf.includes("wheel: (delta) => ipcRenderer.send('island:wheel', delta),"));
+  assert.equal(rendererLf.split('window.island.wheel(').length - 1, 1, 'a roda sai de um só lugar');
+  const listener = rendererLf.slice(rendererLf.indexOf("pill.addEventListener('wheel'"));
+  const body = listener.slice(0, listener.indexOf('\n  }, '));
+  for (const piece of ["closest('#permission')", 'wheelDeltaY', 'WHEEL_PIXELS_TO_DELTA']) assert.ok(body.includes(piece), `ouvinte sem: ${piece}`);
+  assert.ok(listener.slice(0, listener.indexOf('\n\n')).includes('{ passive: true }'));
+  assert.equal(body.includes('preventDefault'), false, 'a pílula nunca segura a rolagem');
+});
+
+test('só o bloco do pedido e a pílula ouvem a roda, e o comentário da pílula diz de que a roda depende', () => {
+  const listeners = [...rendererLf.matchAll(/(\w+)\.addEventListener\('wheel'/g)].map((match) => match[1]);
+  assert.deepEqual(listeners.sort(), ['permissionBox', 'pill']);
+  assert.equal(rendererLf.includes('permissionText.addEventListener(\'wheel\''), false, 'o texto não tem ouvinte próprio de roda');
+  const above = rendererLf.slice(0, rendererLf.indexOf("pill.addEventListener('wheel'"));
+  const comment = above.slice(above.lastIndexOf('\n\n'));
+  assert.ok(comment.includes('Rolar janelas inativas'), 'o comentário da pílula cita a configuração do Windows');
+  assert.ok(comment.includes('captura'), 'o comentário da pílula cita a captura ligada pelo hover');
+});
+
+test('o README explica que a roda chega pela rolagem de janelas inativas do Windows', () => {
+  const readme = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf8');
+  assert.ok(readme.includes('Rolar janelas inativas ao passar o mouse sobre elas'));
+});
+
+// --- Fase 5: snap do pedido novo (cola do main) ---
+
+test('o refresh leva os fatos ao poll, trava a roda depois do snap e nunca reexibe a ilha; a roda ignorada ainda é gesto', () => {
+  const body = mainFunctionBody('refresh');
+  for (const piece of [
+    'shownPermissionId: shown.id',
+    "const userSwitched = reason === 'wheel' || reason === 'select';",
+    'lastWheelAt',
+    'if (selection.snapped) wheelLockedUntil =',
+    'SNAP_WHEEL_LOCK_MS',
+  ]) {
+    assert.ok(body.includes(piece), `refresh sem: ${piece}`);
+  }
+  for (const forbidden of ['showInactive', 'applyVisibility', 'setUserHidden']) {
+    assert.equal(body.includes(forbidden), false, `refresh não pode chamar ${forbidden}: o snap só muda a seleção`);
+  }
+  const start = mainLf.indexOf("ipcMain.on('island:wheel', (event, delta) => {");
+  assert.ok(start >= 0, 'handler de island:wheel ausente');
+  const handler = mainLf.slice(start, mainLf.indexOf('\n  });', start));
+  const recorded = handler.indexOf('lastWheelAt = now;');
+  const locked = handler.indexOf('if (now < wheelLockedUntil) return;');
+  const stepped = handler.indexOf('wheelStep(');
+  assert.ok(recorded >= 0 && locked > recorded && stepped > locked, 'lastWheelAt, trava e wheelStep, nesta ordem');
+});
+
+test('o "N de M" é o primeiro filho do cabeçalho do pedido, flutua à direita e só aparece com fila', () => {
+  const html = rendererLf;
+  const header = html.slice(html.indexOf('<span id="permission-tool">'), html.indexOf('</span>\n', html.indexOf('<span id="permission-tool">')));
+  assert.ok(header.startsWith('<span id="permission-tool"><span id="permission-queue" hidden></span><span id="permission-project">'), 'a fila é o primeiro filho do cabeçalho');
+  const queue = cssDeclarations('#permission-queue');
+  assert.equal(queue.float, 'right');
+  assert.match(queue['margin-left'], /^\d+px$/);
+  assert.equal(cssDeclarations('#permission-queue[hidden]').display, 'none');
+  assert.ok(html.includes("const permissionQueue = document.getElementById('permission-queue');"));
+  assert.ok(html.includes('permissionQueue.hidden = !current.queue;'));
+  assert.ok(html.includes('${current.queue.position} de ${current.queue.total}'));
+});
+
+test('a conferência de vida só envia o sinal 0 e só ESRCH conta como morto (SESS-07)', () => {
+  const code = mainLf.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  assert.equal(code.split('process.kill(').length - 1, 1, 'process.kill aparece uma vez só');
+  assert.ok(code.includes('process.kill(pid, 0)'), 'o único process.kill é o de sinal 0');
+  const body = mainFunctionBody('isPidAlive');
+  assert.ok(body.includes('process.kill(pid, 0)'), 'o sinal 0 está dentro de isPidAlive');
+  assert.ok(body.includes("return error.code !== 'ESRCH';"), 'só ESRCH conta como processo inexistente');
+});
+
+test('readSessions apaga a sessão morta antes de ela ganhar chave e ordem, e só ali (SESS-07)', () => {
+  const body = mainFunctionBody('readSessions');
+  const dead = body.indexOf('isSessionDead(session, now, isPidAlive)');
+  const removal = body.indexOf("fs.rmSync(path.join(STATE_DIR, file), { force: true })");
+  const keyed = body.indexOf('session.key = key;');
+  assert.ok(dead >= 0 && removal > dead && keyed > removal, 'morta, remoção e chave, nesta ordem');
+  assert.equal(body.split('fs.rmSync(').length - 1, 1, 'readSessions só remove um arquivo, o da sessão morta');
+  assert.ok(body.includes('const now = Date.now();'));
+});
+
+// Roda o readSessions de verdade, com um disco de mentira: `disk` mapeia nome do arquivo para o texto dele.
+function runReadSessions(disk, { alive = () => true, firstSeen = new Map(), lastGood = new Map() } = {}) {
+  const { isSessionFile, isSessionDead } = require('./state');
+  const removed = [];
+  const stubs = {
+    fs: {
+      readdirSync: () => Object.keys(disk),
+      readFileSync: (file) => disk[path.basename(file)],
+      statSync: () => ({ birthtimeMs: 500 }),
+      rmSync: (file) => { removed.push(path.basename(file)); delete disk[path.basename(file)]; },
+    },
+    path, STATE_DIR: '/estado', isSessionFile, isSessionDead, isPidAlive: alive, readContextPercent: () => null,
+    firstSeenAtByKey: firstSeen, lastGoodSessionByKey: lastGood, Date: { now: () => 10_000 },
+  };
+  const readSessions = vm.runInNewContext(`${mainFunctionBody('readSessions')}\n}\nreadSessions`, stubs);
+  return { read: () => [...readSessions()].map((session) => session.key), removed, firstSeen, lastGood };
+}
+
+test('readSessions: arquivo pela metade num ciclo mantém o último estado lido, sem a sessão sair da lista', () => {
+  const live = JSON.stringify({ state: 'waiting', updatedAt: 9_000, windowPid: 4242 });
+  const disk = { 'a.json': live, 'b.json': live };
+  const { read } = runReadSessions(disk);
+  assert.deepEqual(read(), ['a', 'b']);
+  disk['a.json'] = '{"state":"wai'; // hook gravando agora
+  disk['b.json'] = '';
+  assert.deepEqual(read(), ['a', 'b'], 'JSON cortado e arquivo vazio contam como a sessão ainda aqui');
+  disk['a.json'] = live;
+  assert.deepEqual(read(), ['a', 'b']);
+});
+
+test('readSessions: a sessão que sumiu, morreu ou venceu sai mesmo quando o arquivo está ilegível', () => {
+  const live = JSON.stringify({ state: 'running', updatedAt: 9_000, windowPid: 4242 });
+  const gone = runReadSessions({ 'a.json': live });
+  assert.deepEqual(gone.read(), ['a']);
+  const { lastGood } = gone;
+  // arquivo apagado: nada para ler, a sessão sai e a última leitura boa também
+  const disk = { 'b.json': live };
+  const afterDelete = runReadSessions(disk, { lastGood, firstSeen: gone.firstSeen });
+  assert.deepEqual(afterDelete.read(), ['b']);
+  assert.equal(lastGood.has('a'), false, 'a última leitura de um arquivo que sumiu é podada');
+
+  // terminal fechado enquanto o arquivo estava ilegível: não ressuscita pelo cache
+  let terminalOpen = true;
+  const diskDead = { 'c.json': live };
+  const dead = runReadSessions(diskDead, { alive: () => terminalOpen });
+  assert.deepEqual(dead.read(), ['c']);
+  diskDead['c.json'] = '{';
+  terminalOpen = false;
+  assert.deepEqual(dead.read(), [], 'a leitura boa antiga não vale para sessão de terminal fechado');
+
+  // sessão com mais de 12 h: o caminho normal apaga o arquivo e a lista não a guarda
+  const old = JSON.stringify({ state: 'running', updatedAt: 10_000 - 13 * 60 * 60_000 });
+  const expired = runReadSessions({ 'd.json': old });
+  assert.deepEqual(expired.read(), []);
+  assert.deepEqual(expired.removed, ['d.json']);
+});
+
+// --- Fase 5: mola da troca de sessão (D-17) ---
+
+const tabRules = loadInlineBlock(SPRING_START, SPRING_END, [
+  'SPRING_TAB', 'TAB_SWITCH_OFFSET_PX', 'TAB_SWITCH_SCALE', 'springParams', 'springStep', 'isSpringAtRest',
+  'REST_DISTANCE_PX', 'REST_SPEED_PX_S', 'tabSwitchFrame',
+]);
+
+test('springParams: a direção tab devolve a mola da troca do mod, sem fator de estilo, e a desconhecida segue neutra', () => {
+  for (const style of ['default', 'bouncy', 'estilo-inventado']) {
+    assert.deepEqual(plain(tabRules.springParams('tab', style)), { stiffness: 250, damping: 31 });
+  }
+  assert.deepEqual(plain(tabRules.SPRING_TAB), { stiffness: 250, damping: 31 });
+  assert.equal(tabRules.TAB_SWITCH_OFFSET_PX, 34);
+  assert.equal(tabRules.TAB_SWITCH_SCALE, 0.965);
+  assert.notEqual(tabRules.springParams('tab', 'default'), tabRules.SPRING_TAB, 'cópia, nunca o objeto da constante');
+  assert.deepEqual(plain(tabRules.springParams('sideways', 'snappy')), { stiffness: 280, damping: 24 });
+});
+
+test('tabSwitchFrame: escala e fade seguem o deslocamento, sem passar do deslocamento da troca e sem NaN', () => {
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+  for (const offset of [34, -34, 100, -100]) {
+    assert.deepEqual(plain(tabRules.tabSwitchFrame(offset)), { scale: 0.965, opacity: 0 });
+  }
+  assert.deepEqual(plain(tabRules.tabSwitchFrame(0)), { scale: 1, opacity: 1 });
+  const half = tabRules.tabSwitchFrame(17);
+  near(half.scale, 0.9825);
+  near(half.opacity, 0.5);
+  for (const invalid of [NaN, undefined, '34', null, Infinity]) {
+    assert.deepEqual(plain(tabRules.tabSwitchFrame(invalid)), { scale: 1, opacity: 1 }, `entrada ${String(invalid)}`);
+  }
+});
+
+test('a mola da troca assenta em menos de 1 s a 1x e nunca passa de 1 px além do alvo, para os dois lados', () => {
+  for (const start of [34, -34]) {
+    for (const speed of [0.5, 1, 2]) {
+      let current = {
+        position: start, velocity: 0, target: 0, direction: 'tab',
+        restDistance: tabRules.REST_DISTANCE_PX, restSpeed: tabRules.REST_SPEED_PX_S,
+      };
+      let elapsedMs = 0;
+      let overshoot = 0;
+      while (!tabRules.isSpringAtRest(current) && elapsedMs < 10_000) {
+        current = tabRules.springStep(current, 16, 'default', speed);
+        overshoot = Math.max(overshoot, current.position * -Math.sign(start));
+        elapsedMs += 16;
+      }
+      assert.ok(tabRules.isSpringAtRest(current), `${start} a ${speed}×: não assentou`);
+      assert.ok(overshoot <= 1, `${start} a ${speed}×: passou ${overshoot} px`);
+      if (speed === 1) assert.ok(elapsedMs < 1000, `${start} a 1×: assentou em ${elapsedMs} ms`);
+    }
+  }
+});
+
+test('a cola liga a mola da troca ao laço, ao canArm e ao onState, antes de o estado novo virar o atual', () => {
+  const literal = rendererLf.indexOf('const springs = {');
+  const tab = rendererLf.indexOf('springs.tab = {');
+  assert.ok(literal >= 0 && tab > literal, 'springs.tab entra depois do literal travado');
+  assert.match(rendererLf.slice(tab, rendererLf.indexOf('};', tab)), /direction: 'tab'/);
+  const apply = functionBody('applySprings');
+  assert.ok(apply.includes('const tab = tabSwitchFrame(springs.tab.position);'));
+  for (const piece of [
+    "pill.style.setProperty('--tab-offset', `${springs.tab.position}px`);",
+    "pill.style.setProperty('--tab-scale', String(tab.scale));",
+    "pill.style.setProperty('--tab-fade', String(tab.opacity));",
+  ]) {
+    assert.ok(apply.includes(piece), `applySprings sem: ${piece}`);
+  }
+  const writers = apply.match(/\.style\.(?:transform|translate|scale)\b/g) || [];
+  assert.equal(writers.length, 1, 'applySprings só escreve o transform da pílula, na linha travada');
+  assert.ok(apply.includes('pill.style.transform = '));
+  assert.ok(rendererLf.includes('const allSpringsAtRest = () => Object.values(springs).every(isSpringAtRest);'));
+  assert.ok(rendererLf.includes('canArm({ settled: step.settled, springsAtRest: allSpringsAtRest() })'));
+  const onState = rendererLf.slice(rendererLf.indexOf('window.island.onState('));
+  const push = onState.indexOf('switchDirection * TAB_SWITCH_OFFSET_PX');
+  assert.ok(push >= 0 && push < onState.indexOf('current = next;'), 'o empurrão decide antes de current = next');
+  assert.ok(onState.includes('if (switchDirection !== 0) springs.tab = { ...springs.tab, position: switchDirection * TAB_SWITCH_OFFSET_PX, velocity: 0, target: 0 };'));
+});
+
+test('a mola da troca nunca alcança um botão da pílula: só #lead, #detail e #permission, sem botão dentro', () => {
+  const rules = [...styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, , body]) => body.includes('var(--tab-'));
+  assert.ok(rules.length >= 2, 'a regra da troca existe');
+  const selectors = new Set();
+  for (const [, selector] of rules) {
+    for (const part of selector.split(',')) selectors.add(part.trim());
+    assert.equal(/button|#sessions|#side|#bar|#open|#actions|#allow|#deny|#pill/.test(selector), false, `a troca alcança: ${selector.trim()}`);
+  }
+  assert.deepEqual([...selectors].sort(), ['#detail', '#lead', '#permission']);
+  const between = (from, to) => rendererLf.slice(rendererLf.indexOf(from), rendererLf.indexOf(to));
+  for (const [from, to] of [['id="lead"', 'id="side"'], ['id="detail"', 'id="permission"'], ['id="permission"', 'id="actions"']]) {
+    const html = between(from, to);
+    assert.ok(html.length > from.length, `trecho vazio: ${from}`);
+    assert.equal(html.includes('<button'), false, `${from} contém botão`);
+    assert.equal(html.includes('id="sessions"'), false, `${from} contém os pontos`);
+  }
+  assert.equal(rendererLf.split("createElement('button')").length - 1, 1, 'só um lugar cria botão');
+  assert.ok(functionBody('renderSessions').includes("createElement('button')"), 'e é renderSessions');
+});
+
+test('o acento é uma cor registrada e a transição base da pílula o interpola sem animar o tamanho', () => {
+  const property = rendererLf.match(/@property --accent \{([^{}]*)\}/);
+  assert.ok(property, '@property --accent ausente');
+  assert.match(property[1], /syntax:\s*'<color>'/);
+  assert.match(property[1], /inherits:\s*true/);
+  assert.match(property[1], /initial-value:\s*\S/);
+  const transition = cssDeclarations('#pill').transition;
+  assert.match(transition, /--accent \.18s ease-out/);
+  assert.equal(/\b(?:width|height|transform)\b/.test(transition), false, 'a transição base não anima o tamanho');
+  const media = rendererLf.slice(rendererLf.indexOf('@media (prefers-reduced-motion: reduce) {'), rendererLf.indexOf('</style>'));
+  assert.match(media, /#pill,[^{]*\{[^}]*transition: opacity \.2s;/, 'com movimento reduzido a transição da pílula é só a opacidade, sem acento');
+});
+
+test('o bloco do pedido não usa o acento: tem tokens próprios e opacos', () => {
+  const rules = [...styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, selector]) => selector.trim().startsWith('#permission'));
+  assert.ok(rules.length >= 5, 'regras do pedido encontradas');
+  for (const [, selector, body] of rules) {
+    assert.equal(body.includes('var(--accent)'), false, `${selector.trim()} usa o acento`);
+  }
+  assert.match(rendererLf, /--perm-label: var\(--waiting\);/);
+});
+
+// Cada vetor de sessionSwitch encadeia as funções puras na mesma ordem do main (nextSelection no handler ou
+// no poll, nextShownPermission no refresh, acceptDecision no island:decide). A cola em si, quem chama quem,
+// é coberta pelas travas de texto abaixo: o main.js carrega o Electron e não roda no node --test.
+const switchFacts = { behavior: 'allow', decidedId: null, windowVisible: true, coveredByFullscreen: false, withinVisibleArea: true };
+for (const vector of vectors.sessionSwitch) {
+  test(`sessionSwitch: ${vector.name}`, () => {
+    const { selection, list, wheel, shownBefore, switchAt } = vector.input;
+    const event = wheel ? { type: 'scroll', step: wheelStep(wheel.gesture, wheel.delta, wheel.now).step } : vector.input.event;
+    const next = nextSelection(selection, list, event);
+    const permissionId = list.find((entry) => entry.key === next.key)?.permissionId ?? null;
+    const shown = nextShownPermission(shownBefore, permissionId, switchAt, false);
+    const decide = (echoedId, now) => acceptDecision({ ...switchFacts, echoedId, shownId: shown.id, shownSince: shown.since, now });
+    assert.equal(next.key, vector.expect.key);
+    assert.equal(shown.id, vector.expect.shownId);
+    assert.equal(shown.epoch, vector.expect.epoch);
+    assert.deepEqual(decide(shown.id, switchAt + 799), vector.expect.before);
+    assert.deepEqual(decide(shown.id, switchAt + 800), vector.expect.after);
+    assert.deepEqual(decide(shownBefore.id, switchAt + 800), vector.expect.oldEcho);
+  });
+}
+
+for (const vector of vectors.wheelStep) {
+  test(`wheelStep: ${vector.name}`, () => {
+    const { gesture, delta, now } = vector.input;
+    assert.deepEqual(wheelStep(gesture, delta, now), vector.expect);
+  });
+}
+
+for (const vector of vectors.nextSelection) {
+  test(`nextSelection: ${vector.name}`, () => {
+    const { selection, list, event } = vector.input;
+    assert.deepEqual(nextSelection(selection, list, event), vector.expect);
+  });
+}
+
+test('o nome inteiro do projeto vai no tooltip do título e do cabeçalho do pedido, onde o CSS o corta no fim', () => {
+  assert.ok(rendererLf.includes('permissionProject.title = permissionProjectName;'));
+  assert.ok(rendererLf.includes("title.title = title.textContent === current.project ? current.project : '';"));
+  // o tooltip não pode virar texto da página nem mexer na largura reservada ao nome
+  assert.match(rendererLf, /#permission-project \{[^}]*max-width: 140px;/);
+  assert.match(rendererLf, /#pill\.multi-session #title \{ flex: 0 1 140px;/);
+});
+
+test('sendState: o aviso sonoro é da primeira ilha e nunca de uma troca feita pela roda ou pelo clique', () => {
+  const sent = [];
+  const makeIsland = (name) => ({ webContents: { getURL: () => 'file:///ilha', send: (...args) => sent.push([name, args[2]]) } });
+  const first = makeIsland('primeira');
+  const second = makeIsland('segunda');
+  const sendState = vm.runInNewContext(`${mainFunctionBody('sendState')}\n}\nsendState`, {
+    isIslandSender: () => true, ISLAND_URL: 'file:///ilha', islands: new Map([[1, first], [2, second]]),
+    displayOf: () => ({}), fitsVisibleArea: () => true, lastPickedState: {}, decidedPermissionId: null,
+    shown: { epoch: 1 }, preferences: {},
+  });
+  sendState(first);
+  sendState(second);
+  sendState(first, false);
+  sendState(first, true);
+  sendState(second, true);
+  assert.deepEqual(sent, [
+    ['primeira', true], ['segunda', false], ['primeira', true], ['primeira', false], ['segunda', false],
+  ]);
+  // o aviso que falha não pode impedir o renderer de aplicar o estado novo
+  const onState = rendererLf.slice(rendererLf.indexOf('window.island.onState('));
+  const guarded = onState.indexOf('chime(CHIMES[next.state]);');
+  assert.ok(guarded >= 0 && onState.lastIndexOf('try {', guarded) > onState.indexOf('if (shouldChime'), 'o chime roda dentro de try');
+  assert.ok(onState.indexOf('} catch {', guarded) < onState.indexOf('current = next;'), 'o catch fecha antes de current = next');
+});
+
+test('as constantes de gesto e de snap do state.js são as do fixture', () => {
+  assert.equal(SNAP_GESTURE_GAP_MS, vectors.snapGestureGapMs);
+  assert.equal(SNAP_WHEEL_LOCK_MS, vectors.snapWheelLockMs);
+  assert.equal(WHEEL_NOTCH_DELTA, vectors.wheelNotchDelta);
+  assert.equal(WHEEL_GESTURE_PAUSE_MS, vectors.wheelGesturePauseMs);
+  assert.equal(WHEEL_STEP_MS, vectors.wheelStepMs);
+  assert.equal(WHEEL_PRECISE_STEP_MS, vectors.wheelPreciseStepMs);
+  assert.equal(WHEEL_DELTA_MAX, vectors.wheelDeltaMax);
 });

@@ -68,6 +68,10 @@
       --perm-label: var(--text);
     }
   }
+  /* Registrar o acento como cor deixa a troca de estado interpolar a cor em tudo que deriva dele (lavagem,
+     contorno, brilho e ponto), como o lerp do mod Dynamic Island for Windows (τ = 0,18 s; MIT, Copyright (c)
+     2026 devcode90; ver THIRD_PARTY_NOTICES.md). O bloco do pedido não usa o acento: tem tokens próprios e opacos. */
+  @property --accent { syntax: '<color>'; inherits: true; initial-value: transparent; }
   /* Temas escuros: só fundo, superfície, texto, secundário e borda mudam (as cores de estado são fixas).
      Valores do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md);
      o Nord usa também a paleta Nord (MIT, Copyright (c) 2016-present Sven Greb), creditada no mesmo arquivo. */
@@ -120,7 +124,7 @@
     display: grid; grid-template-columns: var(--content-width, 1fr); justify-content: center; grid-template-rows: 46px auto auto;
     align-items: center; overflow: hidden; text-align: center;
     transition: opacity .25s, box-shadow .3s, border-radius .3s ease,
-                scale .25s ease, translate .25s ease;
+                scale .25s ease, translate .25s ease, --accent .18s ease-out;
     box-shadow: 0 0 0 1px var(--contour), var(--shadow);
     cursor: grab;
     /* Amplia a partir do centro do topo: o topo não anda e a pílula não sobe no palco. */
@@ -134,6 +138,10 @@
      percentual ficavam a poucos pixels da curva. 24 px dão a mesma folga visual dos dois lados; o raio
      acompanha em PILL_MAX_RADIUS_PX. */
   #pill.expanded { width: 400px; height: 104px; padding-inline: 24px; }
+  /* A compacta nunca passa da largura da expandida, que é o que a conta do palco cobre; abaixo disso a
+     largura segue o conteúdo, e quem cede é o título (#pill.multi-session #title). Só na compacta: na
+     expandida o teto cortaria a passagem da mola ao crescer (ANIM-01), que a conta do palco já cobre. */
+  #pill:not(.expanded) { max-width: 400px; }
   #pill.expanded.has-window { height: 148px; }
   /* Com pedido de permissão a altura segue o texto do pedido (até o limite com rolagem). */
   #pill.expanded.has-permission { height: auto; padding-bottom: 16px; }
@@ -185,7 +193,7 @@
   /* Dois grupos: quem é a sessão (ícone e título) à esquerda, como ela está (reticências,
      contexto, contador) à direita. O gap é o respiro mínimo entre eles na pílula compacta. */
   #bar { display: flex; justify-content: space-between; align-items: center; gap: 38px; height: 46px; }
-  #lead { display: flex; align-items: center; gap: 11px; }
+  #lead { display: flex; align-items: center; gap: 11px; min-width: 0; }
   #dot {
     flex: none; display: grid; place-items: center; width: 14px; height: 14px;
     border-radius: 50%; background: var(--accent); color: var(--icon-ink);
@@ -197,6 +205,11 @@
   #pill[data-state="done"] #dot .icon-done, #pill[data-state="waiting"] #dot .icon-waiting { display: block; }
 
   #title { white-space: nowrap; font-weight: 600; }
+  /* Com várias sessões o título tem largura fixa e corta com reticências: o nome do projeto, longo ou curto,
+     nunca muda a largura da pílula nem empurra o "Abrir". Ele só encolhe abaixo de 140 px quando a barra
+     não cabe (muitos pontos com "Abrir" e anel de contexto).
+     ponytail: limite aceito; se incomodar, tirar o anel de contexto da compacta com muitas sessões. */
+  #pill.multi-session #title { flex: 0 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   #side { display: flex; align-items: center; gap: 11px; }
   #side:not(:has(> :not([hidden]):not(:empty))) { display: none; }
   #dots { display: none; gap: 3px; }
@@ -219,6 +232,19 @@
     border-radius: 11px; padding: 2px 9px; font-weight: 600;
   }
   #count:empty { display: none; }
+  /* Um ponto por sessão no lugar do contador: cor = estado (fixa nos temas, nunca o acento); o ponto da
+     sessão exibida é maior. O botão tem 16 px para ser fácil de acertar, e o ponto dentro dele é menor. */
+  #sessions { display: inline-flex; align-items: center; }
+  #sessions[hidden] { display: none; }
+  #sessions button {
+    width: 16px; height: 16px; padding: 0; border: 0; background: transparent;
+    display: grid; place-items: center; cursor: pointer;
+  }
+  #sessions button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  #sessions i { width: 6px; height: 6px; border-radius: 50%; background: var(--running); }
+  #sessions [data-state="waiting"] i { background: var(--waiting); }
+  #sessions [data-state="done"] i { background: var(--done); }
+  #sessions [aria-current="true"] i { width: 9px; height: 9px; }
   /* Ao concluir, a sessão costuma pedir uma olhada: o atalho fica à mão sem precisar do hover.
      Ele ocupa o lugar do contador, que cede a vez enquanto a pílula está compacta. */
   #open-compact {
@@ -239,6 +265,14 @@
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     opacity: 0; transition: opacity .2s;
   }
+  /* Com pedido na tela o detalhe repete projeto e ferramenta, que já estão no cabeçalho do pedido: uma
+     linha paga a linha a mais do cabeçalho e mantém a conta do palco. */
+  #pill.has-permission #detail { -webkit-line-clamp: 1; }
+  /* A troca de sessão anima só o ícone com o título, o detalhe e o pedido, que não têm controle clicável
+     dentro: pontos, "Abrir", Permitir e Negar ficam parados. Texto e id trocam juntos, sem camada antiga.
+     Mola e fade vêm das variáveis que o applySprings grava (SESS-02). */
+  #lead, #detail, #permission { translate: 0 var(--tab-offset, 0px); scale: var(--tab-scale, 1); }
+  #lead, #permission { opacity: var(--tab-fade, 1); }
   /* Pedido de permissão: o texto aparece inteiro, quebrando linha e rolando se preciso.
      Nada de reticências: não se aprova um comando cortado. */
   #permission {
@@ -247,6 +281,11 @@
   }
   #permission[hidden] { display: none; }
   #permission-tool { display: block; font-size: 11px; font-weight: 600; color: var(--perm-label); margin-bottom: 3px; overflow-wrap: anywhere; }
+  /* Posição deste pedido na fila, só com mais de um pedido pendente. A cor é a da dica, que o teste de contraste já mede. */
+  #permission-queue { float: right; margin-left: 8px; color: var(--perm-hint); font-variant-numeric: tabular-nums; }
+  #permission-queue[hidden] { display: none; }
+  /* Só o projeto pode ser cortado; a ferramenta nunca: é o que diz o que se está aprovando. */
+  #permission-project { display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   #permission-text {
     font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--perm-text);
     white-space: pre-wrap; overflow-wrap: anywhere; max-height: 105px; overflow-y: auto; padding-right: 6px;
@@ -286,9 +325,16 @@
   @keyframes glow {
     50% { opacity: 1; }
   }
+  @keyframes session-pulse { 50% { opacity: .35; } }
+  /* Quem pede permissão pulsa no ritmo do "precisa de você". */
+  #sessions [data-pending="true"] i { animation: session-pulse 1.4s ease-in-out infinite; }
   /* Janela escondida (hide() ou minimizada): a página fica hidden e nada deve animar. */
   html[data-hidden="true"] *, html[data-hidden="true"] ::before { animation-play-state: paused !important; }
-  @media (prefers-reduced-motion: reduce) { #pill, #pill::before, #dot, #dots i { animation: none !important; transition: opacity .2s; } }
+  @media (prefers-reduced-motion: reduce) {
+    #pill, #pill::before, #dot, #dots i, #sessions i { animation: none !important; transition: opacity .2s; }
+    /* Parado, o ponto de quem pede permissão ganha um anel no lugar do pulso. */
+    #sessions [data-pending="true"] i { box-shadow: 0 0 0 2px color-mix(in srgb, var(--waiting) 55%, transparent); }
+  }
 </style>
 </head>
 <body>
@@ -312,11 +358,12 @@
       </span>
       <span id="count"></span>
       <button id="open-compact" type="button" aria-label="Abrir sessão">Abrir</button>
+      <span id="sessions" role="group" aria-label="Sessões" hidden></span>
     </span>
     </div>
     <span id="detail"></span>
     <div id="permission" hidden>
-      <span id="permission-tool"></span>
+      <span id="permission-tool"><span id="permission-queue" hidden></span><span id="permission-project"></span><span id="permission-tool-name"></span></span>
       <pre id="permission-text" tabindex="0" aria-label="Pedido de permissão"></pre>
       <span id="permission-hint" hidden>Role até o fim para poder permitir</span>
     </div>
@@ -454,16 +501,25 @@
     snappy: { stiffness: 1.5, damping: 1.25 },
   };
 
+  // Mola da troca de sessão portada do mod Dynamic Island for Windows (MIT, Copyright (c) 2026
+  // devcode90; ver THIRD_PARTY_NOTICES.md): k 250 e c 31, quase crítica, com 34 px de deslocamento
+  // vertical, escala mínima de 0,965 e fade. Não tem fator de estilo.
+  const SPRING_TAB = { stiffness: 250, damping: 31 };
+  const TAB_SWITCH_OFFSET_PX = 34;
+  const TAB_SWITCH_SCALE = 0.965;
+
   // Limiares de repouso em pixels: abaixo deles ninguém vê movimento, e a mola vai exatamente ao alvo.
   const REST_DISTANCE_PX = 0.05;
   const REST_SPEED_PX_S = 0.5;
 
   /**
    * Rigidez e amortecimento da mola para a direção e o estilo: objeto novo { stiffness, damping }.
-   * Estilo desconhecido vale o Padrão; direção que não seja 'grow' nem 'shrink' devolve a neutra,
-   * sem fator de estilo. Ao encolher o amortecimento nunca fica abaixo do crítico.
+   * Estilo desconhecido vale o Padrão; 'tab' devolve a mola da troca de sessão, sem fator de estilo;
+   * direção que não seja 'grow', 'shrink' nem 'tab' devolve a neutra, também sem fator de estilo.
+   * Ao encolher o amortecimento nunca fica abaixo do crítico.
    */
   function springParams(direction, style) {
+    if (direction === 'tab') return { ...SPRING_TAB };
     if (direction !== 'grow' && direction !== 'shrink') return { ...SPRING_NEUTRAL };
     const base = direction === 'grow' ? SPRING_GROW : SPRING_SHRINK;
     const factors = Object.hasOwn(SPRING_STYLE_FACTORS, style) ? SPRING_STYLE_FACTORS[style] : SPRING_STYLE_FACTORS.default;
@@ -573,6 +629,18 @@
       ? HOVER_SCALE
       : 1;
   }
+
+  /**
+   * Escala e opacidade do conteúdo da troca de sessão para o deslocamento atual da mola: parte de
+   * escala 1 e opacidade 1 com o conteúdo no lugar (offset 0) e chega a TAB_SWITCH_SCALE e 0 a
+   * TAB_SWITCH_OFFSET_PX px de distância, para qualquer lado. Só aceita número: offset não finito
+   * (NaN, string, ausente) conta como 0. Nunca lança.
+   */
+  function tabSwitchFrame(offset) {
+    const distance = Number.isFinite(offset) ? Math.abs(offset) : 0;
+    const progress = Math.min(1, distance / TAB_SWITCH_OFFSET_PX);
+    return { scale: 1 - (1 - TAB_SWITCH_SCALE) * progress, opacity: 1 - progress };
+  }
   // mola:fim
 
   // hover:inicio
@@ -618,18 +686,43 @@
   }
   // hover:fim
 
+  // sessoes:inicio
+  // Regras puras dos pontos de sessão. Inline pela CSP; o gate.test.js executa este texto num contexto
+  // vazio, então aqui só entram constantes e funções que nunca lançam.
+  // ponytail: até 8 pontos; acima disso volta o número e não dá para clicar numa sessão. Rolar a faixa de
+  // pontos se aparecer uso com mais de 8.
+  const MAX_SESSION_DOTS = 8;
+
+  /**
+   * Para que lado a sessão exibida andou entre duas listas de pontos: 1 se o ponto atual foi para a
+   * direita, -1 para a esquerda, 0 se não andou, se as listas têm tamanhos diferentes ou menos de dois
+   * itens, ou se algum dos dois lados não tem um item com `current` verdadeiro.
+   */
+  function sessionSwitchDirection(previousSessions, nextSessions) {
+    if (!Array.isArray(previousSessions) || !Array.isArray(nextSessions)) return 0;
+    if (previousSessions.length < 2 || previousSessions.length !== nextSessions.length) return 0;
+    const previousIndex = previousSessions.findIndex((session) => session && session.current === true);
+    const nextIndex = nextSessions.findIndex((session) => session && session.current === true);
+    if (previousIndex < 0 || nextIndex < 0) return 0;
+    return Math.sign(nextIndex - previousIndex);
+  }
+  // sessoes:fim
+
   // A CSS pausa as animações com a janela escondida; o Electron só reporta hidden com hide() ou minimizada.
   document.addEventListener('visibilitychange', () => { document.documentElement.dataset.hidden = document.hidden; });
   const pill = document.getElementById('pill');
   const title = document.getElementById('title');
   const count = document.getElementById('count');
+  const sessionsStrip = document.getElementById('sessions');
   const detail = document.getElementById('detail');
   const context = document.getElementById('context');
   const contextNumber = document.getElementById('context-number');
   const contextValue = context.querySelector('.value');
 
   const permissionBox = document.getElementById('permission');
-  const permissionTool = document.getElementById('permission-tool');
+  const permissionQueue = document.getElementById('permission-queue');
+  const permissionProject = document.getElementById('permission-project');
+  const permissionToolName = document.getElementById('permission-tool-name');
   const permissionText = document.getElementById('permission-text');
   const permissionHint = document.getElementById('permission-hint');
   const allowButton = document.getElementById('allow');
@@ -638,6 +731,8 @@
 
   const TITLES = { running: 'Trabalhando', waiting: 'Precisa de você', done: 'Concluído' };
   let current = { state: 'idle' };
+  // Assinatura dos pontos desenhados: o DOM só é refeito quando ela muda (a pílula tem aria-live).
+  let renderedSessions = null;
   let hovering = false;
   // Último ponto do cursor vindo do main, em coordenadas da janela; null com o cursor longe.
   let lastCursorPoint = null;
@@ -680,6 +775,12 @@
       restDistance: SCALE_REST_DISTANCE, restSpeed: SCALE_REST_SPEED,
     },
   };
+  // A mola da troca de sessão (deslocamento do conteúdo, em px) entra no mesmo mapa: o laço de quadros
+  // a avança e allSpringsAtRest a espera, então os botões não armam enquanto o conteúdo se move.
+  springs.tab = {
+    position: 0, velocity: 0, target: 0, direction: 'tab',
+    restDistance: REST_DISTANCE_PX, restSpeed: REST_SPEED_PX_S,
+  };
   // Quando o último nudge começou (performance.now); null até o primeiro.
   let lastNudgeAt = null;
   let springLoopRunning = false;
@@ -715,6 +816,12 @@
     // Nudge e escala moram num só transform da pílula inteira, escrito por JS: nenhuma regra de CSS
     // de hover ou de botão escala ou desloca nada (SEG-03).
     pill.style.transform = `translateY(${springs.nudge.position}px) scale(${springs.scale.position})`;
+    // A troca de sessão só entrega números por variáveis CSS; quem as lê é a regra de #lead, #detail e
+    // #permission, que não têm nenhum botão dentro.
+    const tab = tabSwitchFrame(springs.tab.position);
+    pill.style.setProperty('--tab-offset', `${springs.tab.position}px`);
+    pill.style.setProperty('--tab-scale', String(tab.scale));
+    pill.style.setProperty('--tab-fade', String(tab.opacity));
   }
 
   // O conteúdo fica na largura final (--content-width) e a pílula recorta com overflow hidden, então
@@ -784,15 +891,44 @@
   // armamento dos botões até a janela voltar.
   document.addEventListener('visibilitychange', () => { if (document.hidden) snapAllSprings(); });
 
+  function renderSessions() {
+    const list = Array.isArray(current.sessions) ? current.sessions : [];
+    sessionsStrip.hidden = list.length < 2 || list.length > MAX_SESSION_DOTS;
+    const signature = JSON.stringify(list);
+    if (signature === renderedSessions) return;
+    renderedSessions = signature;
+    sessionsStrip.replaceChildren(...list.map((session, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.index = index;
+      button.dataset.state = session.state;
+      button.dataset.pending = session.pending === true;
+      if (session.current) button.setAttribute('aria-current', 'true');
+      button.setAttribute('aria-label', `Sessão ${index + 1} de ${list.length}: ${TITLES[session.state] ?? ''}`);
+      button.appendChild(document.createElement('i'));
+      return button;
+    }));
+  }
+
   function renderContent() {
+    const multiSession = Array.isArray(current.sessions) && current.sessions.length >= 2;
     pill.dataset.state = current.state;
     // "Precisa de você" abre sozinho; "Concluído" não expande (o botão "Abrir" tem de ficar parado sob o
     // mouse); o resto segue a preferência (hover ou clique, e fixar aberta).
     pill.classList.toggle('expanded', shouldExpand({ state: current.state, hovering, clickExpanded, expandOn: current.preferences?.expandOn, pinExpanded: current.preferences?.pinExpanded }));
+    pill.classList.toggle('multi-session', multiSession);
     if (current.state === 'idle') return; // mantém o texto durante o fade de saída
     pill.classList.toggle('has-window', Boolean(current.windowPid));
-    title.textContent = TITLES[current.state];
-    count.textContent = current.count > 1 ? current.count : '';
+    // Com várias sessões o título diz qual é a sessão e o estado segue pela cor e pelos pontos; expandida,
+    // o #detail já começa pelo projeto.
+    title.textContent = multiSession && !pill.classList.contains('expanded') && current.project ? current.project : TITLES[current.state];
+    // ponytail: o corte no fim (140px) segue; dois projetos de prefixo comprido igual se leem iguais aqui, e o nome
+    // inteiro fica no tooltip nativo, que na janela sem foco só aparece se o sistema o desenhar. Truncar no meio
+    // pediria medir o texto em JS; fazer isso se o tooltip não bastar.
+    title.title = title.textContent === current.project ? current.project : '';
+    // Até MAX_SESSION_DOTS sessões o número cede lugar aos pontos; acima disso ele volta.
+    count.textContent = current.count > MAX_SESSION_DOTS ? current.count : '';
+    renderSessions();
     const usage = current.context;
     context.hidden = !usage;
     if (usage) {
@@ -809,7 +945,17 @@
     pill.classList.toggle('has-permission', Boolean(permission));
     permissionBox.hidden = allowButton.hidden = denyButton.hidden = !permission;
     if (!permission) return;
-    permissionTool.textContent = permission.tool;
+    // Saber de qual projeto é o pedido que se aprova é regra de segurança: só o projeto pode ser cortado
+    // (reticências no CSS), a ferramenta nunca.
+    // Com mais de um pedido pendente, mostra a posição deste na fila por ordem de chegada.
+    permissionQueue.hidden = !current.queue;
+    if (current.queue) permissionQueue.textContent = `${current.queue.position} de ${current.queue.total}`;
+    const permissionProjectName = multiSession && current.project ? current.project : '';
+    permissionProject.textContent = permissionProjectName;
+    // Nome inteiro no tooltip nativo (o CSS corta no fim; ver o ponytail do título): com prefixo comprido igual,
+    // é por ele que se distingue o projeto do pedido.
+    permissionProject.title = permissionProjectName;
+    permissionToolName.textContent = permissionProjectName ? ` · ${permission.tool}` : permission.tool;
     // Regravar o mesmo texto devolveria a rolagem ao topo a cada atualização de estado.
     if (permissionText.textContent !== permission.text) {
       permissionText.textContent = permission.text;
@@ -859,9 +1005,11 @@
     startSpringLoop();
   }
   permissionText.addEventListener('scroll', render);
-  // passive: false é obrigatório para o preventDefault valer. A roda sobre o texto nunca sai dele
-  // (a Fase 5 usa a roda na ilha para trocar de sessão) e, na janela depois de uma troca, não rola.
-  permissionText.addEventListener('wheel', (event) => {
+  // passive: false é obrigatório para o preventDefault valer. A roda sobre qualquer parte do pedido
+  // (ferramenta, texto e dica) é do texto e nunca chega à pílula, então rolar até o fim nunca encadeia uma
+  // troca de sessão (o overscroll-behavior: contain do texto segura a rolagem nativa). Na janela depois de
+  // uma troca de conteúdo ela não rola.
+  permissionBox.addEventListener('wheel', (event) => {
     event.stopPropagation();
     if (!isWheelSettled(contentChangedAt, performance.now())) event.preventDefault();
   }, { passive: false });
@@ -1003,7 +1151,20 @@
 
   // Com uma ilha por monitor, só a que o main indicar toca o aviso.
   window.island.onState((next, shouldChime) => {
-    if (shouldChime && next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
+    // Trocar de sessão não é a sessão mudar de estado: só a chegada a um "precisa de você" avisa.
+    const switchDirection = sessionSwitchDirection(current.sessions, next.sessions);
+    // Para baixo (próxima sessão) o conteúdo novo vem de baixo. O render do fim desta função liga o laço,
+    // que com "reduzir movimento" ou a janela escondida vai direto ao alvo, sem deslocamento.
+    if (switchDirection !== 0) springs.tab = { ...springs.tab, position: switchDirection * TAB_SWITCH_OFFSET_PX, velocity: 0, target: 0 };
+    if (shouldChime && next.state !== current.state && CHIMES[next.state] && (switchDirection === 0 || next.state === 'waiting')) {
+      // O aviso é um complemento: sem áudio (contexto bloqueado, saída ausente) a pílula já mostra o estado, e uma
+      // falha aqui não pode abortar o resto da função, que deixaria a tela no pedido anterior com o main já no novo.
+      try {
+        chime(CHIMES[next.state]);
+      } catch {
+        // sem aviso sonoro neste estado
+      }
+    }
     const previousPermissionId = current.permission ? current.permission.id : null;
     const previousText = current.permission ? current.permission.text : null;
     // O nudge decide com o estado antigo e o novo, e nunca com pedido na tela. O render do
@@ -1025,6 +1186,12 @@
     // Sem isto uma recusa do main (rearme no caminho, janela escondida) travaria o pedido para sempre.
     answeredPermissionId = null;
     const permissionId = next.permission ? next.permission.id : null;
+    // Trocar de pedido (inclusive voltar a um que já foi lido, ou ir a outro com o mesmo texto) volta a
+    // exigir a leitura até o fim.
+    if (permissionId !== previousPermissionId) {
+      readPermissionId = null;
+      permissionText.scrollTop = 0;
+    }
     const nextText = next.permission ? next.permission.text : null;
     const epochChanged = next.armEpoch !== lastArmEpoch;
     if (permissionId !== previousPermissionId || epochChanged || nextText !== previousText) {
@@ -1046,6 +1213,14 @@
   for (const id of ['open', 'open-compact']) {
     document.getElementById(id).addEventListener('click', () => window.island.focusSession());
   }
+
+  // O renderer só pede: quem confere o índice e escolhe a sessão é o main. O pointerdown da pílula já
+  // ignora botões, então clicar num ponto não arrasta a pílula nem a abre no modo clique.
+  sessionsStrip.addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (!button || button.getAttribute('aria-current') === 'true') return;
+    window.island.selectSession(Number(button.dataset.index));
+  });
 
   // A janela deixa o clique atravessar; só a pílula (e o botão dentro dela) captura o mouse. O hover vem
   // só do cursor que o main entrega (único jeito que funciona sob janela elevada): decide-se contra o
@@ -1122,6 +1297,21 @@
     // A janela sai de baixo do ponteiro: o próximo tique do cursor (até 33 ms) recolhe a pílula e solta
     // a captura.
   });
+
+  // A roda sobre a pílula troca de sessão (SESS-02). Só o número bruto vai ao main, que acumula com as regras
+  // do mod. O wheelDeltaY do Chromium vale ±120 por entalhe, como o WM_MOUSEWHEEL, e menos no touchpad; sem
+  // ele (propriedade fora do padrão), o deltaY padrão vezes 1,2 leva os 100 px por entalhe do Chromium a 120.
+  // A roda só chega com a captura do mouse ligada pelo hover (updateHover, setCapture e setIgnoreMouseEvents
+  // no main); no Linux a janela sempre captura. No Windows, como a janela nunca recebe o foco, ela depende de
+  // "Rolar janelas inativas ao passar o mouse sobre elas" (ligado por padrão); sem a roda, o clique no ponto
+  // continua trocando a sessão. Sobre o bloco do pedido a roda é do texto: o #permission segura o evento e a
+  // conferência de baixo é a segunda trava. passive: true porque a pílula nunca segura a rolagem.
+  const WHEEL_PIXELS_TO_DELTA = 1.2;
+  pill.addEventListener('wheel', (event) => {
+    if (event.target.closest('#permission')) return;
+    const delta = event.wheelDeltaY || -event.deltaY * WHEEL_PIXELS_TO_DELTA;
+    if (delta) window.island.wheel(delta);
+  }, { passive: true });
 </script>
 </body>
 </html>
