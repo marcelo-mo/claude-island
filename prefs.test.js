@@ -13,6 +13,7 @@ const VALUES_BY_KEY = {
   animationStyle: ANIMATION_STYLES,
   animationSpeed: ANIMATION_SPEED_STEPS,
   expandOn: EXPAND_ON,
+  opacity: OPACITY_LEVELS,
   anchor: ANCHORS,
   islandMode: ISLAND_MODES,
 };
@@ -24,7 +25,7 @@ test('o menu padrão tem os itens, na ordem', () => {
   const template = menuTemplate(DEFAULT_PREFERENCES, 'ok');
   assert.deepEqual(
     template.slice(0, -3).map((item) => item.label),
-    ['Tema', 'Forma', 'Estilo da animação', 'Velocidade da animação', 'Expandir', 'Fixar aberta', 'Âncora', 'Ilhas'],
+    ['Tema', 'Forma', 'Estilo da animação', 'Velocidade da animação', 'Expandir', 'Fixar aberta', 'Transparência', 'Âncora', 'Ilhas'],
   );
   assert.equal(template.at(-3).type, 'separator');
 });
@@ -76,6 +77,18 @@ test("'Âncora' oferece as seis posições, com o rótulo de cada uma, e marca a
   ]);
   assert.deepEqual(checkedValue(anchor), ['top-center']);
   assert.deepEqual(checkedValue(submenuOf(menuTemplate({ anchor: 'bottom-right' }), 'Âncora')), ['bottom-right']);
+});
+
+test("'Transparência' oferece 100, 85, 70 e 55%, com 100% marcado por padrão, entre 'Fixar aberta' e 'Âncora'", () => {
+  const template = menuTemplate(DEFAULT_PREFERENCES);
+  const opacity = submenuOf(template, 'Transparência');
+  assert.deepEqual(opacity.submenu.map((item) => item.label), ['100%', '85%', '70%', '55%']);
+  assert.deepEqual(opacity.submenu.map((item) => item.value), [1, 0.85, 0.7, 0.55]);
+  assert.deepEqual(checkedValue(opacity), [1]);
+  assert.deepEqual(checkedValue(submenuOf(menuTemplate({ opacity: 0.55 }), 'Transparência')), [0.55]);
+  const labels = template.map((item) => item.label);
+  assert.equal(labels.indexOf('Transparência'), labels.indexOf('Fixar aberta') + 1);
+  assert.equal(labels.indexOf('Âncora'), labels.indexOf('Transparência') + 1);
 });
 
 test("'Expandir' oferece hover e clique, e 'Fixar aberta' grava o oposto do valor atual", () => {

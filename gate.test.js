@@ -1120,3 +1120,24 @@ test('esconder nunca decide, reexibir passa pelo rearme e o atalho é registrado
   const menuItem = bodyOf('function toMenuItem(');
   assert.ok(/if \(item\.action === 'hide'\)/.test(menuItem) && menuItem.includes('setUserHidden(true)'));
 });
+
+// Trava de regressão (texto): o main é dono do fato "há pedido", então a opacidade sai do mesmo passo do
+// refresh que decide o pedido exibido e chega antes do estado ao renderer; nenhum outro caminho mexe nela
+// (invariante I5, T-04-16).
+test('a transparência sai do mesmo passo do refresh e nunca vale com pedido na tela', () => {
+  const code = mainSource.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  const line = 'island.setOpacity(effectiveOpacity(preferences.opacity, Boolean(lastPickedState.permission)));';
+  assert.equal(code.split(line).length - 1, 1, 'a linha de applyOpacity aparece uma vez');
+  assert.equal(code.split('setOpacity(').length - 1, 1, 'nenhum outro caminho muda a opacidade');
+  const bodyOf = (opening) => {
+    const start = mainSource.indexOf(opening);
+    assert.ok(start >= 0, `ausente no main.js: ${opening}`);
+    return mainSource.slice(start, mainSource.indexOf('\nfunction ', start + 1));
+  };
+  assert.match(bodyOf('function applyOpacity('), /^function applyOpacity\(island\) \{\s*island\.setOpacity\(/);
+  assert.match(
+    bodyOf('function refresh('),
+    /for \(const island of islands\.values\(\)\) \{\s*applyOpacity\(island\);\s*sendState\(island\);\s*\}/,
+  );
+  assert.ok(bodyOf('function createIsland(').includes('applyOpacity(island);'), 'a ilha nova já nasce com a opacidade efetiva');
+});
