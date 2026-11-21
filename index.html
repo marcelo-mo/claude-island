@@ -240,7 +240,7 @@
   // a CSP não aceita script externo; o gate.test.js lê o texto entre os marcadores e o executa num
   // contexto vazio, então o teste roda o mesmo código que a ilha roda, e um predicado que tocasse
   // DOM ou relógio global quebraria lá. Aqui só entram constantes e funções que nunca lançam.
-  // ponytail: regras puras inline, testadas por extração em node:vm. Quando a Fase 3 validar script-src 'self' via file:// (spring.js), mover para um arquivo carregado por <script src> e por require.
+  // ponytail: regras puras inline, testadas por extração em node:vm. A Fase 3 manteve tudo inline (D-03); mover para um arquivo só quando houver reuso fora do renderer.
 
   // A ilha abre sozinha quando chega um pedido; os botões só valem depois deste tempo na tela,
   // para um clique que já ia para outra janela não virar aprovação. O main.js aplica a mesma
@@ -319,7 +319,126 @@
     return isWheelSettled(contentChangedAt, now)
       && clientHeight > 0 && Number.isFinite(hiddenBelow) && hiddenBelow <= READ_TOLERANCE_PX;
   }
+
+  /**
+   * Se os botões podem armar: o retângulo assentou (settled, de settleStep) E todas as molas de
+   * tamanho pararam. Só settled não basta: com o conteúdo na largura final, os botões podem estar
+   * parados e ainda recortados enquanto a altura cresce, e o que se vê tem de ser o que se clica.
+   * Comparação estrita: qualquer valor que não seja exatamente true não arma.
+   */
+  function canArm(input) {
+    const { settled, springsAtRest } = input || {};
+    return settled === true && springsAtRest === true;
+  }
   // regras-do-gate:fim
+
+  // mola:inicio
+  // Física das molas de tamanho da pílula. Fica inline pelo mesmo motivo do bloco acima (a CSP não
+  // aceita script externo e o D-03 manteve a CSP); o gate.test.js executa o texto entre os marcadores
+  // num contexto vazio. Pureza: só constantes e funções que nunca lançam, sem DOM nem relógio global.
+  // ponytail: mola inline. Mover para um spring.js exige script-src 'self' na CSP e trocar a extração do teste; adiado até haver reuso fora do renderer.
+
+  // Passo fixo da integração e teto de um quadro: um quadro atrasado (volta de suspensão, janela
+  // escondida) não vira um salto, e o teto de passos impede um laço longo com velocidade fora da faixa.
+  const SPRING_STEP_MS = 0.5;
+  const SPRING_MAX_FRAME_MS = 50;
+  const SPRING_MAX_STEPS = 2_000;
+
+  // Constantes de mola portadas do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90;
+  // ver THIRD_PARTY_NOTICES.md). Crescer: k alto e amortecimento folgado dão ~6% de passagem do alvo.
+  // Encolher: mais mole e mais amortecida. Neutra: nudge e hover, que não crescem nem encolhem.
+  // Os fatores dos estilos também são do mod.
+  // Desvio deliberado do mod: ao encolher o amortecimento sobe até o crítico (c >= 2·√k) em todo
+  // estilo, porque o ANIM-01 manda encolher sem balanço sem exceção; com os fatores do mod o
+  // Elástico balançaria ~6% ao encolher.
+  const SPRING_GROW = { stiffness: 380, damping: 26 };
+  const SPRING_SHRINK = { stiffness: 200, damping: 28 };
+  const SPRING_NEUTRAL = { stiffness: 280, damping: 24 };
+  const SPRING_STYLE_FACTORS = {
+    smooth: { stiffness: 1, damping: 1.35 },
+    default: { stiffness: 1, damping: 1 },
+    bouncy: { stiffness: 1.1, damping: 0.7 },
+    snappy: { stiffness: 1.5, damping: 1.25 },
+  };
+
+  // Limiares de repouso em pixels: abaixo deles ninguém vê movimento, e a mola vai exatamente ao alvo.
+  const REST_DISTANCE_PX = 0.05;
+  const REST_SPEED_PX_S = 0.5;
+
+  /**
+   * Rigidez e amortecimento da mola para a direção e o estilo: objeto novo { stiffness, damping }.
+   * Estilo desconhecido vale o Padrão; direção que não seja 'grow' nem 'shrink' devolve a neutra,
+   * sem fator de estilo. Ao encolher o amortecimento nunca fica abaixo do crítico.
+   */
+  function springParams(direction, style) {
+    if (direction !== 'grow' && direction !== 'shrink') return { ...SPRING_NEUTRAL };
+    const base = direction === 'grow' ? SPRING_GROW : SPRING_SHRINK;
+    const factors = Object.hasOwn(SPRING_STYLE_FACTORS, style) ? SPRING_STYLE_FACTORS[style] : SPRING_STYLE_FACTORS.default;
+    const stiffness = base.stiffness * factors.stiffness;
+    const damping = base.damping * factors.damping;
+    return { stiffness, damping: direction === 'shrink' ? Math.max(damping, 2 * Math.sqrt(stiffness)) : damping };
+  }
+
+  /**
+   * Novo alvo sem salto (D-02): devolve uma cópia com a mesma posição e a mesma velocidade, e só a
+   * direção é recalculada comparando o alvo novo com a posição atual (igual mantém a anterior; a
+   * neutra continua neutra). Alvo não finito ou igual ao atual devolve cópia sem mudança.
+   */
+  function retargetSpring(spring, target) {
+    if (!Number.isFinite(target) || target === spring?.target) return { ...spring };
+    let direction = spring?.direction;
+    if (direction !== 'neutral') {
+      if (target > spring?.position) direction = 'grow';
+      else if (target < spring?.position) direction = 'shrink';
+    }
+    return { ...spring, target, direction };
+  }
+
+  /**
+   * Mola parada no alvo, com velocidade 0 (cópia). Alvo não finito cai na posição; posição não
+   * finita também, em 0: nunca devolve NaN.
+   */
+  function snapSpring(spring) {
+    const { position, target } = spring || {};
+    const rest = Number.isFinite(target) ? target : (Number.isFinite(position) ? position : 0);
+    return { ...spring, position: rest, velocity: 0, target: rest };
+  }
+
+  /** Se a mola está exatamente no alvo e sem velocidade (o que springStep e snapSpring produzem). */
+  function isSpringAtRest(spring) {
+    const { position, velocity, target } = spring || {};
+    return position === target && velocity === 0;
+  }
+
+  /**
+   * Avança a mola um quadro: devolve uma cópia, nunca muta. Massa 1, Euler semi-implícito em passos
+   * fixos de SPRING_STEP_MS; a velocidade multiplica o tempo simulado (D-01), então 2× assenta em
+   * metade do tempo com o mesmo pico. frameMs é limitado a [0, SPRING_MAX_FRAME_MS] e speed inválida
+   * vale 1. Ao ficar a menos de restDistance do alvo e abaixo de restSpeed, assenta: posição no
+   * alvo e velocidade 0. Posição, velocidade ou alvo não finitos devolvem a mola parada (snapSpring).
+   */
+  function springStep(spring, frameMs, style, speed) {
+    const { position, velocity, target, restDistance, restSpeed } = spring || {};
+    if (!Number.isFinite(position) || !Number.isFinite(velocity) || !Number.isFinite(target)) return snapSpring(spring);
+    const frame = Number.isFinite(frameMs) ? Math.min(Math.max(frameMs, 0), SPRING_MAX_FRAME_MS) : 0;
+    const rate = Number.isFinite(speed) && speed > 0 ? speed : 1;
+    const steps = Math.min(Math.round((frame * rate) / SPRING_STEP_MS), SPRING_MAX_STEPS);
+    const { stiffness, damping } = springParams(spring.direction, style);
+    const seconds = SPRING_STEP_MS / 1000;
+    let nextPosition = position;
+    let nextVelocity = velocity;
+    for (let step = 0; step < steps; step += 1) {
+      nextVelocity += (-stiffness * (nextPosition - target) - damping * nextVelocity) * seconds;
+      nextPosition += nextVelocity * seconds;
+    }
+    const distanceLimit = Number.isFinite(restDistance) && restDistance > 0 ? restDistance : REST_DISTANCE_PX;
+    const speedLimit = Number.isFinite(restSpeed) && restSpeed > 0 ? restSpeed : REST_SPEED_PX_S;
+    if (Math.abs(nextPosition - target) < distanceLimit && Math.abs(nextVelocity) < speedLimit) {
+      return { ...spring, position: target, velocity: 0 };
+    }
+    return { ...spring, position: nextPosition, velocity: nextVelocity };
+  }
+  // mola:fim
 
   // A CSS pausa as animações com a janela escondida; o Electron só reporta hidden com hide() ou minimizada.
   document.addEventListener('visibilitychange', () => { document.documentElement.dataset.hidden = document.hidden; });

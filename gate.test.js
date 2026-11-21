@@ -462,7 +462,8 @@ test('springParams: valores do mod, fator de estilo e encolher no mínimo críti
   assert.deepEqual(plain(spring.springParams('grow', 'estilo-inventado')), { stiffness: 380, damping: 26 });
   assert.deepEqual(plain(spring.springParams('grow', 'toString')), { stiffness: 380, damping: 26 });
   assert.deepEqual(plain(spring.springParams('shrink', 'default')), { stiffness: 200, damping: 2 * Math.sqrt(200) });
-  assert.deepEqual(plain(spring.springParams('shrink', 'bouncy')), { stiffness: 220, damping: 2 * Math.sqrt(220) });
+  // 200 × 1,1 não é exatamente 220 em ponto flutuante: o esperado repete a conta do mod.
+  assert.deepEqual(plain(spring.springParams('shrink', 'bouncy')), { stiffness: 200 * 1.1, damping: 2 * Math.sqrt(200 * 1.1) });
   // Snappy já está acima do crítico (35 > 34,64): o fator do mod fica.
   assert.deepEqual(plain(spring.springParams('shrink', 'snappy')), { stiffness: 300, damping: 35 });
   assert.deepEqual(plain(spring.springParams('neutral', 'bouncy')), { stiffness: 280, damping: 24 });
