@@ -381,3 +381,26 @@ test('render trava pelo answeredId e só libera Permitir lido; id ou época nova
   }
   assert.match(rendererSource, /if \(epochChanged \|\| \(permissionId && permissionId !== previousPermissionId\)\) \{\s*lastArmEpoch = next\.armEpoch;\s*restartArming\(\);/);
 });
+
+// Travas de regressão (texto) das preferências visuais (D-16): o main só lê o arquivo, uma vez, sem
+// vigiá-lo nem gravá-lo (a gravação, o menu e a migração são da Fase 4), e o renderer só aplica o
+// que veio no payload. Canal novo para o renderer escolher preferência quebraria RENDERER_CHANNELS.
+test('o main lê as preferências uma única vez e nunca as vigia nem as grava', () => {
+  assert.ok(mainSource.includes(
+    "preferences = normalizePreferences(JSON.parse(fs.readFileSync(PREFERENCES_FILE, 'utf8')));",
+  ), 'main.js sem a leitura normalizada do preferences.json');
+  assert.equal(mainSource.split('loadPreferences()').length - 1, 2, 'loadPreferences: definição e uma só chamada');
+  assert.equal(/\.watch(?:File)?\(/.test(mainSource), false, 'main.js vigia um arquivo');
+  assert.equal(/writeFileSync\(\s*PREFERENCES_FILE/.test(mainSource), false, 'main.js grava o preferences.json');
+});
+
+test('o renderer aplica as preferências do payload e rearma se mudaram com pedido na tela', () => {
+  const onState = rendererSource.slice(rendererSource.indexOf('window.island.onState('));
+  assert.ok(onState.indexOf('answeredPermissionId = null;') >= 0);
+  assert.ok(
+    onState.indexOf('applyPreferences(next.preferences);') > onState.indexOf('answeredPermissionId = null;'),
+    'applyPreferences vem depois de soltar a trava local',
+  );
+  const apply = rendererSource.slice(rendererSource.indexOf('function applyPreferences('));
+  assert.ok(apply.slice(0, apply.indexOf('\n  }\n')).includes('if (changed && current.permission) restartArming();'));
+});
