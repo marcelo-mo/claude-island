@@ -8,6 +8,7 @@ const {
   pickState, acceptDecision, anchorPosition, horizontalSlackFor, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
+  effectiveOpacity,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -377,8 +378,18 @@ function refresh(reason) {
   lastPickedState = picked;
   shownWindowPid = picked.windowPid ?? null;
   shown = nextShown;
-  for (const island of islands.values()) sendState(island);
+  for (const island of islands.values()) {
+    applyOpacity(island);
+    sendState(island);
+  }
   updateCursorTick();
+}
+
+// Transparência de 100/85/70/55%, só sem pedido na tela (invariante I5). O main é o dono do fato "há
+// pedido": a opacidade sai do mesmo passo do refresh que decide o pedido exibido e chega antes do estado
+// ao renderer. No Linux o setOpacity não tem efeito (aceito).
+function applyOpacity(island) {
+  island.setOpacity(effectiveOpacity(preferences.opacity, Boolean(lastPickedState.permission)));
 }
 
 function createIsland(display) {
@@ -404,6 +415,7 @@ function createIsland(display) {
   // devolve a 520×412, e a deriva de +2 DIP que resta cabe na tolerância do gate. Nunca setPosition, que
   // também muda o tamanho.
   moveIsland(island, savedPosition(display), display.workArea);
+  applyOpacity(island);
   // Reexibir ou restaurar de minimizada põe os botões sob o cursor de novo, então o main reinicia
   // os 0,8 s. O atalho e o menu escondem por hide() (setUserHidden) e reexibem por showInactive().
   island.on('show', () => refresh('rearm'));

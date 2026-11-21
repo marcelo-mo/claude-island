@@ -361,8 +361,8 @@ function islandDisplays(input) {
 /**
  * Opacidade com que a ilha deve aparecer. Devolve 1 quando há pedido na tela ou o fato é
  * desconhecido (`hasPermission !== false`, fail-safe) e quando a preferência não é um número em
- * (0, 1]; senão devolve a preferência. Ainda sem consumidor: a transparência de 100/85/70/55% da
- * Fase 4 (PREF-06) a usa, e com pedido na tela a transparência nunca vale (invariante I5).
+ * (0, 1]; senão devolve a preferência. Quem a usa é applyOpacity no main (transparência de
+ * 100/85/70/55%, PREF-06); com pedido na tela a transparência nunca vale (invariante I5).
  */
 function effectiveOpacity(preferredOpacity, hasPermission) {
   if (hasPermission !== false) return 1;
@@ -498,6 +498,7 @@ const PREFERENCE_LABELS = Object.freeze({
   animationStyle: Object.freeze({ smooth: 'Suave', default: 'Padrão', bouncy: 'Elástico', snappy: 'Rápido' }),
   animationSpeed: Object.freeze({ 0.5: '0,5×', 0.75: '0,75×', 1: '1×', 1.5: '1,5×', 2: '2×' }),
   expandOn: Object.freeze({ hover: 'Ao passar o mouse', click: 'Ao clicar' }),
+  opacity: Object.freeze({ 1: '100%', 0.85: '85%', 0.7: '70%', 0.55: '55%' }),
   anchor: Object.freeze({
     'top-center': 'Topo, centro', 'top-left': 'Topo, esquerda', 'top-right': 'Topo, direita',
     'bottom-center': 'Base, centro', 'bottom-left': 'Base, esquerda', 'bottom-right': 'Base, direita',
@@ -530,7 +531,7 @@ function registerShortcut(register, accelerator, onPress) {
 /**
  * Modelo do menu de preferências para o main montar com Menu.buildFromTemplate. Devolve um array novo
  * de submenus `{ label, submenu: [...] }` (Tema, Forma, Estilo da animação, Velocidade da animação,
- * Expandir, Âncora, Ilhas) mais a caixa 'Fixar aberta', cada filho de submenu um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
+ * Expandir, Transparência, Âncora, Ilhas) mais a caixa 'Fixar aberta', cada filho de submenu um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
  * atual. `key` e `value` são para o main traduzir o clique em applyPreference; as chaves que ainda
  * não têm item entram com o efeito delas. Depois deles vêm um separador, a informação do atalho
  * (desabilitada, conforme `shortcutStatus`, o resultado de registerShortcut) e 'Esconder'
@@ -556,6 +557,7 @@ function menuTemplate(preferences, shortcutStatus) {
     {
       type: 'checkbox', label: 'Fixar aberta', checked: current.pinExpanded, key: 'pinExpanded', value: !current.pinExpanded,
     },
+    { label: 'Transparência', submenu: radios('opacity', OPACITY_LEVELS) },
     { label: 'Âncora', submenu: radios('anchor', ANCHORS) },
     { label: 'Ilhas', submenu: radios('islandMode', ISLAND_MODES) },
     { type: 'separator' },
