@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 5
 current_phase_name: Sessões
-current_plan: 6
+current_plan: 7
 status: human_needed
-stopped_at: Phase 5 context gathered
-last_updated: "2026-11-21T19:33:19.461Z"
+stopped_at: Fase 5 executada, revisada e auditada; PR aberto sem merge
+last_updated: "2026-11-21T20:44:29.175Z"
 last_activity: 2026-11-21
-last_activity_desc: Fase 4 executada (6 planos), revisão com 4 correções, verificação gaps_found só por D-20 (TELA-01 parcial), segurança 26/26; PR aberto
-state_head: 04161a69612ef402e43d37919c35960ba100fe6c
+last_activity_desc: "Fase 5 executada (7 planos, com a main da Fase 6 integrada), revisão com 4 correções, verificação human_needed (14/16), segurança 31/31; PR aberto"
+state_head: feaf8d2bc4df2590b346a41e6f8b4497f7ee6736
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 26
-  completed_plans: 19
+  completed_plans: 26
   percent: 33
 ---
 
@@ -135,6 +135,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T17:46:40.833Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-sess-es/05-CONTEXT.md
+Last session: 2026-11-21T20:44:28.371Z
+Stopped at: Fase 5 executada, revisada e auditada; PR aberto sem merge
+Resume file: .planning/phases/05-sess-es/05-UAT.md
