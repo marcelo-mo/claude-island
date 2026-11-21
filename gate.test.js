@@ -1128,6 +1128,34 @@ test('esconder nunca decide, reexibir passa pelo rearme e o atalho é registrado
   assert.ok(openMenu.includes('onHide: () => setUserHidden(true)') && openMenu.includes('toMenuItem(item, effects)'));
 });
 
+// Trava de regressão (texto): todo caminho que move a janela sem passar por 'show' rearma os botões,
+// porque o renderer não percebe o movimento (WR-01, SEG-02). Cobre os handlers de arraste e de duplo
+// clique e todo chamador de syncIslands que reposiciona fora do arranque.
+test('todo caminho que move a ilha termina em refresh rearm', () => {
+  const afterMove = (opening, mover) => {
+    const start = mainSource.indexOf(opening);
+    assert.ok(start >= 0, `ausente no main.js: ${opening}`);
+    const body = mainSource.slice(start, mainSource.indexOf('\n  });', start));
+    const moved = body.indexOf(mover);
+    assert.ok(moved >= 0, `${opening} não chama ${mover}`);
+    return body.slice(moved).includes("refresh('rearm');");
+  };
+  assert.ok(afterMove("ipcMain.on('island:reset-position'", 'moveIsland('), 'duplo clique move sem rearmar');
+  assert.ok(afterMove("ipcMain.on('island:drag-end'", 'persistSavedOffsets();'), 'soltar o arraste não rearma');
+  const sync = (opening) => {
+    const start = mainSource.indexOf(opening);
+    assert.ok(start >= 0, `ausente no main.js: ${opening}`);
+    const body = mainSource.slice(start, mainSource.indexOf('\n}', start));
+    return body.indexOf("refresh('rearm')") > body.indexOf('syncIslands()') && body.includes('syncIslands()');
+  };
+  assert.ok(sync('function applyPreference('), 'applyPreference reposiciona sem rearmar');
+  assert.ok(sync('function cursorTick('), 'a troca de monitor do cursor reposiciona sem rearmar');
+  assert.ok(
+    mainSource.includes("for (const eventName of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(eventName, () => refresh('rearm'));"),
+    'os eventos de monitor rearmam',
+  );
+});
+
 // Trava de regressão (texto): o main é dono do fato "há pedido", então a opacidade sai do mesmo passo do
 // refresh que decide o pedido exibido e chega antes do estado ao renderer; nenhum outro caminho mexe nela
 // (invariante I5, T-04-16).

@@ -552,6 +552,9 @@ function registerIpcHandlers() {
     const bounds = island.getBounds();
     savedOffsets[display.id] = { x: bounds.x - standard.x, y: bounds.y - standard.y };
     persistSavedOffsets();
+    // Soltar a ilha pode deixar um botão sob o cursor parado, e o renderer não percebe o movimento da
+    // janela: sem rearmar, o armamento antigo valeria (SEG-02).
+    refresh('rearm');
   });
 
   ipcMain.on('island:reset-position', (event) => {
@@ -561,6 +564,8 @@ function registerIpcHandlers() {
     delete savedOffsets[display.id];
     persistSavedOffsets();
     moveIsland(island, anchorPosition(preferences.anchor, display.workArea, WINDOW_SIZE), display.workArea);
+    // O duplo clique leva a janela de uma vez ao lugar padrão, e um botão pode parar sob o cursor.
+    refresh('rearm');
   });
 
   // O renderer só diz "focar"; o PID é o da sessão em exibição, guardado aqui.
