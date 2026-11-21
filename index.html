@@ -530,6 +530,21 @@
     setTimeout(() => audio.close(), 1000);
   }
 
+  // O renderer só aplica o que o main mandou e nunca escolhe nem envia preferência (SEG-08). Valor
+  // desconhecido não casa com seletor nenhum, e os seletores que leem estes atributos são das formas
+  // e dos temas. Estilo e velocidade das molas não passam por aqui: springFrame os lê de
+  // current.preferences. Trocar tema ou forma pode mover os botões, e o ResizeObserver não vê mudança
+  // só de posição; rearmar é o lado seguro.
+  function applyPreferences(preferences) {
+    const root = document.documentElement;
+    const theme = preferences?.theme || 'auto';
+    const shape = preferences?.shape || 'pill';
+    const changed = root.dataset.theme !== theme || root.dataset.shape !== shape;
+    root.dataset.theme = theme;
+    root.dataset.shape = shape;
+    if (changed && current.permission) restartArming();
+  }
+
   // Com uma ilha por monitor, só a que o main indicar toca o aviso.
   window.island.onState((next, shouldChime) => {
     if (shouldChime && next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
@@ -554,6 +569,7 @@
       lastArmEpoch = next.armEpoch;
       restartArming();
     }
+    applyPreferences(next.preferences);
     render();
   });
 

@@ -7,6 +7,9 @@ const STATE_DIR = path.join(os.homedir(), '.claude', 'island');
 const DECISIONS_DIR = path.join(STATE_DIR, 'decisions');
 // Batimento da ilha: sem ele o permission-hook não espera por botões que ninguém vai ver.
 const HEARTBEAT_FILE = path.join(STATE_DIR, '.heartbeat');
+// Preferências visuais (tema, forma, estilo e velocidade da animação). Nesta fase só o main lê o
+// arquivo; quem grava é o menu da Fase 4.
+const PREFERENCES_FILE = path.join(STATE_DIR, 'preferences.json');
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const HEARTBEAT_STALE_MS = 6_000;
 // Quanto o permission-hook espera pela resposta na ilha antes de deixar só o terminal decidir.
@@ -283,6 +286,36 @@ function isIslandSender(input) {
   }
 }
 
+// Valores de preferência em inglês (o arquivo é editável à mão); os rótulos em pt-BR chegam com o
+// menu da Fase 4. A lista decide o que vale: `includes` não tropeça em chaves do protótipo.
+const THEMES = Object.freeze(['auto', 'obsidian', 'graphite', 'slate', 'nord', 'evergreen', 'espresso', 'plum', 'porcelain']);
+const SHAPES = Object.freeze(['pill', 'notch', 'win11']);
+const ANIMATION_STYLES = Object.freeze(['smooth', 'default', 'bouncy', 'snappy']);
+const ANIMATION_SPEED_MIN = 0.5;
+const ANIMATION_SPEED_MAX = 2;
+const DEFAULT_PREFERENCES = Object.freeze({ theme: 'auto', shape: 'pill', animationStyle: 'default', animationSpeed: 1 });
+
+/**
+ * Preferências visuais válidas a partir do que veio do arquivo, que pode estar ausente, corrompido
+ * ou ter sido editado à mão. Devolve sempre um objeto novo com só as quatro chaves
+ * { theme, shape, animationStyle, animationSpeed }; cada chave inválida ou ausente cai sozinha no
+ * valor de DEFAULT_PREFERENCES. A velocidade só vale como número entre ANIMATION_SPEED_MIN e
+ * ANIMATION_SPEED_MAX. Nunca lança e nunca muta a entrada.
+ */
+function normalizePreferences(input) {
+  const { theme, shape, animationStyle, animationSpeed } = input || {};
+  const pick = (value, list, fallback) => (typeof value === 'string' && list.includes(value) ? value : fallback);
+  return {
+    theme: pick(theme, THEMES, DEFAULT_PREFERENCES.theme),
+    shape: pick(shape, SHAPES, DEFAULT_PREFERENCES.shape),
+    animationStyle: pick(animationStyle, ANIMATION_STYLES, DEFAULT_PREFERENCES.animationStyle),
+    // NaN e Infinity falham na comparação.
+    animationSpeed: typeof animationSpeed === 'number' && animationSpeed >= ANIMATION_SPEED_MIN && animationSpeed <= ANIMATION_SPEED_MAX
+      ? animationSpeed
+      : DEFAULT_PREFERENCES.animationSpeed,
+  };
+}
+
 // Explícito protege de regressão: ligar nodeIntegration desligaria o sandbox em silêncio. O renderer
 // só carrega o index.html local, com CSP default-src 'none'.
 const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: true, nodeIntegration: false });
@@ -293,4 +326,6 @@ module.exports = {
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
   nextShownPermission,
+  PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
+  normalizePreferences,
 };

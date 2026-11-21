@@ -324,11 +324,11 @@ test('island:decide grava o veredito antes de marcar o pedido como decidido', ()
   assert.match(mainSource, /^let decidedPermissionId = null;/m);
 });
 
-test('refresh não engole o rearme e o estado enviado leva answeredId e armEpoch', () => {
+test('refresh não engole o rearme e o estado enviado leva answeredId, armEpoch e as preferências', () => {
   for (const glue of [
     "nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm')",
     'if (serialized === lastSent && nextShown.epoch === shown.epoch) return;',
-    '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch }',
+    '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences }',
   ]) {
     assert.ok(mainSource.includes(glue), `main.js sem a cola: ${glue}`);
   }

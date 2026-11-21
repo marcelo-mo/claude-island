@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
-  SECURE_WEB_PREFERENCES, isIslandSender,
+  SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -45,6 +45,9 @@ let lastSent = JSON.stringify(lastPickedState);
 // Último pedido cuja decisão foi gravada. Primeiro clique vence: só o main enxerga as duas ilhas
 // (cada renderer só trava o próprio botão), então é ele que recusa a segunda decisão.
 let decidedPermissionId = null;
+// Preferências visuais, lidas uma vez na subida. O renderer só recebe o valor pelo estado: nunca
+// escolhe nem envia preferência (SEG-08).
+let preferences = DEFAULT_PREFERENCES;
 
 const positionsFile = () => path.join(app.getPath('userData'), 'positions.json');
 
@@ -54,6 +57,14 @@ function loadSavedOffsets() {
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) savedOffsets = parsed;
   } catch {
     // arquivo ausente ou corrompido: a ilha sobe na posição padrão
+  }
+}
+
+function loadPreferences() {
+  try {
+    preferences = normalizePreferences(JSON.parse(fs.readFileSync(PREFERENCES_FILE, 'utf8')));
+  } catch {
+    // arquivo ausente ou corrompido: valem os padrões
   }
 }
 
@@ -163,7 +174,7 @@ function sendState(island) {
   // sobe a cada troca, reexibição ou mudança de monitor, e o renderer rearma quando ele muda.
   island.webContents.send(
     'island:state',
-    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch },
+    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences },
     isFirstIsland,
   );
 }
@@ -343,6 +354,7 @@ function registerIpcHandlers() {
 
 function start() {
   loadSavedOffsets();
+  loadPreferences();
   removeOrphanDecisions();
   writeHeartbeat();
   setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
