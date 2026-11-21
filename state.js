@@ -374,6 +374,9 @@ const byRequestOrder = (a, b) => (a.seenAt - b.seenAt) || (a.id < b.id ? -1 : a.
 // já esteve na tela. Ver o JSDoc de nextSelection para as regras.
 function pollSelection(key, previous, entries, event) {
   const { now, lastWheelAt, shownPermissionId, previousKeys } = event;
+  // A roda ou o clique que acabou de trocar a sessão: a escolha do usuário vale neste ciclo, e o pedido novo
+  // ou o que sobrou da fila espera o próximo (a exibição já mudou e o poll seguinte parte dela).
+  const userSwitched = event.userSwitched === true;
   const known = new Map(previous.filter((request) => request && typeof request.id === 'string').map((request) => [request.id, request]));
   const sessionOf = new Map();
   const requests = [];
@@ -411,6 +414,9 @@ function pollSelection(key, previous, entries, event) {
       chosen = sessionOf.get(neverShown.id);
       snapped = true;
     }
+  } else if (userSwitched) {
+    // Nada a fazer: o usuário saiu da sessão do pedido exibido de propósito, e `shownPermissionId` ainda é o
+    // de antes do gesto, então puxá-lo de volta (ou ao pedido seguinte) desfaria a escolha dele.
   } else if (key !== null && entries.some((entry) => entry.key === key) && hasShownRequest && !shownIsPending && requests.length > 0) {
     // O pedido exibido saiu e a sessão dele continua viva: vai ao mais antigo restante. Não espera o gesto
     // (quem respondeu na ilha acabou de clicar, não de rolar) e rearma como toda troca.
@@ -448,7 +454,9 @@ function pollSelection(key, previous, entries, event) {
  * ilha à sessão dele uma só vez, nunca no meio de um gesto de roda (fica para o primeiro ciclo depois dele)
  * e nunca por cima de um pedido que está na tela (entra na fila, sem snap). Quando o pedido exibido sai
  * (respondido na ilha ou no terminal), a ilha vai ao mais antigo restante, sem esperar o gesto; se o
- * usuário estava numa sessão sem pedido, nada se move.
+ * usuário estava numa sessão sem pedido, nada se move. O poll que roda logo depois de um gesto do usuário (roda
+ * ou clique no ponto) leva `userSwitched: true`: nele nem a fila avança nem o pedido novo faz snap, para a escolha
+ * do usuário não ser desfeita pelo pedido que saiu no mesmo instante; o ciclo seguinte decide.
  * Sair de fato da lista (SessionEnd, terminal fechado, prazo de "trabalhando" ou "precisa de você") não é troca
  * por estado: a ilha vai à sessão do pedido nunca exibido (`shown: false`) mais antigo, se o gesto da roda
  * acabou, e senão à vizinha na ordem estável, nunca à mais urgente. A vizinha pula as sessões com pedido já

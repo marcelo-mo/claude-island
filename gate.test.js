@@ -1560,6 +1560,7 @@ test('o refresh leva os fatos ao poll, trava a roda depois do snap e nunca reexi
   const body = mainFunctionBody('refresh');
   for (const piece of [
     'shownPermissionId: shown.id',
+    "userSwitched: reason === 'wheel' || reason === 'select'",
     'lastWheelAt',
     'if (selection.snapped) wheelLockedUntil =',
     'SNAP_WHEEL_LOCK_MS',

@@ -485,6 +485,7 @@ function refresh(reason) {
     now: monotonicNow,
     lastWheelAt,
     shownPermissionId: shown.id,
+    userSwitched: reason === 'wheel' || reason === 'select',
   });
   if (selection.snapped) wheelLockedUntil = monotonicNow + SNAP_WHEEL_LOCK_MS;
   // Recalculada com a chave nova: depois de uma troca o "concluído" que ficou para trás vence na hora, e a lista
