@@ -78,8 +78,14 @@ test('o raio da pílula vem de --radius e nenhuma regra o fixa em 30 px', () => 
   assert.equal(rulesFor('#pill::before')[0]['border-radius'], 'inherit', 'o brilho segue o raio da pílula');
 });
 
-test('o script grava --radius com metade da altura-alvo limitada a 44 px', () => {
-  assert.match(script, /const PILL_MAX_RADIUS_PX = 44;/);
+// O teto é o raio do bloco de pedido mais o respiro lateral da expandida: cantos concêntricos, e a curva
+// não encosta no conteúdo da linha de cima. Mudar um dos dois pede rever o outro.
+test('o script grava --radius com metade da altura-alvo limitada ao raio concêntrico da expandida', () => {
+  const ceiling = Number(/const PILL_MAX_RADIUS_PX = (\d+);/.exec(script)?.[1]);
+  const permissionRadius = parseFloat(rulesFor('#permission')[0]['border-radius']);
+  const expandedPadding = parseFloat(rulesFor('#pill.expanded')[0]['padding-inline']);
+  assert.equal(ceiling, permissionRadius + expandedPadding);
+  assert.ok(expandedPadding >= 24, 'respiro lateral da expandida');
   assert.ok(script.includes("pill.style.setProperty('--radius', `${Math.min(target.height / 2, PILL_MAX_RADIUS_PX)}px`);"));
 });
 

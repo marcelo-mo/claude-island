@@ -127,7 +127,10 @@
   #pill[data-state="idle"] { opacity: 0; scale: .6; translate: 0 -12px; pointer-events: none; }
   #pill[data-state="waiting"] { --accent: var(--waiting); }
   #pill[data-state="done"] { --accent: var(--done); }
-  #pill.expanded { width: 400px; height: 104px; }
+  /* Expandida, a linha de cima encosta nos cantos curvos com o respiro da compacta (17 px): o ponto e o
+     percentual ficavam a poucos pixels da curva. 24 px dão a mesma folga visual dos dois lados; o raio
+     acompanha em PILL_MAX_RADIUS_PX. */
+  #pill.expanded { width: 400px; height: 104px; padding-inline: 24px; }
   #pill.expanded.has-window { height: 148px; }
   /* Com pedido de permissão a altura segue o texto do pedido (até o limite com rolagem). */
   #pill.expanded.has-permission { height: auto; padding-bottom: 16px; }
@@ -589,9 +592,11 @@
   // Quando o pedido exibido mudou (id, armEpoch ou texto): abre a janela em que a roda é ignorada.
   let contentChangedAt = 0;
 
-  // Raio máximo da pílula, do mod (MIT, ver THIRD_PARTY_NOTICES.md): a metade da altura-alvo dá o
-  // arredondado total da compacta, e a expandida (mais alta) para em 44 px em vez de virar uma cápsula.
-  const PILL_MAX_RADIUS_PX = 44;
+  // Raio máximo da pílula: a metade da altura-alvo dá o arredondado total da compacta, e a expandida
+  // (mais alta) para neste teto em vez de virar uma cápsula. O mod (MIT, ver THIRD_PARTY_NOTICES.md)
+  // para em 44 px; aqui são 36 para a curva não encostar no ponto e no percentual da linha de cima:
+  // 36 = raio do bloco de pedido (12) + respiro lateral da expandida (24), cantos concêntricos.
+  const PILL_MAX_RADIUS_PX = 36;
 
   // Molas da pílula. nudge (salto do topo, em px) e scale (ampliação do hover) são neutras
   // e existem desde o início; width e height entram na primeira medição, e sem elas conta como em

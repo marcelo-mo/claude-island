@@ -814,8 +814,12 @@ const TOOL_CHAR_WIDTH_EM = 0.6;
 // espaço, como mcp__servidor__ferramenta, passaria da caixa e seria cortado.
 function toolLabelLines() {
   assert.equal(cssDeclarations('#permission-tool')['overflow-wrap'], 'anywhere', 'o rótulo da ferramenta precisa quebrar em qualquer ponto');
-  const labelWidth = cssPixels(cssDeclarations('#pill.expanded').width, 'largura da expandida')
-    - horizontalPadding(cssDeclarations('#pill').padding, 'padding de #pill')
+  const expanded = cssDeclarations('#pill.expanded');
+  // A expandida pode ter respiro lateral próprio (padding-inline), maior que o da compacta.
+  const pillPadding = expanded['padding-inline']
+    ? 2 * cssPixels(expanded['padding-inline'], 'padding-inline da expandida')
+    : horizontalPadding(cssDeclarations('#pill').padding, 'padding de #pill');
+  const labelWidth = cssPixels(expanded.width, 'largura da expandida') - pillPadding
     - horizontalPadding(cssDeclarations('#permission').padding, 'padding de #permission');
   const fontSize = cssPixels(cssDeclarations('#permission-tool')['font-size'], 'font-size de #permission-tool');
   return Math.ceil((PERMISSION_TOOL_LIMIT * TOOL_CHAR_WIDTH_EM * fontSize) / labelWidth);
