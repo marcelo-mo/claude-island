@@ -55,6 +55,14 @@ Fica de fora:
   - A seleção manual vale até a sessão sair da lista; aí volta ao automático.
   - Sem tempo de expiração: a ilha nunca troca sozinha por "concluído" nem por "voltou a trabalhar" (SESS-06).
   - Uma função pura em `state.js`, `nextSelection`, decide a seleção a cada evento (`poll`, `scroll`, `select`, `answered`). O `pickState` passa a receber a seleção e devolve a sessão exibida, mais a lista de pontos e a fila.
+  - **Conciliação com o SESS-06, ajustada na revisão do plano:**
+    - O "automático" não acompanha o `pickState` ao vivo. A escolha por urgência acontece só na subida, quando a lista sai de vazia, ou quando a sessão exibida sai de fato da lista (`SessionEnd`, sessão morta ou prazo de `running`/`waiting`), e então fica fixa como chave.
+    - Acompanhar ao vivo trocaria a sessão exibida quando outra terminasse ou ficasse mais urgente, e isso o SESS-06 proíbe.
+- **D-21:** **O "concluído" exibido não expira enquanto houver outra sessão viva na lista.**
+  - A sessão em `done` que está na tela fica na lista e na tela além dos 10 s de `DONE_VISIBLE_MS`, até o usuário trocar (roda ou ponto) ou um pedido novo fazer o snap. Ao deixar de ser exibida, ela expira na hora, se já passou do prazo.
+  - Se ela for a única sessão, o prazo de 10 s vale como hoje e a ilha fica ociosa. Isso não é troca de sessão, e a ilha continua existindo só enquanto o Claude roda.
+  - Assim, "concluído" e "voltou a trabalhar" nunca trocam a sessão sozinhos (ROADMAP SC3, SESS-06), nem pela expiração.
+  - Sair de fato da lista (`SessionEnd`, sessão morta, prazo de `running`/`waiting`) não é troca por estado. Aí a ilha vai ao pedido pendente mais antigo, se houver, ou à sessão mais urgente.
 
 ### Pontos e rótulo (SESS-01)
 - **D-07:** **Um ponto por sessão viva, no lugar de `#count`, só com 2 ou mais sessões.**
@@ -129,6 +137,9 @@ Fica de fora:
 ### Animação da troca
 - **D-17:** **Mola de troca de aba do mod**, adiada da Fase 3 para cá: k=250, c=31, deslocamento vertical de 34 px e escala 0,965, com fade. O aviso MIT fica sobre as constantes.
   - Direcional: rolar para baixo traz o conteúdo de baixo.
+  - **Só se move um invólucro sem nenhum botão** (título, detalhe e texto do pedido; ajustado na revisão do plano). Pontos, "Abrir", "Abrir sessão", Permitir e Negar nunca recebem a transformação da mola de troca. Uma trava de teste cobre todo `button` da pílula, não só `#actions`.
+  - Largura: com 2 ou mais sessões, o título com o nome do projeto tem largura fixa e corta com reticências, para a troca não mexer a largura da pílula nem empurrar "Abrir".
+  - Mudança no número de sessões ainda pode alterar a largura. Isso é aceito e registrado: não é causado pelo gesto, é raro, e Permitir/Negar seguem cobertos pelo rearme por retângulo.
   - O conteúdo é trocado **de forma atômica**: texto e id juntos, sem crossfade com duas camadas DOM. A camada antiga seria um alvo de clique que o main já descartou. Anima-se só o contêiner.
   - A mola nova entra em `allSpringsAtRest()`, então `canArm` não arma Permitir/Negar enquanto ela se move.
   - Com "reduzir movimento", a troca é sem deslocamento.
