@@ -169,7 +169,9 @@ Plans:
   1. Com a ilha do Windhawk ativa o usuário define um deslocamento e a nossa fica como segunda bolha ao lado dela, expandindo para fora sem cobrir a do mod
   2. Em 5 minutos de convivência medidos, nenhuma das duas ilhas some atrás da outra, e a nossa nunca reafirma o "sempre no topo" por timer
   3. Uma proposta de API para conteúdo externo está aberta como issue no repositório do autor do mod, e o toast do Windows e os apps de notch no macOS estão registrados em documento com o que foi verificado de cada um
-**Plans**: TBD
+**Plans**: 2 plans
+- [x] 06-01-PLAN.md — âncoras ao lado da ilha do sistema (crescendo para fora) e trava de CONV-02
+- [x] 06-02-PLAN.md — medidor somente leitura da convivência e registro das integrações (issue em rascunho)
 **Research flag**: sim (pesquisa grande). Classe real da janela do mod, geometria nas duas ilhas, se o Electron reafirma o topo sozinho; confirmar na tela antes de qualquer promessa de encaixe.
 
 ## Progress
@@ -184,4 +186,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 (condicional) → 4 → 5
 | 3. Palco fixo, animação e visual | 3/3 | In Progress | - |
 | 4. Entrada, preferências e comportamento no sistema | 6/6 | In Progress | - |
 | 5. Sessões | 0/TBD | Not started | - |
-| 6. Convivência com a ilha do sistema | 0/TBD | Not started | - |
+| 6. Convivência com a ilha do sistema | 2/2 | In Progress (PR aberto; verificação humana pendente) | - |

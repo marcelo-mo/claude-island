@@ -325,6 +325,15 @@ const HORIZONTAL_SLACK = 60;
 // Windows, MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md).
 const ANCHOR_SIDE_GAP_PX = 16;
 const ANCHOR_BOTTOM_GAP_PX = 40;
+// Âncoras ao lado da ilha do sistema: a borda interna da pílula fica a esta distância do centro horizontal da
+// área útil. 190 é a meia-largura do painel expandido do mod (kExpandedWidth = 380), 4,75 o hover de 1,025
+// dele e o resto folga visual (valores do mod, MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md).
+// ponytail: distância fixa e o arraste da Fase 4 como ajuste fino. Se o arraste não bastar, virar a chave
+// besideGapPx no esquema de preferências; seguir a pílula do mod ao vivo exige ler a janela dele (v2, INTG-01).
+const BESIDE_GAP_PX = 210;
+// Desce a janela para o centro da nossa pílula compacta (8 + 46 / 2 = 31) ficar na altura do centro da faixa
+// ociosa do mod (palco 8 px abaixo da área útil, pílula 22 px dentro dele, 36 px de altura: 48).
+const BESIDE_TOP_OFFSET_PX = 17;
 // Margem do palco do lado ancorado para a sombra, que alcança 14 px para os lados e 19 px para baixo. O CSS
 // a repete em --stage-shadow.
 const STAGE_SHADOW_PX = 20;
@@ -337,6 +346,29 @@ function defaultIslandPosition(workArea, windowSize) {
 }
 
 /**
+ * Posição da janela nas âncoras ao lado da ilha do sistema, `{ x, y }`, ou null para as outras âncoras. A
+ * borda interna da pílula (a que fica de frente para o mod) fica a BESIDE_GAP_PX do centro horizontal da
+ * área útil (o mesmo centro que o mod usa, .wh.cpp:4041) e a janela começa STAGE_SHADOW_PX antes dela, para a
+ * sombra caber; a pílula encosta nessa borda e cresce para fora (CSS). Com o mod expandido e com hover a
+ * janela invade a pílula dele em até ~5 px, abaixo do limiar de 1/8 com que o mod se sobe sobre outra janela
+ * (.wh.cpp:4141). O centro é arredondado uma vez, para os dois lados ficarem à mesma distância.
+ * Limite conhecido: com a área útil abaixo de 1220 DIP (1366×768 a 125%, por exemplo) não cabe a pílula
+ * expandida ao lado do mod, e clampIslandPosition puxa a janela para o centro, por cima da pílula dele. O gate
+ * não vê outra janela cobrindo a nossa (isso já vale para a âncora padrão, que fica em cima do mod).
+ * ponytail: sem âncora por monitor; quem usa o mod só no principal escolhe "Ilhas > Só no monitor
+ * principal". Se isso não bastar, decidir a âncora efetiva por ilha no main. A forma Notch, colada no topo,
+ * fica 17 px abaixo dele aqui: com o mod, prefira Pílula ou Windows 11.
+ */
+function besidePosition(anchor, workArea, windowSize) {
+  if (anchor !== 'right-of-island' && anchor !== 'left-of-island') return null;
+  const center = Math.round(workArea.x + workArea.width / 2);
+  const x = anchor === 'right-of-island'
+    ? center + BESIDE_GAP_PX - STAGE_SHADOW_PX
+    : center - BESIDE_GAP_PX + STAGE_SHADOW_PX - windowSize.width;
+  return { x, y: workArea.y + BESIDE_TOP_OFFSET_PX };
+}
+
+/**
  * Posição da janela para a âncora escolhida, `{ x, y }`; âncora fora de ANCHORS vale 'top-center', que é
  * igual a defaultIslandPosition. A pílula encosta no lado ancorado do palco, deixando só a margem da
  * sombra, então a janela sai STAGE_SHADOW_PX além da distância de 16 px à lateral e de 40 px à base. Em
@@ -345,6 +377,8 @@ function defaultIslandPosition(workArea, windowSize) {
  */
 function anchorPosition(anchor, workArea, windowSize) {
   const valid = ANCHORS.includes(anchor) ? anchor : 'top-center';
+  const beside = besidePosition(valid, workArea, windowSize);
+  if (beside) return beside;
   let x = Math.round(workArea.x + (workArea.width - windowSize.width) / 2);
   if (valid.endsWith('-left')) x = workArea.x + ANCHOR_SIDE_GAP_PX - STAGE_SHADOW_PX;
   if (valid.endsWith('-right')) x = workArea.x + workArea.width - ANCHOR_SIDE_GAP_PX + STAGE_SHADOW_PX - windowSize.width;
@@ -364,6 +398,9 @@ function anchorPosition(anchor, workArea, windowSize) {
 function horizontalSlackFor(anchor) {
   const valid = ANCHORS.includes(anchor) ? anchor : 'top-center';
   const free = WINDOW_SIZE.width - STAGE_SHADOW_PX - EXPANDED_PILL_WIDTH_PX;
+  // Ao lado do mod a pílula encosta na borda interna do palco: à direita dele, no lado esquerdo.
+  if (valid === 'right-of-island') return { left: STAGE_SHADOW_PX, right: free };
+  if (valid === 'left-of-island') return { left: free, right: STAGE_SHADOW_PX };
   if (valid.endsWith('-left')) return { left: STAGE_SHADOW_PX, right: free };
   if (valid.endsWith('-right')) return { left: free, right: STAGE_SHADOW_PX };
   return { left: HORIZONTAL_SLACK, right: HORIZONTAL_SLACK };
@@ -468,8 +505,12 @@ const ANIMATION_SPEED_MAX = 2;
 const EXPAND_ON = Object.freeze(['hover', 'click']);
 // Degraus de transparência do mod Dynamic Island for Windows (MIT, ver THIRD_PARTY_NOTICES.md).
 const OPACITY_LEVELS = Object.freeze([1, 0.85, 0.7, 0.55]);
-// As seis âncoras do mesmo mod (MIT, ver THIRD_PARTY_NOTICES.md).
-const ANCHORS = Object.freeze(['top-center', 'top-left', 'top-right', 'bottom-center', 'bottom-left', 'bottom-right']);
+// As seis âncoras do mesmo mod (MIT, ver THIRD_PARTY_NOTICES.md) e as duas ao lado da ilha dele (Fase 6). As
+// ao lado não terminam em -left/-right de propósito: esse sufixo quer dizer "encosta nesse lado do palco" aqui
+// e no CSS, e à direita do mod a pílula encosta no lado esquerdo.
+const ANCHORS = Object.freeze([
+  'top-center', 'top-left', 'top-right', 'bottom-center', 'bottom-left', 'bottom-right', 'right-of-island', 'left-of-island',
+]);
 const ISLAND_MODES = Object.freeze(['perDisplay', 'primary', 'cursor']);
 // Ctrl+Alt+C produz ¢ com AltGr+C no ABNT2 do autor e o register() do Electron não enxerga esse
 // conflito; com Ctrl+Alt+Shift nenhuma letra produz caractere no ABNT2 nem no US (medido).
@@ -574,6 +615,7 @@ const PREFERENCE_LABELS = Object.freeze({
   anchor: Object.freeze({
     'top-center': 'Topo, centro', 'top-left': 'Topo, esquerda', 'top-right': 'Topo, direita',
     'bottom-center': 'Base, centro', 'bottom-left': 'Base, esquerda', 'bottom-right': 'Base, direita',
+    'right-of-island': 'Ao lado da ilha do sistema, à direita', 'left-of-island': 'Ao lado da ilha do sistema, à esquerda',
   }),
   islandMode: Object.freeze({ perDisplay: 'Uma por monitor', primary: 'Só no monitor principal', cursor: 'No monitor do cursor' }),
 });
@@ -671,6 +713,7 @@ module.exports = {
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
+  BESIDE_GAP_PX, BESIDE_TOP_OFFSET_PX,
   islandDisplays, nextShownPermission, isIslandVisible, nextUserHidden,
   FULLSCREEN_TOLERANCE_PX, SHELL_WINDOW_CLASSES, WS_EX_TRANSPARENT, nextFullscreen,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,

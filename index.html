@@ -155,6 +155,14 @@
   :root[data-anchor$="-left"] body { justify-content: flex-start; padding-left: var(--stage-shadow); }
   :root[data-anchor$="-right"] body { justify-content: flex-end; padding-right: var(--stage-shadow); }
   :root[data-anchor^="bottom-"] body { align-items: flex-end; padding-top: 0; padding-bottom: var(--stage-shadow); }
+  /* Ao lado da ilha do sistema (Fase 6): a pílula encosta na borda do palco de frente para o mod e cresce para
+     fora dela, então mola, hover e nudge nunca a empurram para cima da pílula dele. À direita do mod é o
+     alinhamento das âncoras -left, à esquerda é o das -right; o nome não usa o sufixo para não herdar o lado
+     errado. */
+  :root[data-anchor="right-of-island"] { --origin-x: 0%; }
+  :root[data-anchor="right-of-island"] body { justify-content: flex-start; padding-left: var(--stage-shadow); }
+  :root[data-anchor="left-of-island"] { --origin-x: 100%; }
+  :root[data-anchor="left-of-island"] body { justify-content: flex-end; padding-right: var(--stage-shadow); }
   /* O contorno pulsa na cor do estado: dá para ler a situação de relance, sem mirar no ponto.
      Quem pede ação pulsa mais rápido; executando é o mais calmo para não cansar.
      O brilho pulsa por opacidade numa camada própria (::before) e a ilha parada não anima nada. */
