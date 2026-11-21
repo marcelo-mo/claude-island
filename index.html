@@ -384,8 +384,8 @@
     })) readPermissionId = permission.id;
     const wasRead = readPermissionId === permission.id;
     permissionHint.hidden = wasRead;
-    // Depois do clique os botões ficam travados até o pedido sair do estado. answeredId vem do
-    // main e trava também a ilha que não recebeu o clique: o outro monitor já decidiu este pedido.
+    // Depois do clique os botões travam até o main responder; se ele aceitou, answeredId mantém a
+    // trava até o pedido sair do estado, também na ilha que não recebeu o clique (outro monitor).
     const locked = !armed || permission.id === answeredPermissionId || permission.id === current.answeredId;
     denyButton.disabled = locked;
     allowButton.disabled = locked || !wasRead;
@@ -506,6 +506,9 @@
     const previousPermissionId = current.permission ? current.permission.id : null;
     const previousText = current.permission ? current.permission.text : null;
     current = next;
+    // A trava local só cobre a ida e volta do IPC: daqui em diante quem trava é o answeredId do main.
+    // Sem isto uma recusa do main (rearme no caminho, janela escondida) travaria o pedido para sempre.
+    answeredPermissionId = null;
     const permissionId = next.permission ? next.permission.id : null;
     const nextText = next.permission ? next.permission.text : null;
     const epochChanged = next.armEpoch !== lastArmEpoch;

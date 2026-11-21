@@ -322,7 +322,12 @@ function registerIpcHandlers() {
       coveredByFullscreen: false,
       withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK),
     });
-    if (!verdict.accept) return;
+    // Recusa e falha de gravação reenviam o estado a quem clicou: o renderer trava os botões ao enviar
+    // e só os solta quando o main responde. Ele nunca reenvia sozinho; o próximo clique é do usuário.
+    if (!verdict.accept) {
+      sendState(island);
+      return;
+    }
     try {
       writeDecision(verdict.permissionId, verdict.behavior);
       // Só depois de gravar: marcar antes impediria tentar de novo se a gravação falhar. O handler
@@ -331,6 +336,7 @@ function registerIpcHandlers() {
       for (const each of islands.values()) sendState(each);
     } catch (error) {
       console.error('Não foi possível gravar a decisão do pedido de permissão:', error.message);
+      sendState(island);
     }
   });
 }

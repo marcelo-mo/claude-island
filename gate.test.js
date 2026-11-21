@@ -217,6 +217,17 @@ test('a janela da ilha não navega nem abre janela, e todo canal confere o remet
   }
 });
 
+// Trava de regressão (texto): recusa silenciosa deixava Permitir e Negar travados para aquele pedido.
+// O main responde a recusa pelo island:state (canal que já existe) e o renderer solta a trava local.
+test('recusa do main destrava os botões sem o renderer reenviar a decisão', () => {
+  const decide = mainSource.slice(mainSource.indexOf("ipcMain.on('island:decide'"));
+  assert.match(decide, /if \(!verdict\.accept\) \{\s*sendState\(island\);\s*return;\s*\}/);
+  assert.match(decide, /console\.error\('Não foi possível gravar a decisão[^\n]*\n\s*sendState\(island\);/);
+  const onState = rendererSource.slice(rendererSource.indexOf('window.island.onState('));
+  assert.match(onState, /^[^]*?current = next;\s*(\/\/[^\n]*\n\s*)*answeredPermissionId = null;/);
+  assert.equal(rendererSource.split('window.island.decide(').length - 1, 1, 'a decisão sai de um só lugar: o clique');
+});
+
 test('o main escuta só com ipcMain.on, nos seis canais do renderer', () => {
   const { methods, channels } = collectChannels(mainSource, 'ipcMain');
   assert.deepEqual([...methods], ['on']);
