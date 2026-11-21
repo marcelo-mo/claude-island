@@ -234,11 +234,13 @@ test('nenhum canal escapa pela IPC por webContents', () => {
 });
 
 const RENDERER_CHANNELS = [
-  'island:state', 'island:hover', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end', 'island:reset-position',
-  'island:menu',
+  'island:state', 'island:cursor', 'island:capture', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end',
+  'island:reset-position', 'island:menu',
 ];
+// Canais que o main envia e o renderer só escuta: o main não registra handler para eles.
+const MAIN_TO_RENDERER_CHANNELS = ['island:state', 'island:cursor'];
 
-test('o preload usa só send e on, nos oito canais conhecidos', () => {
+test('o preload usa só send e on, nos nove canais conhecidos', () => {
   const { methods, channels } = collectChannels(preloadSource, 'ipcRenderer');
   assert.deepEqual([...methods].sort(), ['on', 'send']);
   assert.deepEqual([...channels].sort(), [...RENDERER_CHANNELS].sort());
@@ -293,7 +295,56 @@ test('o armamento acompanha o retângulo dos próprios botões', () => {
 test('o main escuta só com ipcMain.on, nos sete canais do renderer', () => {
   const { methods, channels } = collectChannels(mainSource, 'ipcMain');
   assert.deepEqual([...methods], ['on']);
-  assert.deepEqual([...channels].sort(), RENDERER_CHANNELS.filter((channel) => channel !== 'island:state').sort());
+  assert.deepEqual(
+    [...channels].sort(),
+    RENDERER_CHANNELS.filter((channel) => !MAIN_TO_RENDERER_CHANNELS.includes(channel)).sort(),
+  );
+});
+
+// Trava de regressão (texto): a captura do mouse nunca usa a opção forward (para sob janela elevada,
+// UIPI) e só nasce de um booleano. Arraste e menu a seguram, e todo caminho que esconde ou ociosa a
+// ilha a solta, senão a janela transparente de 520 × 410 engole cliques de outras janelas (T-04-06, T-04-08).
+test('a captura vem só de um booleano, sem a opção forward, e o arraste e o menu a seguram', () => {
+  assert.ok(mainSource.includes("ipcMain.on('island:capture', (event, capture) => {"));
+  assert.ok(mainSource.includes("typeof capture !== 'boolean'"));
+  assert.equal(/forward\s*:/.test(mainSource), false, 'main.js com a opção forward de setIgnoreMouseEvents');
+  const bodyOf = (opening, closing = '\n}') => {
+    assert.equal(mainSource.split(opening).length - 1, 1, `ausente ou repetido no main.js: ${opening}`);
+    const rest = mainSource.slice(mainSource.indexOf(opening));
+    return rest.slice(0, rest.indexOf(closing));
+  };
+  const apply = bodyOf('function applyCapture(');
+  for (const needle of [
+    'captureRequests.get(island) === true', 'dragStartPositions.has(island)', 'island === menuIsland',
+    'island.setIgnoreMouseEvents(!capture);',
+  ]) assert.ok(apply.includes(needle), `applyCapture sem: ${needle}`);
+  const dragEnd = bodyOf("ipcMain.on('island:drag-end'", '\n  });');
+  assert.ok(dragEnd.includes('applyCapture(island);'), 'o fim do arraste reaplica a captura');
+  assert.ok(bodyOf("menu.on('menu-will-close'", '\n  });').includes('applyCapture('), 'o fim do menu reaplica a captura');
+  assert.equal(mainSource.split('setInterval(cursorTick, CURSOR_TICK_MS)').length - 1, 1);
+  const update = bodyOf('function updateCursorTick(');
+  for (const needle of ["lastPickedState.state !== 'idle'", 'island.isVisible()', 'releaseCapture(']) {
+    assert.ok(update.includes(needle), `updateCursorTick sem: ${needle}`);
+  }
+  const release = bodyOf('function releaseCapture(');
+  assert.ok(release.includes('captureRequests.delete(island);') && release.includes('applyCapture(island);'));
+  const hide = bodyOf("island.on('hide', () => {", '\n  });');
+  assert.ok(hide.includes('releaseCapture(island);') && hide.includes('updateCursorTick();'), 'esconder solta a captura');
+  assert.ok(bodyOf('function refresh(reason)').includes('updateCursorTick();'), 'o refresh religa e desliga o timer');
+});
+
+// Trava de nomes (execução do texto): a casca Tauri do spike não pode ficar com um nome velho quando o
+// preload muda. Roda os dois arquivos com um electron e um window de mentira e compara as chaves.
+test('o shim da casca Tauri expõe os mesmos nomes do preload', () => {
+  let exposed;
+  const fakeElectron = {
+    contextBridge: { exposeInMainWorld: (name, api) => { assert.equal(name, 'island'); exposed = api; } },
+    ipcRenderer: {},
+  };
+  vm.runInNewContext(preloadSource, { require: () => fakeElectron });
+  const shimWindow = {};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'spike/tauri/src-tauri/src/shim.js'), 'utf8'), { window: shimWindow });
+  assert.deepEqual(Object.keys(shimWindow.island).sort(), Object.keys(exposed).sort());
 });
 
 // Travas da cola (texto): as regras puras têm vetores, mas a ligação dos argumentos que as chama

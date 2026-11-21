@@ -2,7 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('island', {
   onState: (callback) => ipcRenderer.on('island:state', (_event, state, shouldChime) => callback(state, shouldChime)),
-  setHover: (isOverPill) => ipcRenderer.send('island:hover', isOverPill),
+  onCursor: (callback) => ipcRenderer.on('island:cursor', (_event, point) => callback(point)),
+  setCapture: (capture) => ipcRenderer.send('island:capture', capture),
   focusSession: () => ipcRenderer.send('island:focus'),
   decide: (behavior, pressedId) => ipcRenderer.send('island:decide', behavior, pressedId),
   drag: (deltaX, deltaY) => ipcRenderer.send('island:drag', deltaX, deltaY),

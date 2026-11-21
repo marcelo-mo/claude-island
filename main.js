@@ -12,11 +12,18 @@ const {
 const { focusWindow } = require('./window');
 
 const POLL_MS = 400;
+// ponytail: taxa fixa de cerca de 30 Hz; getCursorScreenPoint custa 0,69 µs por chamada (medido na
+// pesquisa da Fase 4). Adaptar a taxa só se o custo aparecer.
+const CURSOR_TICK_MS = 33;
+// O main só manda o ponto com o cursor a até esta distância da janela: mais longe, a histerese do
+// renderer não captura de qualquer jeito.
+const CURSOR_NEAR_PX = 24;
 // A ilha carrega por esta URL e só aceita mensagens da página que está nela (ver islandOf).
 const ISLAND_URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
 
-// Em Linux o "forward" de setIgnoreMouseEvents não existe, então não dá para
-// deixar o clique atravessar a área transparente e ainda detectar o hover.
+// No Linux (melhor esforço, não testado) a ilha mantém o comportamento de hoje, sem click-through: a
+// janela transparente captura o mouse inteira (D-03). O hover vem do cursor do main em todas as
+// plataformas; só a captura do mouse depende disto.
 const CAN_CLICK_THROUGH = process.platform !== 'linux';
 
 // Uma janela por monitor, indexada por display.id.
@@ -46,6 +53,13 @@ let preferences = DEFAULT_PREFERENCES;
 // Ilha cujo menu de preferências está aberto. Um menu por vez: pedido de menu enquanto há um aberto
 // é descartado.
 let menuIsland = null;
+// Último pedido de captura do mouse de cada ilha. Quem decide é o renderer, pelo retângulo vivo da
+// pílula; o main só aplica (applyCapture).
+const captureRequests = new Map();
+// Ilhas que receberam o ponto do cursor no último tique, para mandar null uma vez só quando o cursor
+// se afasta.
+const nearIslands = new Set();
+let cursorTimer = null;
 
 const positionsFile = () => path.join(app.getPath('userData'), 'positions.json');
 
@@ -190,6 +204,8 @@ function openMenu(island) {
   menu.on('menu-will-show', () => refresh('rearm'));
   menu.on('menu-will-close', () => {
     menuIsland = null;
+    // Com o menu fechado vale de novo o último pedido do renderer.
+    applyCapture(island);
     refresh('rearm');
   });
   menuIsland = island;
@@ -200,7 +216,55 @@ function openMenu(island) {
     // Janela destruída no meio do pedido: sem isto menuIsland ficaria preso e todo pedido seguinte
     // seria descartado.
     menuIsland = null;
+    applyCapture(island);
     console.error('Não foi possível abrir o menu da ilha:', error.message);
+  }
+}
+
+// Arraste e menu seguram a captura: soltá-la no meio devolveria o clique à janela de trás. Quando eles
+// terminam, vale o último pedido do renderer. Sem a opção forward de setIgnoreMouseEvents: ela para de
+// funcionar sob janela elevada (UIPI, doc do Electron), e o hover vem do cursor do main de qualquer jeito.
+function applyCapture(island) {
+  if (!CAN_CLICK_THROUGH) return;
+  const capture = captureRequests.get(island) === true || dragStartPositions.has(island) || island === menuIsland;
+  island.setIgnoreMouseEvents(!capture);
+}
+
+// Solta a captura e manda o renderer desligar o hover: a janela transparente nunca fica engolindo cliques.
+function releaseCapture(island) {
+  captureRequests.delete(island);
+  nearIslands.delete(island);
+  if (island.isDestroyed()) return;
+  island.webContents.send('island:cursor', null);
+  applyCapture(island);
+}
+
+function cursorTick() {
+  const point = screen.getCursorScreenPoint();
+  for (const island of islands.values()) {
+    if (!island.isVisible()) continue;
+    const bounds = island.getBounds();
+    const isNear = point.x >= bounds.x - CURSOR_NEAR_PX && point.x <= bounds.x + bounds.width + CURSOR_NEAR_PX
+      && point.y >= bounds.y - CURSOR_NEAR_PX && point.y <= bounds.y + bounds.height + CURSOR_NEAR_PX;
+    if (isNear) {
+      nearIslands.add(island);
+      island.webContents.send('island:cursor', { x: point.x - bounds.x, y: point.y - bounds.y });
+    } else if (nearIslands.delete(island)) {
+      island.webContents.send('island:cursor', null);
+    }
+  }
+}
+
+// Só roda com pelo menos uma ilha visível e fora de ociosa (D-02). Ociosa ou sem ilha visível, nenhum
+// timer roda e nenhuma janela transparente segue engolindo cliques.
+function updateCursorTick() {
+  const active = lastPickedState.state !== 'idle' && [...islands.values()].some((island) => island.isVisible());
+  if (active && !cursorTimer) {
+    cursorTimer = setInterval(cursorTick, CURSOR_TICK_MS);
+  } else if (!active && cursorTimer) {
+    clearInterval(cursorTimer);
+    cursorTimer = null;
+    for (const island of islands.values()) releaseCapture(island);
   }
 }
 
@@ -279,6 +343,7 @@ function refresh(reason) {
   shownWindowPid = picked.windowPid ?? null;
   shown = nextShown;
   for (const island of islands.values()) sendState(island);
+  updateCursorTick();
 }
 
 function createIsland(display) {
@@ -304,6 +369,13 @@ function createIsland(display) {
   // fica para lá (Assumption A9).
   island.on('show', () => refresh('rearm'));
   island.on('restore', () => refresh('rearm'));
+  // Todo caminho que esconde a ilha (atalho e menu na Fase 4, tela cheia quando houver sensor) passa
+  // por este evento: a ilha escondida solta a captura e, se era a última visível, o timer do cursor
+  // para. Reexibir emite 'show', que chama refresh('rearm'), e o refresh religa o timer.
+  island.on('hide', () => {
+    releaseCapture(island);
+    updateCursorTick();
+  });
   // Por padrão o Chromium navega a janela quando um link ou arquivo é solto nela, e a página nova
   // herdaria o preload (window.island). A ilha nunca sai do index.html nem abre outra janela.
   island.webContents.on('will-navigate', (event) => event.preventDefault());
@@ -311,7 +383,7 @@ function createIsland(display) {
   island.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   island.setAlwaysOnTop(true, 'screen-saver'); // acima de apps em tela cheia
   island.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  if (CAN_CLICK_THROUGH) island.setIgnoreMouseEvents(true, { forward: true });
+  if (CAN_CLICK_THROUGH) island.setIgnoreMouseEvents(true);
   islands.set(display.id, island);
   // Janela criada depois (monitor plugado) não pode esperar a próxima mudança de estado.
   island.webContents.on('did-finish-load', () => sendState(island));
@@ -335,6 +407,8 @@ function syncIslands() {
     if (displays.some((display) => display.id === displayId)) continue;
     islands.delete(displayId);
     dragStartPositions.delete(island);
+    captureRequests.delete(island);
+    nearIslands.delete(island);
     island.destroy();
   }
 }
@@ -350,12 +424,13 @@ function registerIpcHandlers() {
     return BrowserWindow.fromWebContents(event.sender);
   };
 
-  ipcMain.on('island:hover', (event, isOverPill) => {
+  // Só um booleano: o renderer pede captura e o main aplica (arraste e menu a seguram). Outro valor,
+  // identificador ou preferência é ignorado.
+  ipcMain.on('island:capture', (event, capture) => {
     const island = islandOf(event);
-    // Durante o arraste o ponteiro pode sair da pílula (a janela para na borda da tela);
-    // religar o click-through ali soltaria o arraste.
-    if (!island || dragStartPositions.has(island) || !CAN_CLICK_THROUGH) return;
-    island.setIgnoreMouseEvents(!isOverPill, { forward: true });
+    if (!island || typeof capture !== 'boolean') return;
+    captureRequests.set(island, capture);
+    applyCapture(island);
   });
 
   // O renderer só pede "abrir"; itens, valores e gravação são do main (SEG-08).
@@ -380,6 +455,8 @@ function registerIpcHandlers() {
     const island = islandOf(event);
     const display = island && displayOf(island);
     if (!display || !dragStartPositions.delete(island)) return;
+    // O arraste segurava a captura; terminado, volta o último pedido do renderer.
+    applyCapture(island);
     const standard = defaultIslandPosition(display.workArea, WINDOW_SIZE);
     const bounds = island.getBounds();
     savedOffsets[display.id] = { x: bounds.x - standard.x, y: bounds.y - standard.y };

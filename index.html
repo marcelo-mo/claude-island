@@ -554,6 +554,33 @@
   }
   // mola:fim
 
+  // hover:inicio
+  // Regra pura do hover. Fica inline pelo mesmo motivo dos blocos acima: a CSP só aceita script inline
+  // e o renderer em sandbox não carrega o state.js; e só o renderer conhece o retângulo vivo da pílula,
+  // que muda a cada quadro da mola. hover.test.js executa exatamente este texto num contexto vazio:
+  // só constantes e funções que nunca lançam.
+  // 8 px cobre a deriva de +1 a +3 DIP do getBounds() a 125% e a ampliação de 2,5% do hover (medido
+  // na pesquisa da Fase 4); entrar só 2 px para dentro evita pegar o hover de raspão na borda. Escolha
+  // de projeto, fixada por vetor em hover.test.js.
+  const HOVER_ENTER_PX = 2;
+  const HOVER_LEAVE_PX = 8;
+
+  /**
+   * Se o cursor está sobre a pílula, com histerese: estando dentro (inside exatamente true), só sai
+   * quando o ponto passa HOVER_LEAVE_PX para fora do retângulo; estando fora, só entra quando o ponto
+   * fica HOVER_ENTER_PX para dentro. Ponto ou retângulo ausente ou não numérico, e entrada ausente,
+   * devolvem false, que é não capturar. Nunca lança.
+   */
+  function hoverStep(input) {
+    const { inside, point, rect } = input || {};
+    const values = [point?.x, point?.y, rect?.left, rect?.top, rect?.right, rect?.bottom];
+    if (!values.every((value) => Number.isFinite(value))) return false;
+    const margin = inside === true ? HOVER_LEAVE_PX : -HOVER_ENTER_PX;
+    return point.x >= rect.left - margin && point.x <= rect.right + margin
+      && point.y >= rect.top - margin && point.y <= rect.bottom + margin;
+  }
+  // hover:fim
+
   // A CSS pausa as animações com a janela escondida; o Electron só reporta hidden com hide() ou minimizada.
   document.addEventListener('visibilitychange', () => { document.documentElement.dataset.hidden = document.hidden; });
   const pill = document.getElementById('pill');
@@ -575,6 +602,8 @@
   const TITLES = { running: 'Trabalhando', waiting: 'Precisa de você', done: 'Concluído' };
   let current = { state: 'idle' };
   let hovering = false;
+  // Último ponto do cursor vindo do main, em coordenadas da janela; null com o cursor longe.
+  let lastCursorPoint = null;
   let answeredPermissionId = null;
   let readPermissionId = null;
   // Armamento dos botões. armToken é a geração: toda volta ao desarmado a muda, o que invalida
@@ -977,17 +1006,23 @@
     document.getElementById(id).addEventListener('click', () => window.island.focusSession());
   }
 
-  // A janela deixa o clique atravessar; só a pílula (e o botão dentro dela) captura o mouse.
-  function setHovering(isOverPill) {
-    hovering = isOverPill;
-    window.island.setHover(isOverPill);
+  // A janela deixa o clique atravessar; só a pílula (e o botão dentro dela) captura o mouse. O hover vem
+  // só do cursor que o main entrega (único jeito que funciona sob janela elevada): decide-se contra o
+  // retângulo vivo da pílula, já escalado. Hover e captura nunca armam nem desarmam os botões (D-04).
+  function updateHover() {
+    // No meio de um arraste a pílula não pode encolher nem devolver o clique para a janela de trás;
+    // o fim do arraste reavalia.
+    if (drag) return;
+    // Ociosa, a pílula some e não segura o clique de ninguém.
+    const next = current.state !== 'idle' && hoverStep({
+      inside: hovering, point: lastCursorPoint, rect: pill.getBoundingClientRect(),
+    });
+    if (next === hovering) return;
+    hovering = next;
+    window.island.setCapture(hovering);
     render();
   }
-  pill.addEventListener('mouseenter', () => setHovering(true));
-  // Rede de segurança: se um mouseenter se perder, o primeiro movimento sobre a pílula corrige.
-  pill.addEventListener('mousemove', () => { if (!hovering) setHovering(true); });
-  // No meio de um arraste a pílula não pode encolher nem devolver o clique para a janela de trás.
-  pill.addEventListener('mouseleave', () => { if (!drag) setHovering(false); });
+  window.island.onCursor((point) => { lastCursorPoint = point; updateHover(); });
 
   // Arraste manual: -webkit-app-region: drag engoliria, no Windows, o hover e o clique no botão.
   // Abaixo deste limiar é clique (ou duplo clique), não arraste.
@@ -1022,11 +1057,8 @@
     drag = null;
     pill.classList.remove('dragging');
     if (moved) window.island.endDrag();
-    // O mouseleave foi ignorado durante o arraste: confere onde o ponteiro terminou.
-    const rect = pill.getBoundingClientRect();
-    const isOverPill = event.clientX >= rect.left && event.clientX <= rect.right
-      && event.clientY >= rect.top && event.clientY <= rect.bottom;
-    if (isOverPill !== hovering) setHovering(isOverPill);
+    // O hover ficou congelado durante o arraste: reavalia pelo último ponto do cursor.
+    updateHover();
   });
 
   // O renderer só pede para abrir o menu: quem monta, marca e grava é o main (SEG-08).
@@ -1038,9 +1070,8 @@
   pill.addEventListener('dblclick', (event) => {
     if (event.target.closest('button, #permission')) return;
     window.island.resetPosition();
-    // A janela sai de baixo do ponteiro sem gerar mouseleave; sem isto a pílula ficaria
-    // expandida e a janela bloqueando cliques até o mouse passar por ela de novo.
-    setHovering(false);
+    // A janela sai de baixo do ponteiro: o próximo tique do cursor (até 33 ms) recolhe a pílula e solta
+    // a captura.
   });
 </script>
 </body>
