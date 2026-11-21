@@ -7,8 +7,8 @@ const STATE_DIR = path.join(os.homedir(), '.claude', 'island');
 const DECISIONS_DIR = path.join(STATE_DIR, 'decisions');
 // Batimento da ilha: sem ele o permission-hook não espera por botões que ninguém vai ver.
 const HEARTBEAT_FILE = path.join(STATE_DIR, '.heartbeat');
-// Preferências visuais (tema, forma, estilo e velocidade da animação). Nesta fase só o main lê o
-// arquivo; quem grava é o menu da Fase 4.
+// Preferências da ilha. O main lê na subida e grava pelo menu (por .tmp + rename); o .tmp e a
+// quarentena .bad ficam fora da leitura de sessões por não terminarem em .json.
 const PREFERENCES_FILE = path.join(STATE_DIR, 'preferences.json');
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const HEARTBEAT_STALE_MS = 6_000;
@@ -321,9 +321,58 @@ const SHAPES = Object.freeze(['pill', 'notch', 'win11']);
 const ANIMATION_STYLES = Object.freeze(['smooth', 'default', 'bouncy', 'snappy']);
 const ANIMATION_SPEED_MIN = 0.5;
 const ANIMATION_SPEED_MAX = 2;
+const EXPAND_ON = Object.freeze(['hover', 'click']);
+// Degraus de transparência do mod Dynamic Island for Windows (MIT, ver THIRD_PARTY_NOTICES.md).
+const OPACITY_LEVELS = Object.freeze([1, 0.85, 0.7, 0.55]);
+// As seis âncoras do mesmo mod (MIT, ver THIRD_PARTY_NOTICES.md).
+const ANCHORS = Object.freeze(['top-center', 'top-left', 'top-right', 'bottom-center', 'bottom-left', 'bottom-right']);
+const ISLAND_MODES = Object.freeze(['perDisplay', 'primary', 'cursor']);
+// Ctrl+Alt+C produz ¢ com AltGr+C no ABNT2 do autor e o register() do Electron não enxerga esse
+// conflito; com Ctrl+Alt+Shift nenhuma letra produz caractere no ABNT2 nem no US (medido).
+const DEFAULT_SHORTCUT = 'Control+Alt+Shift+C';
+// ponytail: só letras, números e +; teclas de pontuação ficam de fora até alguém pedir. Um
+// acelerador com forma válida que o Electron recusa vira status 'invalid' no registro do atalho.
+const SHORTCUT_PATTERN = /^[A-Za-z0-9]+(?:\+[A-Za-z0-9]+)*$/;
+const SHORTCUT_MAX_LENGTH = 64;
+// Sobe quando uma chave muda de nome ou de sentido, para a leitura poder migrar o arquivo antigo.
+const PREFERENCES_VERSION = 1;
+// Arquivo de preferências acima disto não é lido: vai para a quarentena.
+const PREFERENCES_MAX_BYTES = 64 * 1024;
 // Velocidades oferecidas no menu; o arquivo continua aceitando qualquer número da faixa acima.
 const ANIMATION_SPEED_STEPS = Object.freeze([0.5, 0.75, 1, 1.5, 2]);
-const DEFAULT_PREFERENCES = Object.freeze({ theme: 'auto', shape: 'pill', animationStyle: 'default', animationSpeed: 1 });
+const DEFAULT_PREFERENCES = Object.freeze({
+  theme: 'auto',
+  shape: 'pill',
+  animationStyle: 'default',
+  animationSpeed: 1,
+  expandOn: 'hover',
+  pinExpanded: false,
+  opacity: 1,
+  anchor: 'top-center',
+  islandMode: 'perDisplay',
+  shortcut: DEFAULT_SHORTCUT,
+  version: PREFERENCES_VERSION,
+});
+
+const isOneOf = (list) => (value) => typeof value === 'string' && list.includes(value);
+
+// Um predicado por chave do esquema: decide se o valor vindo do arquivo vale. Valor que não passa
+// volta ao padrão da chave.
+const PREFERENCE_VALIDATORS = Object.freeze({
+  theme: isOneOf(THEMES),
+  shape: isOneOf(SHAPES),
+  animationStyle: isOneOf(ANIMATION_STYLES),
+  // NaN e Infinity falham na comparação.
+  animationSpeed: (value) => typeof value === 'number' && value >= ANIMATION_SPEED_MIN && value <= ANIMATION_SPEED_MAX,
+  expandOn: isOneOf(EXPAND_ON),
+  pinExpanded: (value) => typeof value === 'boolean',
+  // includes já recusa string e NaN; a ilha nunca fica invisível.
+  opacity: (value) => OPACITY_LEVELS.includes(value),
+  anchor: isOneOf(ANCHORS),
+  islandMode: isOneOf(ISLAND_MODES),
+  shortcut: (value) => typeof value === 'string' && value.length <= SHORTCUT_MAX_LENGTH && SHORTCUT_PATTERN.test(value),
+  version: (value) => Number.isInteger(value) && value >= 1,
+});
 
 /**
  * Diz se um nome de arquivo da pasta da ilha é o estado de uma sessão. O preferences.json mora na
@@ -335,24 +384,31 @@ function isSessionFile(fileName) {
 }
 
 /**
- * Preferências visuais válidas a partir do que veio do arquivo, que pode estar ausente, corrompido
- * ou ter sido editado à mão. Devolve sempre um objeto novo com só as quatro chaves
- * { theme, shape, animationStyle, animationSpeed }; cada chave inválida ou ausente cai sozinha no
- * valor de DEFAULT_PREFERENCES. A velocidade só vale como número entre ANIMATION_SPEED_MIN e
- * ANIMATION_SPEED_MAX. Nunca lança e nunca muta a entrada.
+ * Preferências válidas a partir do que veio do arquivo, que pode estar ausente, corrompido ou ter
+ * sido editado à mão. Devolve sempre um objeto novo e completo, com as 11 chaves de
+ * DEFAULT_PREFERENCES na mesma ordem; cada chave inválida ou ausente cai sozinha no padrão dela.
+ * Só as chaves do esquema são lidas, e só se forem próprias da entrada: chave extra, `__proto__` e
+ * valor herdado são ignorados. Nunca lança e nunca muta a entrada.
  */
 function normalizePreferences(input) {
-  const { theme, shape, animationStyle, animationSpeed } = input || {};
-  const pick = (value, list, fallback) => (typeof value === 'string' && list.includes(value) ? value : fallback);
-  return {
-    theme: pick(theme, THEMES, DEFAULT_PREFERENCES.theme),
-    shape: pick(shape, SHAPES, DEFAULT_PREFERENCES.shape),
-    animationStyle: pick(animationStyle, ANIMATION_STYLES, DEFAULT_PREFERENCES.animationStyle),
-    // NaN e Infinity falham na comparação.
-    animationSpeed: typeof animationSpeed === 'number' && animationSpeed >= ANIMATION_SPEED_MIN && animationSpeed <= ANIMATION_SPEED_MAX
-      ? animationSpeed
-      : DEFAULT_PREFERENCES.animationSpeed,
-  };
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const result = {};
+  for (const key of Object.keys(DEFAULT_PREFERENCES)) {
+    result[key] = Object.hasOwn(source, key) && PREFERENCE_VALIDATORS[key](source[key])
+      ? source[key]
+      : DEFAULT_PREFERENCES[key];
+  }
+  return result;
+}
+
+/**
+ * Caminho de quarentena de um arquivo estragado: `<arquivo>.<carimbo>.bad`, com `now` truncado.
+ * Cada arquivo estragado ganha a sua cópia e uma quarentena nunca sobrescreve a anterior. O nome não
+ * termina em .json, então isSessionFile o ignora. Se `now` não for um número finito, cai em
+ * `<arquivo>.bad`. Nunca lança.
+ */
+function quarantinePath(file, now) {
+  return Number.isFinite(now) ? `${file}.${Math.trunc(now)}.bad` : `${file}.bad`;
 }
 
 // Rótulos do menu em pt-BR, por chave e por valor (o arquivo guarda os valores em inglês). A chave da
@@ -406,4 +462,6 @@ module.exports = {
   nextShownPermission,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
   normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate,
+  EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, SHORTCUT_PATTERN, SHORTCUT_MAX_LENGTH,
+  PREFERENCES_VERSION, PREFERENCES_MAX_BYTES, PREFERENCE_VALIDATORS, quarantinePath,
 };

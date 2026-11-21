@@ -417,9 +417,15 @@ test('com o palco fora da área útil o renderer desabilita os botões e manda r
 // que veio no payload. Canal novo para o renderer escolher preferência quebraria RENDERER_CHANNELS.
 // A gravação passou a existir na Fase 4, só pelo menu nativo, e sempre por .tmp + rename.
 test('o main lê as preferências uma vez, não as vigia e só as grava pelo menu, por .tmp e rename', () => {
-  assert.ok(mainSource.includes(
-    "preferences = normalizePreferences(JSON.parse(fs.readFileSync(PREFERENCES_FILE, 'utf8')));",
-  ), 'main.js sem a leitura normalizada do preferences.json');
+  assert.ok(mainSource.includes('preferences = normalizePreferences(JSON.parse(text));'), 'main.js sem a leitura normalizada do preferences.json');
+  // Leitura tolerante (D-07): teto de tamanho e quarentena com carimbo de tempo, que nunca sobrescreve outra.
+  assert.ok(mainSource.includes('PREFERENCES_MAX_BYTES'), 'main.js sem o teto do arquivo de preferências');
+  assert.ok(mainSource.includes('quarantinePath(PREFERENCES_FILE, Date.now())'), 'main.js sem a quarentena com carimbo');
+  assert.equal(
+    mainSource.includes('writeFileAtomic(positionsFile(), JSON.stringify(savedOffsets))'), true,
+    'positions.json grava por .tmp + rename',
+  );
+  assert.equal(mainSource.includes('writeFileSync(positionsFile()'), false, 'main.js grava o positions.json direto');
   assert.equal(mainSource.split('loadPreferences()').length - 1, 2, 'loadPreferences: definição e uma só chamada');
   assert.equal(/\.watch(?:File)?\(/.test(mainSource), false, 'main.js vigia um arquivo');
   assert.equal(/writeFileSync\(\s*PREFERENCES_FILE/.test(mainSource), false, 'main.js grava o preferences.json direto');

@@ -7,7 +7,7 @@ const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
-  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset, menuTemplate,
+  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -58,17 +58,42 @@ function loadSavedOffsets() {
   }
 }
 
-function loadPreferences() {
+// O arquivo é editado à mão, e a próxima gravação do menu apagaria o que o usuário escreveu errado.
+// Guardado com carimbo de tempo, nenhuma cópia anterior se perde e dá para consertar.
+function quarantinePreferences() {
+  const quarantined = quarantinePath(PREFERENCES_FILE, Date.now());
   try {
-    preferences = normalizePreferences(JSON.parse(fs.readFileSync(PREFERENCES_FILE, 'utf8')));
+    fs.renameSync(PREFERENCES_FILE, quarantined);
+    console.error('Preferências da ilha inválidas; o arquivo foi guardado em', quarantined);
+  } catch (error) {
+    // nem renomear deu: valem só os padrões
+    console.error('Não foi possível guardar o arquivo de preferências inválido:', error.message);
+  }
+}
+
+// Nunca lança: arquivo ausente, corrompido, enorme ou ilegível não impede a ilha de subir.
+function loadPreferences() {
+  let text;
+  try {
+    if (fs.statSync(PREFERENCES_FILE).size > PREFERENCES_MAX_BYTES) {
+      quarantinePreferences();
+      return;
+    }
+    text = fs.readFileSync(PREFERENCES_FILE, 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.error('Não foi possível ler as preferências da ilha:', error.message);
+    return; // sem arquivo ou ilegível: valem os padrões
+  }
+  try {
+    preferences = normalizePreferences(JSON.parse(text));
   } catch {
-    // arquivo ausente ou corrompido: valem os padrões
+    quarantinePreferences();
   }
 }
 
 function persistSavedOffsets() {
   try {
-    fs.writeFileSync(positionsFile(), JSON.stringify(savedOffsets));
+    writeFileAtomic(positionsFile(), JSON.stringify(savedOffsets));
   } catch (error) {
     console.error('Não foi possível salvar a posição da ilha:', error.message);
   }
