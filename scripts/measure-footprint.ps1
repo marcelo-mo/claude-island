@@ -336,7 +336,14 @@ foreach ($scenario in $Scenarios) {
         if (Test-Path $errFile) { $tail = (Get-Content $errFile -Raw); if ($tail) { $failure += ': ' + $tail.Substring(0, [Math]::Min(300, $tail.Length)) } }
       }
     } finally {
-      & taskkill.exe /PID $proc.Id /T /F 2>&1 | Out-Null   # por PID, nunca por nome: a ilha viva também é electron.exe
+      # Raiz que já saiu: o PID pode ter sido reaproveitado, então não se mata nada. Com 'Stop', o stderr do taskkill
+      # (PID inexistente) viraria erro terminante no PowerShell 5.1 e interromperia este finally (a pasta vazaria e
+      # a tentativa 'crashed' não seria gravada); por isso o 'Continue' ao redor da chamada.
+      if (-not $proc.HasExited) {
+        $previousPreference = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        & taskkill.exe /PID $proc.Id /T /F 2>&1 | Out-Null   # por PID, nunca por nome: a ilha viva também é electron.exe
+        $ErrorActionPreference = $previousPreference
+      }
       Start-Sleep -Seconds 2
       Remove-Item $home1 -Recurse -Force -ErrorAction SilentlyContinue
     }
