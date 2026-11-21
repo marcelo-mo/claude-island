@@ -7,6 +7,7 @@ const {
   eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
   keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh, PERMISSION_TEXT_LIMIT,
   normalizePreferences, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES, isSessionFile,
+  EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES,
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
@@ -250,14 +251,15 @@ test('normalizePreferences: entrada que não é objeto devolve o padrão', () =>
 
 test('normalizePreferences: objeto válido completo volta igual', () => {
   const valid = { theme: 'nord', shape: 'notch', animationStyle: 'bouncy', animationSpeed: 2 };
-  assert.deepEqual(normalizePreferences(valid), valid);
+  assert.deepEqual(normalizePreferences(valid), { ...DEFAULT_PREFERENCES, ...valid });
 });
 
 test('normalizePreferences: cada chave inválida cai sozinha no padrão', () => {
   const valid = { theme: 'nord', shape: 'notch', animationStyle: 'bouncy', animationSpeed: 2 };
-  assert.deepEqual(normalizePreferences({ ...valid, theme: 'NORD' }), { ...valid, theme: 'auto' });
-  assert.deepEqual(normalizePreferences({ ...valid, shape: 3 }), { ...valid, shape: 'pill' });
-  assert.deepEqual(normalizePreferences({ ...valid, animationStyle: 'elastico' }), { ...valid, animationStyle: 'default' });
+  const complete = { ...DEFAULT_PREFERENCES, ...valid };
+  assert.deepEqual(normalizePreferences({ ...valid, theme: 'NORD' }), { ...complete, theme: 'auto' });
+  assert.deepEqual(normalizePreferences({ ...valid, shape: 3 }), { ...complete, shape: 'pill' });
+  assert.deepEqual(normalizePreferences({ ...valid, animationStyle: 'elastico' }), { ...complete, animationStyle: 'default' });
   // 'toString' e 'constructor' existem no protótipo: a lista decide, não a busca por propriedade.
   assert.equal(normalizePreferences({ theme: 'constructor' }).theme, 'auto');
 });
@@ -271,10 +273,10 @@ test('normalizePreferences: velocidade só vale dentro da faixa e como número',
 });
 
 test('normalizePreferences: descarta chave desconhecida, não muta a entrada e devolve objeto novo', () => {
-  const input = { theme: 'slate', opacity: 0.5 };
+  const input = { theme: 'slate', cor: 'vermelho' };
   const snapshot = JSON.stringify(input);
   const result = normalizePreferences(input);
-  assert.deepEqual(Object.keys(result).sort(), ['animationSpeed', 'animationStyle', 'shape', 'theme']);
+  assert.deepEqual(Object.keys(result), Object.keys(DEFAULT_PREFERENCES));
   assert.equal(result.theme, 'slate');
   assert.equal(JSON.stringify(input), snapshot);
   assert.notEqual(normalizePreferences({}), DEFAULT_PREFERENCES);
@@ -287,7 +289,13 @@ test('DEFAULT_PREFERENCES está congelado e cada valor pertence à lista dele', 
   assert.ok(SHAPES.includes(DEFAULT_PREFERENCES.shape));
   assert.ok(ANIMATION_STYLES.includes(DEFAULT_PREFERENCES.animationStyle));
   assert.equal(DEFAULT_PREFERENCES.animationSpeed, 1);
-  for (const list of [THEMES, SHAPES, ANIMATION_STYLES]) assert.ok(Object.isFrozen(list));
+  for (const list of [THEMES, SHAPES, ANIMATION_STYLES, EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES]) {
+    assert.ok(Object.isFrozen(list));
+  }
+  assert.ok(EXPAND_ON.includes(DEFAULT_PREFERENCES.expandOn));
+  assert.ok(OPACITY_LEVELS.includes(DEFAULT_PREFERENCES.opacity));
+  assert.ok(ANCHORS.includes(DEFAULT_PREFERENCES.anchor));
+  assert.ok(ISLAND_MODES.includes(DEFAULT_PREFERENCES.islandMode));
 });
 
 test('THEMES tem 9 itens e começa por auto', () => {
@@ -349,5 +357,8 @@ test('só arquivo de sessão entra na leitura da pasta: o preferences.json nunca
   assert.equal(isSessionFile('preferences.json'), false);
   assert.equal(isSessionFile('.heartbeat'), false);
   assert.equal(isSessionFile('abc.json.tmp'), false);
+  assert.equal(isSessionFile('preferences.json.bad'), false);
+  assert.equal(isSessionFile('preferences.json.tmp'), false);
+  assert.equal(isSessionFile('preferences.json.1732200000000.bad'), false);
   assert.equal(isSessionFile(undefined), false);
 });
