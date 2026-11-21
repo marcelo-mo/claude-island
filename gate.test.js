@@ -1608,3 +1608,101 @@ test('readSessions apaga a sessão morta antes de ela ganhar chave e ordem, e s�
   assert.equal(body.split('fs.rmSync(').length - 1, 1, 'readSessions só remove um arquivo, o da sessão morta');
   assert.ok(body.includes('const now = Date.now();'));
 });
+
+// --- Fase 5: mola da troca de sessão (D-17) ---
+
+const tabRules = loadInlineBlock(SPRING_START, SPRING_END, [
+  'SPRING_TAB', 'TAB_SWITCH_OFFSET_PX', 'TAB_SWITCH_SCALE', 'springParams', 'springStep', 'isSpringAtRest',
+  'REST_DISTANCE_PX', 'REST_SPEED_PX_S', 'tabSwitchFrame',
+]);
+
+test('springParams: a direção tab devolve a mola da troca do mod, sem fator de estilo, e a desconhecida segue neutra', () => {
+  for (const style of ['default', 'bouncy', 'estilo-inventado']) {
+    assert.deepEqual(plain(tabRules.springParams('tab', style)), { stiffness: 250, damping: 31 });
+  }
+  assert.deepEqual(plain(tabRules.SPRING_TAB), { stiffness: 250, damping: 31 });
+  assert.equal(tabRules.TAB_SWITCH_OFFSET_PX, 34);
+  assert.equal(tabRules.TAB_SWITCH_SCALE, 0.965);
+  assert.notEqual(tabRules.springParams('tab', 'default'), tabRules.SPRING_TAB, 'cópia, nunca o objeto da constante');
+  assert.deepEqual(plain(tabRules.springParams('sideways', 'snappy')), { stiffness: 280, damping: 24 });
+});
+
+test('tabSwitchFrame: escala e fade seguem o deslocamento, sem passar do deslocamento da troca e sem NaN', () => {
+  const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
+  for (const offset of [34, -34, 100, -100]) {
+    assert.deepEqual(plain(tabRules.tabSwitchFrame(offset)), { scale: 0.965, opacity: 0 });
+  }
+  assert.deepEqual(plain(tabRules.tabSwitchFrame(0)), { scale: 1, opacity: 1 });
+  const half = tabRules.tabSwitchFrame(17);
+  near(half.scale, 0.9825);
+  near(half.opacity, 0.5);
+  for (const invalid of [NaN, undefined, '34', null, Infinity]) {
+    assert.deepEqual(plain(tabRules.tabSwitchFrame(invalid)), { scale: 1, opacity: 1 }, `entrada ${String(invalid)}`);
+  }
+});
+
+test('a mola da troca assenta em menos de 1 s a 1x e nunca passa de 1 px além do alvo, para os dois lados', () => {
+  for (const start of [34, -34]) {
+    for (const speed of [0.5, 1, 2]) {
+      let current = {
+        position: start, velocity: 0, target: 0, direction: 'tab',
+        restDistance: tabRules.REST_DISTANCE_PX, restSpeed: tabRules.REST_SPEED_PX_S,
+      };
+      let elapsedMs = 0;
+      let overshoot = 0;
+      while (!tabRules.isSpringAtRest(current) && elapsedMs < 10_000) {
+        current = tabRules.springStep(current, 16, 'default', speed);
+        overshoot = Math.max(overshoot, current.position * -Math.sign(start));
+        elapsedMs += 16;
+      }
+      assert.ok(tabRules.isSpringAtRest(current), `${start} a ${speed}×: não assentou`);
+      assert.ok(overshoot <= 1, `${start} a ${speed}×: passou ${overshoot} px`);
+      if (speed === 1) assert.ok(elapsedMs < 1000, `${start} a 1×: assentou em ${elapsedMs} ms`);
+    }
+  }
+});
+
+test('a cola liga a mola da troca ao laço, ao canArm e ao onState, antes de o estado novo virar o atual', () => {
+  const literal = rendererLf.indexOf('const springs = {');
+  const tab = rendererLf.indexOf('springs.tab = {');
+  assert.ok(literal >= 0 && tab > literal, 'springs.tab entra depois do literal travado');
+  assert.match(rendererLf.slice(tab, rendererLf.indexOf('};', tab)), /direction: 'tab'/);
+  const apply = functionBody('applySprings');
+  assert.ok(apply.includes('const tab = tabSwitchFrame(springs.tab.position);'));
+  for (const piece of [
+    "pill.style.setProperty('--tab-offset', `${springs.tab.position}px`);",
+    "pill.style.setProperty('--tab-scale', String(tab.scale));",
+    "pill.style.setProperty('--tab-fade', String(tab.opacity));",
+  ]) {
+    assert.ok(apply.includes(piece), `applySprings sem: ${piece}`);
+  }
+  const writers = apply.match(/\.style\.(?:transform|translate|scale)\b/g) || [];
+  assert.equal(writers.length, 1, 'applySprings só escreve o transform da pílula, na linha travada');
+  assert.ok(apply.includes('pill.style.transform = '));
+  assert.ok(rendererLf.includes('const allSpringsAtRest = () => Object.values(springs).every(isSpringAtRest);'));
+  assert.ok(rendererLf.includes('canArm({ settled: step.settled, springsAtRest: allSpringsAtRest() })'));
+  const onState = rendererLf.slice(rendererLf.indexOf('window.island.onState('));
+  const push = onState.indexOf('switchDirection * TAB_SWITCH_OFFSET_PX');
+  assert.ok(push >= 0 && push < onState.indexOf('current = next;'), 'o empurrão decide antes de current = next');
+  assert.ok(onState.includes('if (switchDirection !== 0) springs.tab = { ...springs.tab, position: switchDirection * TAB_SWITCH_OFFSET_PX, velocity: 0, target: 0 };'));
+});
+
+test('a mola da troca nunca alcança um botão da pílula: só #lead, #detail e #permission, sem botão dentro', () => {
+  const rules = [...styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, , body]) => body.includes('var(--tab-'));
+  assert.ok(rules.length >= 2, 'a regra da troca existe');
+  const selectors = new Set();
+  for (const [, selector] of rules) {
+    for (const part of selector.split(',')) selectors.add(part.trim());
+    assert.equal(/button|#sessions|#side|#bar|#open|#actions|#allow|#deny|#pill/.test(selector), false, `a troca alcança: ${selector.trim()}`);
+  }
+  assert.deepEqual([...selectors].sort(), ['#detail', '#lead', '#permission']);
+  const between = (from, to) => rendererLf.slice(rendererLf.indexOf(from), rendererLf.indexOf(to));
+  for (const [from, to] of [['id="lead"', 'id="side"'], ['id="detail"', 'id="permission"'], ['id="permission"', 'id="actions"']]) {
+    const html = between(from, to);
+    assert.ok(html.length > from.length, `trecho vazio: ${from}`);
+    assert.equal(html.includes('<button'), false, `${from} contém botão`);
+    assert.equal(html.includes('id="sessions"'), false, `${from} contém os pontos`);
+  }
+  assert.equal(rendererLf.split("createElement('button')").length - 1, 1, 'só um lugar cria botão');
+  assert.ok(functionBody('renderSessions').includes("createElement('button')"), 'e é renderSessions');
+});
