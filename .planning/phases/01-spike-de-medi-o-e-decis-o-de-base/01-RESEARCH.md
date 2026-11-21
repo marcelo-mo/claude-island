@@ -692,12 +692,16 @@ Tauri vence somente se Etapa 1 e Etapa 2 passarem. Vencendo, o ROADMAP ganha a f
 | A10 | `target/` dentro do repo deixaria `node --test` lento | Estrutura | Só afeta onde pôr o `CARGO_TARGET_DIR` |
 | A11 | ~430 crates transitivas do tauri são confiáveis | Package Audit | Risco de cadeia de suprimentos aceito como o do upstream |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Escopo do gate de memória e tolerância de CPU (A1/A2).** O que sabemos: BASE-02 cita "≤60% do private working set" e "CPU ociosa ≤". O que falta: escolher cenários e tolerância. Recomendação: adotar o texto proposto e commitar; é o autor aprovando a regra no PR/checkpoint, antes dos números.
+   **RESOLVIDA → D-01 e D-02:** N1 vale nos 3 cenários (ociosa, trabalhando, precisa de você); N2 é o texto literal do autor, CPU(T0, ociosa) <= CPU(E_ref, ociosa), estrito e sem tolerância.
 2. **E2 (`--in-process-gpu`) como referência?** Só entra se as 3 capturas e as 9 execuções passarem; senão E3 é a referência.
+   **RESOLVIDA → D-12:** a elegibilidade de E2 é decidida pelas sondas antes de medir, gravada em `spike/results/eligibility.json` e passada como entrada explícita a `evaluateRule`; E2 com qualquer queda é excluída; inelegível, a referência é E3 mesmo que E2 gaste menos.
 3. **Halo interno do glow (A9).** Julgamento visual do autor no checkpoint de fim de fase; plano B descrito.
+   **RESOLVIDA → D-03:** halo interno aceito (pseudo-elemento, só `opacity`), com checagem visual do autor no checkpoint humano único do fim da fase; o plano B não é planejado.
 4. **Etapa 2 dentro da Fase 1 ou já como fase 3.1?** Se a Etapa 1 passar, o roadmap manda criar a 3.1. Recomendação: o plano condicional da Etapa 2 faz só F5/F6 mínimos e o checkpoint humano; o porte de verdade fica na 3.1.
+   **RESOLVIDA → D-04 e D-09:** a Etapa 2 só roda se a Etapa 1 passar; o Tauri só vence se a Etapa 1 passar e cada gate F1 a F6 for observado passando nesta fase. Gate não observado (inclusive F2, que exige polling de cursor em Rust) dá "Electron mantido; Tauri pendente de Etapa 2 incompleta", o orquestrador escala ao autor e nenhuma 3.1 é criada. F6 aqui = caminho de permissão ponta a ponta com o `permission-hook.js` real (allow, deny, id velho recusado); a paridade com `fixtures/permission-vectors.json` é o SEG-07, da fase 3.1.
 
 ## Environment Availability
 
