@@ -71,10 +71,11 @@ test("'Ilhas' oferece uma por monitor (padrão), só no principal e no monitor d
   assert.deepEqual(checkedValue(submenuOf(menuTemplate({ islandMode: 'cursor' }), 'Ilhas')), ['cursor']);
 });
 
-test("'Âncora' oferece as seis posições, com o rótulo de cada uma, e marca a atual", () => {
+test("'Âncora' oferece as seis posições e as duas ao lado da ilha do sistema, com o rótulo de cada uma, e marca a atual", () => {
   const anchor = submenuOf(menuTemplate(DEFAULT_PREFERENCES), 'Âncora');
   assert.deepEqual(anchor.submenu.map((item) => item.label), [
     'Topo, centro', 'Topo, esquerda', 'Topo, direita', 'Base, centro', 'Base, esquerda', 'Base, direita',
+    'Ao lado da ilha do sistema, à direita', 'Ao lado da ilha do sistema, à esquerda',
   ]);
   assert.deepEqual(checkedValue(anchor), ['top-center']);
   assert.deepEqual(checkedValue(submenuOf(menuTemplate({ anchor: 'bottom-right' }), 'Âncora')), ['bottom-right']);
