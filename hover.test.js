@@ -28,7 +28,7 @@ function functionBody(name) {
   return renderer.slice(start, renderer.indexOf('\n  }\n', start));
 }
 
-const hover = () => loadInlineBlock(HOVER_START, HOVER_END, ['HOVER_ENTER_PX', 'HOVER_LEAVE_PX', 'hoverStep']);
+const hover = () => loadInlineBlock(HOVER_START, HOVER_END, ['HOVER_ENTER_PX', 'HOVER_LEAVE_PX', 'hoverStep', 'shouldExpand']);
 
 test('as constantes da histerese são 2 px para entrar e 8 px para sair', () => {
   const { HOVER_ENTER_PX, HOVER_LEAVE_PX } = hover();
@@ -127,4 +127,72 @@ test('o fim do arraste reavalia o hover pelo último ponto e o armamento dos bot
   assert.equal(body.includes('clientX'), false, 'o hover não sai mais do ponteiro do DOM');
   assert.ok(renderer.includes("actions.addEventListener('pointermove', () => { lastPointerMoveAt = performance.now(); });"));
   assert.equal(renderer.split("document.addEventListener('visibilitychange'").length - 1, 3);
+});
+
+// ---- Expandir no hover ou no clique, e fixar aberta (D-04, D-05) ----
+
+test('shouldExpand: Precisa de você abre sozinho, com qualquer combinação', () => {
+  const { shouldExpand } = hover();
+  for (const hovering of [true, false]) {
+    for (const clickExpanded of [true, false]) {
+      for (const expandOn of ['hover', 'click', 'tap', undefined]) {
+        for (const pinExpanded of [true, false]) {
+          assert.equal(shouldExpand({ state: 'waiting', hovering, clickExpanded, expandOn, pinExpanded }), true);
+        }
+      }
+    }
+  }
+});
+
+test('shouldExpand: Trabalhando segue a preferência', () => {
+  const { shouldExpand } = hover();
+  const running = (change) => shouldExpand({
+    state: 'running', hovering: false, clickExpanded: false, expandOn: 'hover', pinExpanded: false, ...change,
+  });
+  assert.equal(running({ hovering: true }), true, 'hover, com o cursor');
+  assert.equal(running({ hovering: false }), false, 'hover, sem o cursor');
+  assert.equal(running({ hovering: 'true' }), false, 'hovering de texto não vale');
+  assert.equal(running({ expandOn: 'click', hovering: true }), false, 'clique: o cursor sozinho não expande');
+  assert.equal(running({ expandOn: 'click', hovering: true, clickExpanded: true }), true, 'clique: depois do clique');
+  assert.equal(running({ expandOn: 'click', hovering: true, clickExpanded: 'true' }), false, 'clickExpanded de texto não vale');
+  assert.equal(running({ pinExpanded: true }), true, 'fixada, sem hover nem clique');
+  assert.equal(running({ pinExpanded: true, expandOn: 'click' }), true, 'fixada, no modo clique');
+  assert.equal(running({ pinExpanded: 'true' }), false, 'pinExpanded de texto não vale');
+  assert.equal(running({ expandOn: 'tap', hovering: true }), true, 'valor desconhecido segue a regra do hover');
+  assert.equal(running({ expandOn: 'tap', hovering: false }), false);
+  assert.equal(running({ expandOn: undefined, hovering: true }), true);
+});
+
+test('shouldExpand: Concluído e ociosa nunca expandem, nem fixadas', () => {
+  const { shouldExpand } = hover();
+  for (const state of ['done', 'idle', 'bogus', undefined]) {
+    assert.equal(shouldExpand({ state, hovering: true, clickExpanded: true, expandOn: 'hover', pinExpanded: true }), false);
+    assert.equal(shouldExpand({ state, hovering: true, clickExpanded: true, expandOn: 'click', pinExpanded: true }), false);
+  }
+});
+
+test('shouldExpand: entrada ausente é false', () => {
+  const { shouldExpand } = hover();
+  assert.equal(shouldExpand(null), false);
+  assert.equal(shouldExpand(undefined), false);
+  assert.equal(shouldExpand(), false);
+});
+
+test('a cola da expansão: uma chamada só em renderContent, o clique expande e sair do hover desfaz o clique', () => {
+  const body = functionBody('renderContent');
+  assert.ok(body.includes(
+    "pill.classList.toggle('expanded', shouldExpand({ state: current.state, hovering, clickExpanded, "
+      + 'expandOn: current.preferences?.expandOn, pinExpanded: current.preferences?.pinExpanded }));',
+  ));
+  assert.equal(body.includes('expandsOnHover'), false, 'o cálculo antigo da expansão saiu');
+  const update = functionBody('updateHover');
+  assert.ok(update.includes('clickExpanded = false;'), 'sair do hover recolhe o modo clique');
+  const listener = renderer.slice(renderer.indexOf("pill.addEventListener('lostpointercapture'"));
+  const listenerBody = listener.slice(0, listener.indexOf('\n  });'));
+  assert.ok(listenerBody.includes('clickExpanded = true;'));
+  assert.ok(listenerBody.includes("current.preferences?.expandOn === 'click'"));
+  assert.ok(listenerBody.indexOf('updateHover();') < listenerBody.indexOf('clickExpanded = true;'), 'reavalia o hover antes de expandir');
+  for (const forbidden of ['restartArming', 'armed', 'decide(']) {
+    assert.equal(listenerBody.includes(forbidden), false, `o clique de expandir não pode tocar: ${forbidden}`);
+  }
 });

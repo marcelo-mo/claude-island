@@ -12,16 +12,33 @@ const VALUES_BY_KEY = {
   shape: SHAPES,
   animationStyle: ANIMATION_STYLES,
   animationSpeed: ANIMATION_SPEED_STEPS,
+  expandOn: EXPAND_ON,
 };
 
 const checkedValue = (submenu) => submenu.submenu.filter((item) => item.checked).map((item) => item.value);
 const submenuOf = (template, label) => template.find((item) => item.label === label);
 
-test('o menu padrão tem os quatro submenus, na ordem', () => {
+test('o menu padrão tem os itens, na ordem', () => {
   assert.deepEqual(
     menuTemplate(DEFAULT_PREFERENCES).map((item) => item.label),
-    ['Tema', 'Forma', 'Estilo da animação', 'Velocidade da animação'],
+    ['Tema', 'Forma', 'Estilo da animação', 'Velocidade da animação', 'Expandir', 'Fixar aberta'],
   );
+});
+
+test("'Expandir' oferece hover e clique, e 'Fixar aberta' grava o oposto do valor atual", () => {
+  const expand = submenuOf(menuTemplate(DEFAULT_PREFERENCES), 'Expandir');
+  assert.deepEqual(expand.submenu.map((item) => item.label), ['Ao passar o mouse', 'Ao clicar']);
+  assert.deepEqual(expand.submenu.map((item) => item.value), ['hover', 'click']);
+  assert.deepEqual(checkedValue(expand), ['hover']);
+  assert.deepEqual(checkedValue(submenuOf(menuTemplate({ expandOn: 'click' }), 'Expandir')), ['click']);
+
+  const pin = (preferences) => submenuOf(menuTemplate(preferences), 'Fixar aberta');
+  assert.deepEqual(pin(DEFAULT_PREFERENCES), {
+    type: 'checkbox', label: 'Fixar aberta', checked: false, key: 'pinExpanded', value: true,
+  });
+  assert.deepEqual(pin({ pinExpanded: true }), {
+    type: 'checkbox', label: 'Fixar aberta', checked: true, key: 'pinExpanded', value: false,
+  });
 });
 
 test('todo submenu com chave oferece exatamente a lista da chave, com um só marcado: o valor atual', () => {
