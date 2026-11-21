@@ -128,3 +128,23 @@ test('a CSP do renderer continua sem fonte de script nova', () => {
     `content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"`,
   ));
 });
+
+// O corpo MIT do mod é idêntico ao nosso LICENSE exceto a linha do titular (conferido por diff na
+// pesquisa, blob 30ee69c1c1d2c6804f4e845e303f59d4ef1a96e6), então comparar com o nosso LICENSE
+// prova o texto completo sem rede.
+test('o aviso de terceiros credita o mod com o texto MIT completo', () => {
+  const toLf = (text) => text.replace(/\r\n/g, '\n');
+  const notices = toLf(fs.readFileSync(path.join(__dirname, 'THIRD_PARTY_NOTICES.md'), 'utf8'));
+  const license = toLf(fs.readFileSync(path.join(__dirname, 'LICENSE'), 'utf8'));
+  const mitBody = license.slice(license.indexOf('Permission is hereby granted')).trim();
+  assert.ok(mitBody.startsWith('Permission is hereby granted'));
+  assert.ok(notices.includes(mitBody), 'o corpo MIT do LICENSE não está inteiro no aviso');
+  for (const expected of [
+    'Copyright (c) 2026 devcode90',
+    '1.4.0',
+    'https://github.com/devcode90/Dynamic-Island-for-Windows',
+    'Copyright (c) 2016-present Sven Greb',
+  ]) {
+    assert.ok(notices.includes(expected), `aviso sem: ${expected}`);
+  }
+});
