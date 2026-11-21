@@ -7,6 +7,7 @@ const {
   eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
   keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh, PERMISSION_TEXT_LIMIT,
   normalizePreferences, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES,
+  WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -294,4 +295,51 @@ test('THEMES tem 9 itens e começa por auto', () => {
   assert.equal(THEMES[0], 'auto');
   assert.deepEqual([...SHAPES], ['pill', 'notch', 'win11']);
   assert.deepEqual([...ANIMATION_STYLES], ['smooth', 'default', 'bouncy', 'snappy']);
+});
+
+// Palco da Fase 2, de onde se veio: o deslocamento salvo é relativo à posição padrão, então trocar o
+// palco não pode mover a pílula de quem já tem posição salva (D-14).
+const OLD_WINDOW_SIZE = { width: 440, height: 324 };
+const MONITOR_WORK_AREA = { x: 0, y: 0, width: 1920, height: 1040 };
+
+test('positionFromSavedOffset: sem deslocamento válido vale a posição padrão, e nada é mutado', () => {
+  const standard = defaultIslandPosition(MONITOR_WORK_AREA, WINDOW_SIZE);
+  for (const offset of [undefined, null, { x: 'a', y: 0 }, { x: NaN, y: 0 }, { x: 0 }, { x: Infinity, y: 0 }, 'x', 5, []]) {
+    assert.deepEqual(positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset), standard, `deslocamento ${JSON.stringify(offset)}`);
+  }
+  const offset = Object.freeze({ x: 300, y: 120 });
+  assert.doesNotThrow(() => positionFromSavedOffset(Object.freeze({ ...MONITOR_WORK_AREA }), WINDOW_SIZE, offset));
+  assert.deepEqual({ ...offset }, { x: 300, y: 120 });
+});
+
+test('positionFromSavedOffset: trocar o palco preserva o centro horizontal e o topo da pílula', () => {
+  const offset = { x: 300, y: 120 };
+  const standard = defaultIslandPosition(MONITOR_WORK_AREA, WINDOW_SIZE);
+  const position = positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset);
+  assert.deepEqual(position, { x: standard.x + 300, y: 120 });
+  const before = positionFromSavedOffset(MONITOR_WORK_AREA, OLD_WINDOW_SIZE, offset);
+  assert.equal(position.x + WINDOW_SIZE.width / 2, before.x + OLD_WINDOW_SIZE.width / 2, 'o centro horizontal andou');
+  assert.equal(position.y, before.y, 'o topo andou');
+});
+
+test('com o palco novo a pílula expandida ainda encosta nas duas bordas do monitor', () => {
+  const clamp = (offset) => clampIslandPosition(
+    positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset), MONITOR_WORK_AREA, WINDOW_SIZE, HORIZONTAL_SLACK,
+  );
+  assert.equal(clamp({ x: -5000, y: 0 }).x + HORIZONTAL_SLACK, MONITOR_WORK_AREA.x);
+  assert.equal(clamp({ x: 5000, y: 0 }).x + HORIZONTAL_SLACK + 400, MONITOR_WORK_AREA.x + MONITOR_WORK_AREA.width);
+});
+
+test('ilha salva na borda de baixo sobe o necessário para a janela caber na área útil (exceção aceita ao D-14)', () => {
+  // 716 = 1040 − 324: o mais baixo que a pílula ia com o palco antigo.
+  const saved = positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, { x: 0, y: 716 });
+  const clamped = clampIslandPosition(saved, MONITOR_WORK_AREA, WINDOW_SIZE, HORIZONTAL_SLACK);
+  assert.equal(clamped.y, MONITOR_WORK_AREA.height - WINDOW_SIZE.height);
+  assert.equal(saved.y - clamped.y, WINDOW_SIZE.height - OLD_WINDOW_SIZE.height, 'subiu mais ou menos que o palco cresceu');
+  assert.equal(isWithinWorkArea({ ...clamped, ...WINDOW_SIZE }, MONITOR_WORK_AREA, HORIZONTAL_SLACK), true);
+});
+
+test('na posição padrão a janela do palco novo está dentro da área útil e a decisão segue aceita', () => {
+  const standard = defaultIslandPosition(MONITOR_WORK_AREA, WINDOW_SIZE);
+  assert.equal(isWithinWorkArea({ ...standard, ...WINDOW_SIZE }, MONITOR_WORK_AREA, HORIZONTAL_SLACK), true);
 });

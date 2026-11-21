@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
-  effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES,
+  effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES, WINDOW_SIZE, HORIZONTAL_SLACK,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -742,4 +742,126 @@ test('a cola liga o nudge e o hover às molas neutras, nunca com pedido na tela'
   assert.match(rendererLf, /const springs = \{\s*nudge: \{[^}]*direction: 'neutral'[^}]*\},\s*scale: \{[^}]*direction: 'neutral'[^}]*SCALE_REST_DISTANCE[^}]*\},\s*\};/);
   assert.match(functionBody('applySprings'), /pill\.style\.transform = `translateY\(\$\{springs\.nudge\.position\}px\) scale\(\$\{springs\.scale\.position\}\)`;/);
   assert.match(rendererLf, /#pill \{[^}]*transform-origin: 50% 0;/);
+});
+
+// Palco fixo (D-13): a janela nunca muda de tamanho durante a animação, então ela tem de caber o pico
+// das molas no pior caso. As medidas da pílula saem do CSS do próprio index.html: um número estimado
+// à mão envelheceria calado quando uma regra mudasse.
+const styleRules = rendererLf.slice(rendererLf.indexOf('<style>'), rendererLf.indexOf('</style>')).replace(/\/\*[^]*?\*\//g, '');
+
+function cssDeclarations(selector) {
+  const found = [...styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, foundSelector]) => foundSelector.trim() === selector);
+  assert.ok(found.length > 0, `regra ausente no CSS do index.html: ${selector}`);
+  const entries = found.flatMap(([, , body]) => body.split(';').map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+    const colon = entry.indexOf(':');
+    return [entry.slice(0, colon).trim(), entry.slice(colon + 1).trim()];
+  }));
+  return Object.fromEntries(entries);
+}
+
+function cssPixels(value, what) {
+  const match = /^(-?\d+(?:\.\d+)?)px$/.exec(String(value).trim());
+  assert.ok(match, `${what}: esperava um valor em px, veio ${value}`);
+  return Number(match[1]);
+}
+
+// Cima e baixo do atalho `padding` (1 a 4 valores).
+function verticalPadding(value, what) {
+  const parts = String(value).trim().split(/\s+/).map((part) => cssPixels(part, what));
+  return parts[0] + (parts[2] ?? parts[0]);
+}
+
+// Tamanho da fonte e altura de linha (multiplicador) do atalho `font: 15px/1.3 …`.
+function fontMetrics(value, what) {
+  const match = /^(\d+(?:\.\d+)?)px\/(\d+(?:\.\d+)?)/.exec(String(value).trim());
+  assert.ok(match, `${what}: esperava font: <px>/<altura de linha>, veio ${value}`);
+  return { size: Number(match[1]), lineHeight: Number(match[2]) };
+}
+
+const lineHeightOfBody = fontMetrics(cssDeclarations('body').font, 'font do body').lineHeight;
+const textLine = (selector) => cssPixels(cssDeclarations(selector)['font-size'], `font-size de ${selector}`) * lineHeightOfBody;
+
+// Altura da pílula com o pior pedido, somada das regras do CSS (hoje 46 + 31,2 + 165,6 + 40,9 + 16 ≈ 299,7):
+//   barra (#bar) ........................ 46
+//   detalhe (#detail): 2 linhas de 12 px . 12 × 1,3 × 2 = 31,2
+//   pedido (#permission) ................ margem 8 + padding 16 + título (11 × 1,3 + 3) + texto com max-height 105
+//                                         + dica (5 + 11 × 1,3) = 165,6
+//   ações (#actions) .................... margem 8 + botão (13 × 1,3 + 8 × 2) = 40,9
+//   respiro de baixo (has-permission) ... 16
+function pillMaxHeight() {
+  const bar = cssPixels(cssDeclarations('#bar').height, 'altura de #bar');
+  const detail = textLine('#detail') * Number(cssDeclarations('#detail')['-webkit-line-clamp']);
+  const permission = cssDeclarations('#permission');
+  const tool = cssDeclarations('#permission-tool');
+  const hint = cssDeclarations('#permission-hint');
+  const permissionHeight = cssPixels(permission['margin-top'], 'margin-top de #permission')
+    + verticalPadding(permission.padding, 'padding de #permission')
+    + textLine('#permission-tool') + cssPixels(tool['margin-bottom'], 'margin-bottom de #permission-tool')
+    + cssPixels(cssDeclarations('#permission-text')['max-height'], 'max-height de #permission-text')
+    + cssPixels(hint['margin-top'], 'margin-top de #permission-hint') + textLine('#permission-hint');
+  const button = cssDeclarations('#actions button');
+  const actions = cssPixels(cssDeclarations('#actions')['margin-top'], 'margin-top de #actions')
+    + textLine('#actions button') + verticalPadding(button.padding, 'padding de #actions button');
+  const bottom = cssPixels(cssDeclarations('#pill.expanded.has-permission')['padding-bottom'], 'padding-bottom do pedido');
+  return bar + detail + permissionHeight + actions + bottom;
+}
+
+const expandedWidth = cssPixels(cssDeclarations('#pill.expanded').width, 'largura da expandida');
+const windowHeight = cssPixels(cssDeclarations('#pill.expanded.has-window').height, 'altura com a janela');
+// O respiro do topo é o maior --stage-top declarado: o notch o zera, as outras formas usam o do :root.
+const stageTop = Math.max(...[...styleRules.matchAll(/--stage-top:\s*(\d+(?:\.\d+)?)px/g)].map((match) => Number(match[1])));
+
+// Abaixo da menor pílula compacta (~137×46): conservador, porque quanto maior a viagem, maior a passagem.
+const PILL_MIN = { width: 120, height: 36 };
+// Sombra estática: espalhamento de 14 px mais deslocamento de 5 px, arredondado para cima.
+const SHADOW_MARGIN_PX = 20;
+
+// Maior posição que a mola de `from` a `to` alcança, em dois casos: (a) crescer de `from` até `to` e
+// (b) encolher de `to` até `from` com um alvo novo (`to`) em cada quadro de 16 ms do encolhimento,
+// que é o pior caso de uma pílula interrompida (D-02).
+function worstPeak(rules, from, to, style, speed, frameMs = 16) {
+  const settle = (start) => {
+    let current = start;
+    let peak = current.position;
+    for (let elapsed = 0; !rules.isSpringAtRest(current) && elapsed < 10_000; elapsed += frameMs) {
+      current = rules.springStep(current, frameMs, style, speed);
+      peak = Math.max(peak, current.position);
+    }
+    return peak;
+  };
+  let worst = settle(movingSpring(from, to));
+  let shrinking = movingSpring(to, from);
+  for (let elapsed = 0; !rules.isSpringAtRest(shrinking) && elapsed < 10_000; elapsed += frameMs) {
+    shrinking = rules.springStep(shrinking, frameMs, style, speed);
+    worst = Math.max(worst, settle(rules.retargetSpring(shrinking, to)));
+  }
+  return worst;
+}
+
+test('o palco cobre o pico das molas, com hover, nudge e sombra, em todo estilo e velocidade (ANIM-04)', () => {
+  const hoverPeak = Math.max(spring.HOVER_SCALE, simulateNeutral(neutralSpring(1, spring.HOVER_SCALE, spring.SCALE_REST_DISTANCE, spring.SCALE_REST_SPEED)).peak);
+  const nudgeRebound = Math.max(0, simulateNeutral(neutralSpring(spring.NUDGE_OFFSET_PX, 0, spring.REST_DISTANCE_PX, spring.REST_SPEED_PX_S)).peak);
+  const maxHeight = pillMaxHeight();
+  assert.ok(maxHeight > windowHeight, `o pior pedido (${maxHeight} px) deveria passar da pílula com a janela (${windowHeight} px)`);
+  for (const style of ANIMATION_STYLES) {
+    for (const speed of [0.5, 1, 2]) {
+      const widthPeak = worstPeak(spring, PILL_MIN.width, expandedWidth, style, speed);
+      const heightPeak = Math.max(
+        worstPeak(spring, PILL_MIN.height, maxHeight, style, speed),
+        worstPeak(spring, PILL_MIN.height, windowHeight, style, speed),
+      );
+      // A escala amplia a partir do centro do topo: a largura cresce dos dois lados e a altura só para baixo.
+      const neededWidth = widthPeak * hoverPeak + 2 * SHADOW_MARGIN_PX;
+      const neededHeight = stageTop + heightPeak * hoverPeak + nudgeRebound + SHADOW_MARGIN_PX;
+      const where = `${style} a ${speed}×: pico ${widthPeak.toFixed(1)}×${heightPeak.toFixed(1)}, precisa de ${neededWidth.toFixed(1)}×${neededHeight.toFixed(1)}, palco ${WINDOW_SIZE.width}×${WINDOW_SIZE.height}`;
+      assert.ok(WINDOW_SIZE.width >= neededWidth, `largura do palco curta: ${where}`);
+      assert.ok(WINDOW_SIZE.height >= neededHeight, `altura do palco curta: ${where}`);
+    }
+  }
+});
+
+test('a folga horizontal é o que sobra de cada lado da pílula expandida e o palco é congelado', () => {
+  assert.equal(HORIZONTAL_SLACK, (WINDOW_SIZE.width - expandedWidth) / 2);
+  assert.ok(Object.isFrozen(WINDOW_SIZE));
+  assert.ok(Number.isInteger(WINDOW_SIZE.width) && Number.isInteger(WINDOW_SIZE.height));
 });
