@@ -1,0 +1,24 @@
+{
+  "e2": false,
+  "reason": "criterio (b) reprovado: a captura PrintWindow de E2 no cenario waiting difere 44.6710% da de E3 (limite 1%); em running 0.9799% e em idle 0.0000%. As capturas de E2 saem inteiramente pretas, com o switch --in-process-gpu o PrintWindow nao enxerga o conteudo da janela, entao a equivalencia visual com E3 nao e demonstravel. E2 nao e medida e E_ref = E3.",
+  "tolerance": { "perChannel": 8, "maxDiffPercent": 1, "stabilityMaxPercent": 0.1 },
+  "stabilityPercent": 0,
+  "stability": {
+    "idle": 0,
+    "running": 0,
+    "waiting": 0
+  },
+  "captures": {
+    "idle": { "diffPercent": 0, "a": "e2-idle-a1-1-0.png", "b": "e3-idle-a1-1-0.png" },
+    "running": { "diffPercent": 0.9799, "a": "e2-running-a1-1-0.png", "b": "e3-running-a1-1-0.png" },
+    "waiting": { "diffPercent": 44.671, "a": "e2-waiting-a1-1-0.png", "b": "e3-waiting-a1-1-0.png" }
+  },
+  "probe": {
+    "warmupSeconds": 8,
+    "windowSeconds": 5,
+    "flags": "--force-prefers-reduced-motion (so nas sondas)",
+    "allWindowsValidD10": true,
+    "e2RootAlive": true
+  },
+  "measuredRuns": null
+}
