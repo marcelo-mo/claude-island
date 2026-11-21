@@ -113,6 +113,13 @@ EXCLUÍDA: e2 (criterio (b) reprovado: a captura PrintWindow de E2 no cenario wa
   working set de E3 na ociosa (94,7 contra 69,3 MB), 132,2% em trabalhando (105,1 contra 79,5 MB) e 117,6% em precisa de
   você (114,4 contra 97,3 MB), quando o limite é 60%. N2 também reprova, por pouco: CPU ociosa do T0 0,0105% do total
   contra 0,0082% do E3 (D-02, estrito).
+- **N2 está dentro do ruído de medição e não sustenta a decisão.** A CPU vem de `KernelModeTime` e `UserModeTime` do
+  `Win32_Process`, contabilizados por tick do escalonador (cerca de 15,6 ms), e na ociosa as faixas das 3 execuções se
+  sobrepõem por completo: T0 0,0059–0,0235% e E3 0,0023–0,0176%, com medianas 0,0105% e 0,0082% (diferença de 0,0023
+  ponto). A regra congelada e os limiares não mudam, e o veredito "REPROVOU" continua o mesmo; ele se apoia no N1, que
+  reprova por larga margem nos três cenários (T0 em 117,6% a 136,7% do E3, contra o limite de 60%). N2 não deve ser
+  citado como evidência no `PROJECT.md`. Numa nova medição, usar o contador de ciclos por processo
+  (`QueryProcessCycleTime`) ou uma tolerância justificada pela variação observada por execução.
 - **Critério 4 (D-11) atendido:** a CPU ociosa de E1 (0,0129% do total) ficou abaixo da de E0 (0,2266%), o que mostra o
   efeito do BASE-05.
 - **A base continua Electron.** Pela D-04 e D-09 a Etapa 2 não roda, o caminho de permissão não é portado (BASE-03) e não
