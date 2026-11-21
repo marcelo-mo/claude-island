@@ -1589,3 +1589,22 @@ test('o "N de M" é o primeiro filho do cabeçalho do pedido, flutua à direita 
   assert.ok(html.includes('permissionQueue.hidden = !current.queue;'));
   assert.ok(html.includes('${current.queue.position} de ${current.queue.total}'));
 });
+
+test('a conferência de vida só envia o sinal 0 e só ESRCH conta como morto (SESS-07)', () => {
+  const code = mainLf.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  assert.equal(code.split('process.kill(').length - 1, 1, 'process.kill aparece uma vez só');
+  assert.ok(code.includes('process.kill(pid, 0)'), 'o único process.kill é o de sinal 0');
+  const body = mainFunctionBody('isPidAlive');
+  assert.ok(body.includes('process.kill(pid, 0)'), 'o sinal 0 está dentro de isPidAlive');
+  assert.ok(body.includes("return error.code !== 'ESRCH';"), 'só ESRCH conta como processo inexistente');
+});
+
+test('readSessions apaga a sessão morta antes de ela ganhar chave e ordem, e só ali (SESS-07)', () => {
+  const body = mainFunctionBody('readSessions');
+  const dead = body.indexOf('isSessionDead(session, now, isPidAlive)');
+  const removal = body.indexOf("fs.rmSync(path.join(STATE_DIR, file), { force: true })");
+  const keyed = body.indexOf('session.key = key;');
+  assert.ok(dead >= 0 && removal > dead && keyed > removal, 'morta, remoção e chave, nesta ordem');
+  assert.equal(body.split('fs.rmSync(').length - 1, 1, 'readSessions só remove um arquivo, o da sessão morta');
+  assert.ok(body.includes('const now = Date.now();'));
+});

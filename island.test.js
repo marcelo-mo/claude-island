@@ -11,7 +11,7 @@ const {
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
   anchorPosition, horizontalSlackFor, ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
   islandDisplays, isIslandVisible, nextUserHidden, nextFullscreen, sessionList, nextSelection,
-  SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS,
+  SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS, isSessionDead,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -1007,4 +1007,45 @@ test('só um pedido de permissão troca a sessão sozinho; concluir, voltar a tr
   selection = nextSelection(selection, sessionList(withRequest, wall), { type: 'select', index: 0 });
   assert.equal(cycle(withRequest, PEDIDO_B), 'A');
   assert.equal(selection.snapped, false);
+});
+
+// Sessão morta (SESS-07): o PID é perguntado por uma função injetada; estes testes nunca tocam em ~/.claude/island
+// nem em processo real.
+test('isSessionDead: só isPidAlive exatamente false mata a sessão de windowPid válido (SESS-07)', () => {
+  const session = { state: 'running', windowPid: 4242, updatedAt: 1_000 };
+  assert.equal(isSessionDead(session, 2_000, () => false), true);
+  assert.equal(isSessionDead(session, 2_000, () => true), false);
+  // fato desconhecido mantém a sessão: nunca apagar sessão viva
+  for (const unknown of [undefined, null, 'false', 0, 1, {}]) {
+    assert.equal(isSessionDead(session, 2_000, () => unknown), false, `isPidAlive devolveu ${String(unknown)}`);
+  }
+  // o PID chega ao teste de vida tal como está no arquivo
+  const asked = [];
+  isSessionDead(session, 2_000, (pid) => { asked.push(pid); return true; });
+  assert.deepEqual(asked, [4242]);
+});
+
+test('isSessionDead: sem windowPid válido o PID nem é consultado (SESS-07)', () => {
+  for (const windowPid of [undefined, null, '4242', 1.5, -3, 0, NaN, Infinity, [4242], {}]) {
+    let calls = 0;
+    const dead = isSessionDead({ state: 'running', windowPid, updatedAt: 1_000 }, 2_000, () => { calls += 1; return false; });
+    assert.equal(dead, false, `windowPid ${String(windowPid)} não é PID`);
+    assert.equal(calls, 0, `windowPid ${String(windowPid)} não deveria ser consultado`);
+  }
+  let calls = 0;
+  assert.equal(isSessionDead({ state: 'running', updatedAt: 1_000 }, 2_000, () => { calls += 1; return false; }), false);
+  assert.equal(calls, 0);
+});
+
+test('isSessionDead: entrada inválida nunca lança nem muta a sessão (SESS-07)', () => {
+  for (const session of [null, undefined, 7, 'x', [], true]) {
+    assert.equal(isSessionDead(session, 2_000, () => false), false);
+  }
+  // sem função de teste, a regra do PID não vale
+  for (const isPidAlive of [undefined, null, 'x', {}, true]) {
+    assert.equal(isSessionDead({ windowPid: 4242, updatedAt: 1_000 }, 2_000, isPidAlive), false);
+  }
+  const session = Object.freeze({ state: 'running', windowPid: 4242, updatedAt: 1_000 });
+  assert.equal(isSessionDead(session, 2_000, () => false), true);
+  assert.deepEqual(session, { state: 'running', windowPid: 4242, updatedAt: 1_000 });
 });
