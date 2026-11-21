@@ -1206,5 +1206,496 @@
         "epoch": 1
       }
     }
+  ],
+  "settleStableMs": 100,
+  "pressDwellMs": 200,
+  "settleStep": [
+    {
+      "name": "primeiro quadro parado, sem stableSince, ainda não assentou",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": null,
+        "now": 1000
+      },
+      "expect": {
+        "stableSince": 1000,
+        "settled": false
+      }
+    },
+    {
+      "name": "parado desde 1000, em 1099 ainda não assentou",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1099
+      },
+      "expect": {
+        "stableSince": 1000,
+        "settled": false
+      }
+    },
+    {
+      "name": "parado desde 1000, em 1100 assentou",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": 1000,
+        "settled": true
+      }
+    },
+    {
+      "name": "retângulo andou 1 px recomeça a contagem",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 21,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "sem retângulo anterior não assenta",
+      "input": {
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "pílula com opacidade 0.98 não assenta",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "0.98",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "botões com opacidade 0.5 não assentam",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "0.5",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "opacidade como número (não string) não assenta",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": 1,
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "sem now não assenta",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    }
+  ],
+  "canPress": [
+    {
+      "name": "sem movimento do cursor, 200 ms depois de armar, vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 1200
+      },
+      "expect": true
+    },
+    {
+      "name": "199 ms depois de armar, ainda não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 1199
+      },
+      "expect": false
+    },
+    {
+      "name": "cursor mexeu em 1500, 150 ms depois não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 1500,
+        "now": 1650
+      },
+      "expect": false
+    },
+    {
+      "name": "cursor mexeu em 1500, 200 ms depois vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 1500,
+        "now": 1700
+      },
+      "expect": true
+    },
+    {
+      "name": "desarmado não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": false,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 1200
+      },
+      "expect": false
+    },
+    {
+      "name": "sem pedido não vale",
+      "input": {
+        "hasPermission": false,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 1200
+      },
+      "expect": false
+    },
+    {
+      "name": "sem armedAt não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "lastPointerMoveAt": 0,
+        "now": 1200
+      },
+      "expect": false
+    },
+    {
+      "name": "lastPointerMoveAt que não é número não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": "x",
+        "now": 1200
+      },
+      "expect": false
+    },
+    {
+      "name": "relógio antes de armedAt não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 900
+      },
+      "expect": false
+    }
+  ],
+  "isValidRelease": [
+    {
+      "name": "allow apertado e solto em allow, mesmo pedido, vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": true
+    },
+    {
+      "name": "deny apertado e solto em deny vale",
+      "input": {
+        "pressedBehavior": "deny",
+        "releasedBehavior": "deny",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": true
+    },
+    {
+      "name": "apertou allow e soltou em deny não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "deny",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "soltou fora de um botão não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": null,
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "sem pointerdown válido (teclado, element.click) não vale",
+      "input": {
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "pedido mudou no meio do gesto não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p2",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "sem pedido atual não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": null,
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "id apertado vazio não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "armamento recomeçou e ainda não voltou não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": false,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "armamento recomeçou durante o gesto e voltou a armar antes de soltar não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 4
+      },
+      "expect": false
+    },
+    {
+      "name": "sem geração de armamento no pointerdown não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "geração de armamento como string não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": "3",
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "comportamento em maiúsculas não vale",
+      "input": {
+        "pressedBehavior": "ALLOW",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    }
   ]
 }

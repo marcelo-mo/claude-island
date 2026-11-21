@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const { acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -57,4 +58,56 @@ test('toda reexibição rearma o relógio do main', () => {
   ]) {
     assert.ok(mainSource.includes(hook), `main.js sem o gancho de rearme: ${hook}`);
   }
+});
+
+// Predicados puros do renderer. O index.html em sandbox não carrega state.js e a CSP não aceita
+// script externo, então as regras ficam inline entre dois marcadores e este teste executa
+// exatamente esse texto. O contexto vazio é a prova de pureza: um predicado que tocasse DOM,
+// performance ou window lançaria ReferenceError.
+const rendererSource = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+const RULES_START = '// regras-do-gate:inicio';
+const RULES_END = '// regras-do-gate:fim';
+
+function loadRendererRules() {
+  for (const marker of [RULES_START, RULES_END]) {
+    assert.equal(rendererSource.split(marker).length - 1, 1, `marcador ausente ou repetido no index.html: ${marker}`);
+  }
+  const start = rendererSource.indexOf(RULES_START) + RULES_START.length;
+  const block = rendererSource.slice(start, rendererSource.indexOf(RULES_END));
+  const exported = ['PERMISSION_ARM_MS', 'SETTLE_STABLE_MS', 'PRESS_DWELL_MS', 'settleStep', 'canPress', 'isValidRelease'];
+  return vm.runInNewContext(`${block}\n({ ${exported.join(', ')} })`, Object.create(null));
+}
+
+test('as constantes do bloco do renderer são as do fixture', () => {
+  const rules = loadRendererRules();
+  assert.equal(rules.PERMISSION_ARM_MS, PERMISSION_ARM_MS);
+  assert.equal(rules.PERMISSION_ARM_MS, vectors.armMs);
+  assert.equal(rules.SETTLE_STABLE_MS, vectors.settleStableMs);
+  assert.equal(rules.PRESS_DWELL_MS, vectors.pressDwellMs);
+});
+
+for (const vector of vectors.settleStep) {
+  test(`settleStep: ${vector.name}`, () => {
+    // O objeto nasce noutro realm (vm), então o deepEqual estrito pede uma cópia no realm do teste.
+    assert.deepEqual({ ...loadRendererRules().settleStep(vector.input) }, vector.expect);
+  });
+}
+
+for (const vector of vectors.canPress) {
+  test(`canPress: ${vector.name}`, () => {
+    assert.equal(loadRendererRules().canPress(vector.input), vector.expect);
+  });
+}
+
+for (const vector of vectors.isValidRelease) {
+  test(`isValidRelease: ${vector.name}`, () => {
+    assert.equal(loadRendererRules().isValidRelease(vector.input), vector.expect);
+  });
+}
+
+// Trava de regressão (texto exato): afrouxar a CSP é o jeito mais barato de quebrar o gate.
+test('a CSP do renderer continua sem fonte de script nova', () => {
+  assert.ok(rendererSource.includes(
+    `content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"`,
+  ));
 });
