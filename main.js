@@ -5,7 +5,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, acceptDecision, anchorPosition, horizontalSlackFor, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  pickState, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
   effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem,
@@ -343,6 +343,16 @@ function displayOf(island) {
   return undefined;
 }
 
+// A única conferência de "a janela inteira está à vista", para o renderer (fitsWorkArea) e para o gate
+// (withinVisibleArea): por isso os dois nunca divergem. Ao lado da ilha do sistema, numa área útil estreita, a
+// pílula do mod fica por cima da nossa e cobre o começo do pedido, então isso conta como fora da área visível
+// (SEG-06).
+function fitsVisibleArea(island, display) {
+  return Boolean(display)
+    && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor))
+    && besideFits(preferences.anchor, display.workArea);
+}
+
 function moveIsland(island, position, workArea) {
   // setBounds com o tamanho explícito (e não setPosition): com escala de DPI fracionária a
   // janela transparente muda de tamanho a cada setPosition no Windows.
@@ -364,7 +374,7 @@ function sendState(island) {
   // (monitor baixo, DPI alto) toda decisão seria recusada, então o renderer nem oferece os botões.
   // Só pode desabilitar: o gate continua sendo quem decide.
   const display = displayOf(island);
-  const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor));
+  const fitsWorkArea = fitsVisibleArea(island, display);
   island.webContents.send(
     'island:state',
     { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea },
@@ -604,7 +614,7 @@ function registerIpcHandlers() {
       windowVisible: island.isVisible() && !island.isMinimized(),
       // Fail-safe (D-19): monitor desconhecido conta como coberto.
       coveredByFullscreen: display ? fullscreenByDisplay.has(display.id) : true,
-      withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor)),
+      withinVisibleArea: fitsVisibleArea(island, display),
     });
     // Recusa e falha de gravação reenviam o estado a quem clicou: o renderer trava os botões ao enviar
     // e só os solta quando o main responde. Ele nunca reenvia sozinho; o próximo clique é do usuário.

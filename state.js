@@ -406,6 +406,23 @@ function horizontalSlackFor(anchor) {
   return { left: HORIZONTAL_SLACK, right: HORIZONTAL_SLACK };
 }
 
+// A borda interna da pílula fica a BESIDE_GAP_PX do centro da área útil, dos dois lados, e a pílula expandida
+// mede EXPANDED_PILL_WIDTH_PX. Abaixo disso o clamp puxa a janela para cima da pílula do mod, que sobe por
+// cima da nossa e cobre o começo das linhas do pedido. Fica depois das duas constantes que usa.
+const BESIDE_MIN_WORK_AREA_WIDTH_PX = 2 * (BESIDE_GAP_PX + EXPANDED_PILL_WIDTH_PX);
+
+/**
+ * A área útil comporta a pílula expandida ao lado da ilha do sistema? Devolve true quando `anchor` não é
+ * 'right-of-island' nem 'left-of-island' (inclusive valor desconhecido ou ausente): a regra não se aplica e
+ * quem confere a área útil é isWithinWorkArea. Nas duas âncoras ao lado devolve false com área útil ausente
+ * ou sem largura numérica (dado que não confere não decide) e quando ela é mais estreita que
+ * BESIDE_MIN_WORK_AREA_WIDTH_PX. Nunca lança.
+ */
+function besideFits(anchor, workArea) {
+  if (anchor !== 'right-of-island' && anchor !== 'left-of-island') return true;
+  return Number.isFinite(workArea?.width) && workArea.width >= BESIDE_MIN_WORK_AREA_WIDTH_PX;
+}
+
 /**
  * Posição da janela a partir do deslocamento salvo pelo usuário. O deslocamento é relativo à posição
  * da âncora (topo centro quando `anchor` falta ou é inválido), que centra pela largura da janela, então
@@ -714,6 +731,7 @@ module.exports = {
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
   BESIDE_GAP_PX, BESIDE_TOP_OFFSET_PX,
+  BESIDE_MIN_WORK_AREA_WIDTH_PX, besideFits,
   islandDisplays, nextShownPermission, isIslandVisible, nextUserHidden,
   FULLSCREEN_TOLERANCE_PX, SHELL_WINDOW_CLASSES, WS_EX_TRANSPARENT, nextFullscreen,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,

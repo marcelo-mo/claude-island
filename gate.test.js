@@ -421,7 +421,7 @@ test('island:decide: o eco vem do renderer, o alvo e o relógio do main, os fato
     ['decidedId', 'decidedPermissionId'],
     ['windowVisible', 'island.isVisible() && !island.isMinimized()'],
     ['coveredByFullscreen', 'display ? fullscreenByDisplay.has(display.id) : true'],
-    ['withinVisibleArea', 'Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor))'],
+    ['withinVisibleArea', 'fitsVisibleArea(island, display)'],
   ]);
   // O renderer manda o eco como o segundo argumento do preload; sem ele toda decisão seria recusada.
   assert.ok(preloadSource.includes("decide: (behavior, pressedId) => ipcRenderer.send('island:decide', behavior, pressedId),"));
@@ -442,8 +442,8 @@ test('refresh não engole o rearme e o estado enviado leva answeredId, armEpoch 
     "nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm')",
     'if (serialized === lastSent && nextShown.epoch === shown.epoch) return;',
     '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea }',
-    // a mesma conferência do gate (isWithinWorkArea com a folga da âncora), nunca uma mais frouxa
-    'const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor));',
+    // a mesma conferência do gate (fitsVisibleArea), nunca uma mais frouxa
+    'const fitsWorkArea = fitsVisibleArea(island, display);',
   ]) {
     assert.ok(mainSource.includes(glue), `main.js sem a cola: ${glue}`);
   }
@@ -1255,3 +1255,15 @@ for (const vector of vectors.besideDecision) {
     assert.deepEqual(verdict, vector.expect);
   });
 }
+
+test('o renderer e o gate conferem a área visível pela mesma função, com a âncora ao lado', () => {
+  const mainLf = mainSource.replace(/\r\n/g, '\n');
+  const start = mainLf.indexOf('function fitsVisibleArea(');
+  assert.ok(start >= 0, 'função ausente: fitsVisibleArea');
+  const body = mainLf.slice(start, mainLf.indexOf('\n}\n', start));
+  assert.ok(body.includes('isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor))'));
+  assert.ok(body.includes('besideFits(preferences.anchor, display.workArea)'));
+  // definição e as duas chamadas (sendState e island:decide); comentário não conta
+  const code = mainLf.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  assert.equal(code.split('fitsVisibleArea(island, display)').length - 1, 3);
+});
