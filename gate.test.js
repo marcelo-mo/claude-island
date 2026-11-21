@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
   effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES, WINDOW_SIZE, HORIZONTAL_SLACK,
-  PERMISSION_TOOL_LIMIT,
+  PERMISSION_TOOL_LIMIT, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -976,6 +976,9 @@ const stageTop = Math.max(...[...styleRules.matchAll(/--stage-top:\s*(\d+(?:\.\d
 const PILL_MIN = { width: 120, height: 36 };
 // Sombra estática: espalhamento de 14 px mais deslocamento de 5 px, arredondado para cima.
 const SHADOW_MARGIN_PX = 20;
+// Alcance da sombra para cima: desfoque de 14 px menos o deslocamento de 5 px (D-21). Na âncora de baixo a
+// pílula encosta na base do palco e a sombra de cima é a que pode ser recortada.
+const SHADOW_TOP_REACH_PX = 9;
 
 // Maior posição que a mola de `from` a `to` alcança, em dois casos: (a) crescer de `from` até `to` e
 // (b) encolher de `to` até `from` com um alvo novo (`to`) em cada quadro de 16 ms do encolhimento,
@@ -1007,22 +1010,54 @@ test('o palco cobre o pico das molas, com hover, nudge e sombra, em todo estilo 
   for (const style of ANIMATION_STYLES) {
     for (const speed of [0.5, 1, 2]) {
       const widthPeak = worstPeak(spring, PILL_MIN.width, expandedWidth, style, speed);
-      const heightPeak = Math.max(
-        worstPeak(spring, PILL_MIN.height, maxHeight, style, speed),
-        worstPeak(spring, PILL_MIN.height, windowHeight, style, speed),
-      );
+      const permissionPeak = worstPeak(spring, PILL_MIN.height, maxHeight, style, speed);
+      const windowPeak = worstPeak(spring, PILL_MIN.height, windowHeight, style, speed);
+      const heightPeak = Math.max(permissionPeak, windowPeak);
       // A escala amplia a partir do centro do topo: a largura cresce dos dois lados e a altura só para baixo.
       const neededWidth = widthPeak * hoverPeak + 2 * SHADOW_MARGIN_PX;
       const neededHeight = stageTop + heightPeak * hoverPeak + nudgeRebound + SHADOW_MARGIN_PX;
+      // Âncoras de baixo: a pílula cresce para cima a partir da base do palco, que guarda só a margem da
+      // sombra (STAGE_SHADOW_PX). O nudge sobe a pílula 6 px, sem o respiro do --stage-top para absorver, e em
+      // cima só cabe o alcance da sombra para cima. As âncoras de canto pedem a mesma largura do centro (a
+      // margem da sombra dos dois lados), já coberta pela conta de neededWidth.
+      // Hover e nudge só existem sem pedido na tela (shouldNudge e hoverScaleTarget), e o pedido é a pílula
+      // mais alta: a sombra inteira cabe no pedido sozinho e na pílula comum com hover e nudge. O produto do
+      // maior pico pelo hover e pelo nudge (pior caso combinado, que só se sobreporia na passagem do pedido
+      // chegando com o hover assentando) estoura em 6 px a sombra de cima do Elástico a 0,5×, e por isso o
+      // que se exige dele é só a pílula inteira dentro do palco.
+      const bottomAnchorShadow = {
+        permission: STAGE_SHADOW_PX + permissionPeak + SHADOW_TOP_REACH_PX,
+        hoverAndNudge: STAGE_SHADOW_PX + windowPeak * hoverPeak + Math.abs(spring.NUDGE_OFFSET_PX) + SHADOW_TOP_REACH_PX,
+      };
+      const bottomAnchorPill = STAGE_SHADOW_PX + heightPeak * hoverPeak + Math.abs(spring.NUDGE_OFFSET_PX);
       const where = `${style} a ${speed}×: pico ${widthPeak.toFixed(1)}×${heightPeak.toFixed(1)}, precisa de ${neededWidth.toFixed(1)}×${neededHeight.toFixed(1)}, palco ${WINDOW_SIZE.width}×${WINDOW_SIZE.height}`;
       assert.ok(WINDOW_SIZE.width >= neededWidth, `largura do palco curta: ${where}`);
       assert.ok(WINDOW_SIZE.height >= neededHeight, `altura do palco curta: ${where}`);
+      for (const [situation, needed] of Object.entries(bottomAnchorShadow)) {
+        assert.ok(WINDOW_SIZE.height >= needed, `altura do palco curta na âncora de baixo (${situation}, ${needed.toFixed(1)}): ${where}`);
+      }
+      assert.ok(WINDOW_SIZE.height >= bottomAnchorPill, `a pílula sairia do palco na âncora de baixo (${bottomAnchorPill.toFixed(1)}): ${where}`);
     }
   }
 });
 
 test('a folga horizontal é o que sobra de cada lado da pílula expandida e o palco é congelado', () => {
   assert.equal(HORIZONTAL_SLACK, (WINDOW_SIZE.width - expandedWidth) / 2);
+  assert.equal(EXPANDED_PILL_WIDTH_PX, expandedWidth, 'o state.js repete a largura de #pill.expanded');
   assert.ok(Object.isFrozen(WINDOW_SIZE));
   assert.ok(Number.isInteger(WINDOW_SIZE.width) && Number.isInteger(WINDOW_SIZE.height));
+});
+
+// Trava de regressão (texto): a 125% a janela nasce 6 DIP mais alta (520×416 medido) e só o setBounds com o
+// tamanho explícito a corrige; setPosition também muda o tamanho. Sem isto a borda de baixo recusa toda
+// decisão (T-04-12).
+test('a ilha é posicionada só por setBounds, inclusive logo depois de criada', () => {
+  const start = mainSource.indexOf('function createIsland(');
+  assert.ok(start >= 0);
+  const createBody = mainSource.slice(start, mainSource.indexOf('\nfunction ', start + 1));
+  const created = createBody.indexOf('new BrowserWindow(');
+  const placed = createBody.indexOf('moveIsland(island, savedPosition(display), display.workArea);');
+  assert.ok(created >= 0 && placed > created, 'createIsland não reposiciona por moveIsland depois de new BrowserWindow(');
+  const code = mainSource.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  assert.equal(/\.setPosition\(/.test(code), false, 'main.js posiciona por setPosition');
 });

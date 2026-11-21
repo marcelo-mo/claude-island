@@ -1042,6 +1042,213 @@
         }
       },
       "expect": false
+    },
+    {
+      "name": "125%: âncora de baixo no centro, deriva de +2 DIP",
+      "input": {
+        "workArea": {
+          "x": -1536,
+          "y": 0,
+          "width": 1536,
+          "height": 824
+        },
+        "horizontalSlack": 60,
+        "bounds": {
+          "x": -1028,
+          "y": 394,
+          "width": 520,
+          "height": 412
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "125%: arrastada até a borda de baixo, deriva de +2 DIP",
+      "input": {
+        "workArea": {
+          "x": -1536,
+          "y": 0,
+          "width": 1536,
+          "height": 824
+        },
+        "horizontalSlack": 60,
+        "bounds": {
+          "x": -1028,
+          "y": 414,
+          "width": 520,
+          "height": 412
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "125%: arrastada até a borda de baixo, deriva de +3 DIP (recusa, lado seguro)",
+      "input": {
+        "workArea": {
+          "x": -1536,
+          "y": 0,
+          "width": 1536,
+          "height": 824
+        },
+        "horizontalSlack": 60,
+        "bounds": {
+          "x": -1028,
+          "y": 414,
+          "width": 520,
+          "height": 413
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "125%: janela recém-criada sem setBounds na borda de baixo, +6 DIP",
+      "input": {
+        "workArea": {
+          "x": -1536,
+          "y": 0,
+          "width": 1536,
+          "height": 824
+        },
+        "horizontalSlack": 60,
+        "bounds": {
+          "x": -1028,
+          "y": 414,
+          "width": 520,
+          "height": 416
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "âncora de canto esquerda: pílula encostada na borda",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": {
+          "left": 20,
+          "right": 100
+        },
+        "bounds": {
+          "x": -20,
+          "y": 0,
+          "width": 520,
+          "height": 410
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "âncora de canto esquerda: 2 px além da folga (tolerância)",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": {
+          "left": 20,
+          "right": 100
+        },
+        "bounds": {
+          "x": -22,
+          "y": 0,
+          "width": 520,
+          "height": 410
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "âncora de canto esquerda: 3 px além da folga recusa",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": {
+          "left": 20,
+          "right": 100
+        },
+        "bounds": {
+          "x": -23,
+          "y": 0,
+          "width": 520,
+          "height": 410
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "âncora de canto direita: pílula encostada na borda",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": {
+          "left": 100,
+          "right": 20
+        },
+        "bounds": {
+          "x": 1420,
+          "y": 0,
+          "width": 520,
+          "height": 410
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "âncora de canto direita: 3 px além da folga recusa",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": {
+          "left": 100,
+          "right": 20
+        },
+        "bounds": {
+          "x": 1423,
+          "y": 0,
+          "width": 520,
+          "height": 410
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "folga em objeto sem um dos lados recusa",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": {
+          "left": 20
+        },
+        "bounds": {
+          "x": -20,
+          "y": 0,
+          "width": 520,
+          "height": 410
+        }
+      },
+      "expect": false
     }
   ],
   "nextShownPermission": [
