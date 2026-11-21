@@ -24,7 +24,7 @@
     --button-text: oklch(0.98 0.016 73.684);
     /* Verde mais escuro que o do ponto: o rótulo branco precisa de contraste nos dois temas. */
     --done-button: #248a3d;
-    /* Curva com leve "overshoot": é o que dá a sensação elástica da ilha. */
+    /* Curva com leve "overshoot", só do ponto de estado (#dot): o tamanho da pílula vem das molas em JS. */
     --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   }
   /* O Electron segue o tema do sistema em tempo real; a ilha acompanha sem reiniciar. */
@@ -43,8 +43,6 @@
       --shadow: 0 0 0 1px rgba(0, 0, 0, .1), 0 4px 14px rgba(0, 0, 0, .18);
     }
   }
-  /* Permite animar a largura entre "abraçar o conteúdo" e o tamanho expandido. */
-  :root { interpolate-size: allow-keywords; }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; background: transparent; overflow: hidden; user-select: none; }
   body {
@@ -56,16 +54,18 @@
     width: max-content; height: 46px; padding: 0 17px;
     background: var(--surface); border-radius: 23px;
     /* Compacta, a pílula abraça o conteúdo: nada de um lado cheio e o outro vazio.
-       Expandida, a barra espalha ícone, título e indicadores pela largura toda. */
-    display: grid; grid-template-columns: 1fr; grid-template-rows: 46px auto auto;
+       Expandida, a barra espalha ícone, título e indicadores pela largura toda.
+       Largura e altura vêm de molas em JS, que fixam --content-width: o conteúdo fica na largura final
+       e a pílula, mais estreita durante a animação, recorta o excesso (igual dos dois lados). */
+    display: grid; grid-template-columns: var(--content-width, 1fr); justify-content: center; grid-template-rows: 46px auto auto;
     align-items: center; overflow: hidden; text-align: center;
-    transition: width .45s var(--spring), height .45s var(--spring), border-radius .45s var(--spring),
-                opacity .25s, transform .45s var(--spring), box-shadow .3s, background .3s;
+    transition: opacity .25s, box-shadow .3s, background .3s, border-radius .3s ease,
+                scale .25s ease, translate .25s ease;
     box-shadow: 0 0 0 1px var(--ring), var(--shadow);
     cursor: grab;
   }
   #pill.dragging { cursor: grabbing; }
-  #pill[data-state="idle"] { opacity: 0; transform: scale(.6) translateY(-12px); pointer-events: none; }
+  #pill[data-state="idle"] { opacity: 0; scale: .6; translate: 0 -12px; pointer-events: none; }
   #pill[data-state="waiting"] { --accent: var(--waiting); }
   #pill[data-state="done"] { --accent: var(--done); }
   #pill.expanded { width: 400px; height: 104px; border-radius: 30px; }
@@ -478,7 +478,107 @@
   // Quando o pedido exibido mudou (id, armEpoch ou texto): abre a janela em que a roda é ignorada.
   let contentChangedAt = 0;
 
-  function render() {
+  // Molas de tamanho da pílula (D-04, D-05). `springs` ganha as chaves width e height na primeira
+  // medição; sem mola ainda conta como em repouso. O laço de quadros só existe enquanto alguma mola
+  // se move: parada, a ilha não agenda nenhum quadro.
+  const springs = {};
+  let springLoopRunning = false;
+  let lastSpringFrameAt = 0;
+  // Se a pílula já esteve na tela: a primeira exibição vai direto ao tamanho, sem animar de 0.
+  let pillVisible = false;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+  // Tamanho que a pílula teria agora, lido do layout com o conteúdo final (D-06): nada de largura
+  // presa a uma fonte. Tira as três medidas inline, lê e devolve tudo no mesmo turno, sem pintura
+  // intermediária. offsetWidth e offsetHeight ignoram scale e translate; contentWidth é a largura
+  // que o conteúdo ocupa por dentro do padding.
+  function measurePillTarget() {
+    const savedWidth = pill.style.width;
+    const savedHeight = pill.style.height;
+    const savedContentWidth = pill.style.getPropertyValue('--content-width');
+    pill.style.width = '';
+    pill.style.height = '';
+    pill.style.removeProperty('--content-width');
+    const width = pill.offsetWidth;
+    const height = pill.offsetHeight;
+    const style = getComputedStyle(pill);
+    const contentWidth = width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    pill.style.width = savedWidth;
+    pill.style.height = savedHeight;
+    if (savedContentWidth) pill.style.setProperty('--content-width', savedContentWidth);
+    return { width, height, contentWidth };
+  }
+
+  function applySprings() {
+    if (springs.width) pill.style.width = `${springs.width.position}px`;
+    if (springs.height) pill.style.height = `${springs.height.position}px`;
+  }
+
+  // O conteúdo fica na largura final (--content-width) e a pílula recorta com overflow hidden, então
+  // a altura do texto não muda enquanto a largura anima (D-05). `instant` cria as molas já paradas no
+  // alvo; senão cada eixo troca de alvo sem salto (D-02).
+  function setSizeTarget(target, instant) {
+    pill.style.setProperty('--content-width', `${target.contentWidth}px`);
+    if (!springs.width || instant) {
+      for (const [axis, value] of [['width', target.width], ['height', target.height]]) {
+        springs[axis] = {
+          position: value, velocity: 0, target: value, direction: 'grow',
+          restDistance: REST_DISTANCE_PX, restSpeed: REST_SPEED_PX_S,
+        };
+      }
+    } else {
+      springs.width = retargetSpring(springs.width, target.width);
+      springs.height = retargetSpring(springs.height, target.height);
+    }
+    applySprings();
+  }
+
+  const allSpringsAtRest = () => Object.values(springs).every(isSpringAtRest);
+
+  function snapAllSprings() {
+    for (const axis of Object.keys(springs)) springs[axis] = snapSpring(springs[axis]);
+    applySprings();
+  }
+
+  // Único caminho por onde toda animação começa, então nenhum alvo novo anima com movimento reduzido
+  // nem com a janela escondida (D-25): as molas vão direto ao alvo. Com tudo parado nenhum quadro
+  // roda (D-04).
+  function startSpringLoop() {
+    if (reducedMotion.matches || document.hidden) {
+      snapAllSprings();
+      return;
+    }
+    if (springLoopRunning || allSpringsAtRest()) return;
+    springLoopRunning = true;
+    lastSpringFrameAt = performance.now();
+    requestAnimationFrame(springFrame);
+  }
+
+  function springFrame() {
+    const now = performance.now();
+    const frameMs = now - lastSpringFrameAt;
+    lastSpringFrameAt = now;
+    // Estilo e velocidade vêm do payload do main (D-17); sem eles springStep usa o Padrão a 1×.
+    const { animationStyle, animationSpeed } = current.preferences || {};
+    for (const axis of Object.keys(springs)) {
+      springs[axis] = springStep(springs[axis], frameMs, animationStyle, animationSpeed);
+    }
+    applySprings();
+    if (allSpringsAtRest()) {
+      springLoopRunning = false;
+      return;
+    }
+    requestAnimationFrame(springFrame);
+  }
+
+  reducedMotion.addEventListener('change', () => {
+    if (reducedMotion.matches) snapAllSprings();
+  });
+  // O requestAnimationFrame congela com a janela escondida: uma mola parada no meio travaria o
+  // armamento dos botões até a janela voltar.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) snapAllSprings(); });
+
+  function renderContent() {
     pill.dataset.state = current.state;
     // "Precisa de você" abre sozinho: é o único estado que exige ação.
     // Em "concluído" a pílula não expande no hover: o botão "Abrir" tem de ficar parado sob o mouse.
@@ -525,6 +625,19 @@
     const locked = !armed || permission.id === answeredPermissionId || permission.id === current.answeredId;
     denyButton.disabled = locked;
     allowButton.disabled = locked || !wasRead;
+  }
+
+  function render() {
+    renderContent();
+    if (current.state === 'idle') {
+      // Ilha ociosa não anima: o alvo não muda, então não há salto no fade de saída.
+      pillVisible = false;
+      snapAllSprings();
+    } else {
+      setSizeTarget(measurePillTarget(), !pillVisible);
+      pillVisible = true;
+    }
+    startSpringLoop();
   }
   permissionText.addEventListener('scroll', render);
   // passive: false é obrigatório para o preventDefault valer. A roda sobre o texto nunca sai dele
@@ -573,7 +686,9 @@
       });
       previousRect = rect;
       stableSince = step.stableSince;
-      if (step.settled) {
+      // Retângulo parado não basta: com o conteúdo na largura final os botões podem estar parados e
+      // ainda recortados enquanto a altura cresce (D-10).
+      if (canArm({ settled: step.settled, springsAtRest: allSpringsAtRest() })) {
         armed = true;
         armedAt = now;
         armedRect = rect;
