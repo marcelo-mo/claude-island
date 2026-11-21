@@ -11,6 +11,7 @@ const {
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
   anchorPosition, horizontalSlackFor, ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
   islandDisplays, isIslandVisible, nextUserHidden, nextFullscreen, sessionList, nextSelection,
+  SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -803,4 +804,100 @@ test('hook.js e permission-hook.js seguem gravando o projeto pela pasta da sess�
   const permissionHook = fs.readFileSync(path.join(__dirname, 'permission-hook.js'), 'utf8');
   assert.ok(hook.includes("path.basename(input.cwd || '') || 'Claude'"));
   assert.ok(permissionHook.includes("previous.project || path.basename(input.cwd || '') || 'Claude'"));
+});
+
+// --- Fase 5: snap, fila e avanço do poll de nextSelection ---
+
+const PEDIDO_C = '33333333-3333-4333-8333-333333333333';
+const PEDIDO_SNAP = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const waitingEntry = (key, permissionId = null) => ({
+  key, state: permissionId ? 'waiting' : 'running', updatedAt: 1, permissionId,
+});
+const pollEvent = (now, extra = {}) => ({ type: 'poll', previousKeys: [], now, lastWheelAt: null, shownPermissionId: null, ...extra });
+
+test('SNAP_GESTURE_GAP_MS e SNAP_WHEEL_LOCK_MS valem 400', () => {
+  assert.deepEqual([SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS], [400, 400]);
+});
+
+test('o pedido novo leva a ilha à sessão dele uma vez e não puxa de novo quem rolou para longe (SESS-04)', () => {
+  const list = [waitingEntry('a'), waitingEntry('b', PEDIDO_SNAP)];
+  const first = nextSelection({ key: 'a', requests: [] }, list, pollEvent(1000));
+  assert.equal(first.key, 'b');
+  assert.equal(first.snapped, true);
+  assert.deepEqual(first.requests, [{ id: PEDIDO_SNAP, seenAt: 1000, handled: true, shown: true }]);
+  // o usuário voltou para a: o pedido já foi tratado e não puxa de novo
+  const later = nextSelection({ key: 'a', requests: first.requests }, list, pollEvent(1400));
+  assert.equal(later.key, 'a');
+  assert.equal(later.snapped, false);
+  assert.deepEqual(later.requests, first.requests);
+  // com a pílula de b ainda pulsando
+  const sessions = [
+    { key: 'a', firstSeenAt: 1, state: 'running', updatedAt: 1000, project: 'a' },
+    { key: 'b', firstSeenAt: 2, state: 'waiting', updatedAt: 1000, project: 'b', permission: pedidoValido(PEDIDO_SNAP) },
+  ];
+  assert.equal(pickState(sessions, 1000, later).sessions[1].pending, true);
+});
+
+test('o snap espera o fim do gesto da roda e o pedido ainda conta como novo (SESS-04)', () => {
+  const list = [waitingEntry('a'), waitingEntry('b', PEDIDO_SNAP)];
+  const during = nextSelection({ key: 'a', requests: [] }, list, pollEvent(1000, { lastWheelAt: 601 }));
+  assert.equal(during.key, 'a');
+  assert.equal(during.snapped, false);
+  assert.deepEqual(during.requests, [{ id: PEDIDO_SNAP, seenAt: 1000, handled: false, shown: false }]);
+  // 400 ms exatos depois da última roda o gesto acabou
+  const after = nextSelection({ key: 'a', requests: during.requests }, list, pollEvent(1001, { lastWheelAt: 601 }));
+  assert.equal(after.key, 'b');
+  assert.equal(after.snapped, true);
+  assert.deepEqual(after.requests, [{ id: PEDIDO_SNAP, seenAt: 1000, handled: true, shown: true }]);
+});
+
+test('com um pedido na tela o novo entra na fila sem snap e sem ter sido exibido (SESS-05)', () => {
+  const list = [waitingEntry('a', PEDIDO_A), waitingEntry('b', PEDIDO_B)];
+  const queued = nextSelection({ key: 'a', requests: [] }, list, pollEvent(1000, { shownPermissionId: PEDIDO_A }));
+  assert.equal(queued.key, 'a');
+  assert.equal(queued.snapped, false);
+  assert.deepEqual(queued.requests, [
+    { id: PEDIDO_A, seenAt: 1000, handled: true, shown: true },
+    { id: PEDIDO_B, seenAt: 1000, handled: true, shown: false },
+  ]);
+  // nos ciclos seguintes continua na fila e nunca puxa
+  const next = nextSelection({ key: 'a', requests: queued.requests }, list, pollEvent(5000, { shownPermissionId: PEDIDO_A }));
+  assert.deepEqual([next.key, next.snapped], ['a', false]);
+});
+
+test('na subida os pendentes contam como novos: snap para o mais antigo, desempate pelo id', () => {
+  const list = [waitingEntry('a'), waitingEntry('b', PEDIDO_B), waitingEntry('c', PEDIDO_A)];
+  const picked = nextSelection({ key: 'a', requests: [] }, list, pollEvent(1000));
+  assert.equal(picked.key, 'c');
+  assert.equal(picked.snapped, true);
+  assert.deepEqual(picked.requests, [
+    { id: PEDIDO_A, seenAt: 1000, handled: true, shown: true },
+    { id: PEDIDO_B, seenAt: 1000, handled: true, shown: false },
+  ]);
+});
+
+test('o poll poda os pedidos que saíram, preserva os que ficam e nunca lança nem muta', () => {
+  const requests = [
+    { id: PEDIDO_A, seenAt: 100, handled: true, shown: true },
+    { id: PEDIDO_B, seenAt: 200, handled: true, shown: false },
+  ];
+  const kept = nextSelection({ key: 'a', requests }, [waitingEntry('a'), waitingEntry('b', PEDIDO_B)], pollEvent(9000));
+  assert.deepEqual(kept.requests, [{ id: PEDIDO_B, seenAt: 200, handled: true, shown: false }]);
+  assert.equal(kept.key, 'a');
+  // saída de fato da sessão exibida: a vizinha, e o pedido nunca exibido de b fica como estava
+  const exit = nextSelection({ key: 'a', requests }, [waitingEntry('x'), waitingEntry('b', PEDIDO_B)], pollEvent(9000, { previousKeys: ['x', 'a', 'b'] }));
+  assert.deepEqual([exit.key, exit.snapped], ['x', false]);
+  assert.equal(exit.requests[0].shown, false);
+  // sem now finito nenhum pedido novo entra neste ciclo
+  for (const now of [undefined, NaN, null, '1000', Infinity]) {
+    const none = nextSelection({ key: 'a', requests: [] }, [waitingEntry('a'), waitingEntry('b', PEDIDO_B)], { type: 'poll', now });
+    assert.deepEqual([none.key, none.snapped, none.requests], ['a', false, []], String(now));
+  }
+  // campos ausentes não lançam
+  assert.doesNotThrow(() => nextSelection({ key: 'a' }, [waitingEntry('a', PEDIDO_A)], { type: 'poll' }));
+  // não muta
+  const frozenRequests = Object.freeze(requests.map((request) => Object.freeze({ ...request })));
+  const frozenList = Object.freeze([Object.freeze(waitingEntry('a')), Object.freeze(waitingEntry('b', PEDIDO_C))]);
+  assert.doesNotThrow(() => nextSelection(Object.freeze({ key: 'a', requests: frozenRequests }), frozenList, pollEvent(9000)));
+  assert.deepEqual(requests.map((request) => request.id), [PEDIDO_A, PEDIDO_B]);
 });

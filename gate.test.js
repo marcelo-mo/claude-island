@@ -1550,3 +1550,27 @@ test('o README explica que a roda chega pela rolagem de janelas inativas do Wind
   const readme = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf8');
   assert.ok(readme.includes('Rolar janelas inativas ao passar o mouse sobre elas'));
 });
+
+// --- Fase 5: snap do pedido novo (cola do main) ---
+
+test('o refresh leva os fatos ao poll, trava a roda depois do snap e nunca reexibe a ilha; a roda ignorada ainda é gesto', () => {
+  const body = mainFunctionBody('refresh');
+  for (const piece of [
+    'shownPermissionId: shown.id',
+    'lastWheelAt',
+    'if (selection.snapped) wheelLockedUntil =',
+    'SNAP_WHEEL_LOCK_MS',
+  ]) {
+    assert.ok(body.includes(piece), `refresh sem: ${piece}`);
+  }
+  for (const forbidden of ['showInactive', 'applyVisibility', 'setUserHidden']) {
+    assert.equal(body.includes(forbidden), false, `refresh não pode chamar ${forbidden}: o snap só muda a seleção`);
+  }
+  const start = mainLf.indexOf("ipcMain.on('island:wheel', (event, delta) => {");
+  assert.ok(start >= 0, 'handler de island:wheel ausente');
+  const handler = mainLf.slice(start, mainLf.indexOf('\n  });', start));
+  const recorded = handler.indexOf('lastWheelAt = now;');
+  const locked = handler.indexOf('if (now < wheelLockedUntil) return;');
+  const stepped = handler.indexOf('wheelStep(');
+  assert.ok(recorded >= 0 && locked > recorded && stepped > locked, 'lastWheelAt, trava e wheelStep, nesta ordem');
+});
