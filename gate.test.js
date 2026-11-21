@@ -425,6 +425,8 @@ function loadSpringRules() {
   return loadInlineBlock(SPRING_START, SPRING_END, [
     'SPRING_STEP_MS', 'SPRING_MAX_FRAME_MS', 'SPRING_GROW', 'SPRING_SHRINK', 'SPRING_NEUTRAL', 'SPRING_STYLE_FACTORS',
     'REST_DISTANCE_PX', 'REST_SPEED_PX_S', 'springParams', 'retargetSpring', 'springStep', 'snapSpring', 'isSpringAtRest',
+    'NUDGE_OFFSET_PX', 'NUDGE_MIN_INTERVAL_MS', 'HOVER_SCALE', 'NUDGE_STATES', 'HOVER_SCALE_STATES',
+    'SCALE_REST_DISTANCE', 'SCALE_REST_SPEED', 'shouldNudge', 'hoverScaleTarget',
   ]);
 }
 
@@ -627,4 +629,117 @@ test('os botões só armam com o retângulo assentado e todas as molas paradas (
   assert.ok(wait.includes('if (canArm({ settled: step.settled, springsAtRest: allSpringsAtRest() })) {'));
   assert.equal(wait.includes('if (step.settled) {'), false, 'armar só pelo retângulo deixa botão recortado armar');
   assert.match(wait, /armed = true;\s*armedAt = now;\s*armedRect = rect;\s*render\(\);\s*return;/);
+});
+
+// Nudge e ampliação no hover (D-07, D-08, D-09): as duas decisões são puras e a tabela de casos é a
+// prova de que nunca valem com pedido na tela (SEG-03) nem com movimento reduzido (D-25).
+test('nudge e hover: as constantes são as do mod', () => {
+  assert.equal(spring.NUDGE_OFFSET_PX, -6);
+  assert.equal(spring.NUDGE_MIN_INTERVAL_MS, 450);
+  assert.equal(spring.HOVER_SCALE, 1.025);
+  assert.deepEqual([...spring.NUDGE_STATES], ['running', 'waiting', 'done']);
+  assert.deepEqual([...spring.HOVER_SCALE_STATES], ['running', 'waiting']);
+});
+
+const NUDGE_BASE = {
+  previousState: 'running', nextState: 'waiting', hasPermission: false, reducedMotion: false, lastNudgeAt: null, now: 1000,
+};
+
+test('shouldNudge: só na troca entre running, waiting e done, sem pedido e sem movimento reduzido', () => {
+  const nudge = (change) => spring.shouldNudge({ ...NUDGE_BASE, ...change });
+  assert.equal(nudge({}), true);
+  assert.equal(nudge({ previousState: 'idle' }), false, 'vindo de idle é a primeira exibição');
+  assert.equal(nudge({ nextState: 'idle' }), false);
+  assert.equal(nudge({ nextState: 'running' }), false, 'mesmo estado');
+  assert.equal(nudge({ hasPermission: true }), false);
+  assert.equal(nudge({ hasPermission: undefined }), false);
+  assert.equal(nudge({ reducedMotion: true }), false);
+  assert.equal(nudge({ reducedMotion: undefined }), false);
+  assert.equal(nudge({ nextState: 'pensando' }), false);
+  assert.equal(nudge({ previousState: 'pensando' }), false);
+  assert.equal(nudge({ lastNudgeAt: 1000, now: 1449 }), false);
+  assert.equal(nudge({ lastNudgeAt: 1000, now: 1450 }), true);
+  assert.equal(nudge({ lastNudgeAt: 1000, now: 900 }), false, 'relógio para trás');
+  assert.equal(nudge({ lastNudgeAt: NaN }), false);
+  assert.equal(nudge({ now: NaN }), false);
+  assert.equal(nudge({ now: undefined }), false);
+  assert.equal(spring.shouldNudge(null), false);
+  assert.equal(spring.shouldNudge(undefined), false);
+});
+
+test('hoverScaleTarget: só em Trabalhando e Precisa de você, com o cursor, sem pedido e sem movimento reduzido', () => {
+  const base = { hovering: true, hasPermission: false, reducedMotion: false, state: 'running' };
+  const target = (change) => spring.hoverScaleTarget({ ...base, ...change });
+  assert.equal(target({}), spring.HOVER_SCALE);
+  assert.equal(target({ state: 'waiting' }), spring.HOVER_SCALE);
+  assert.equal(target({ state: 'done' }), 1, 'o Abrir compacto fica parado sob o mouse');
+  assert.equal(target({ state: 'idle' }), 1);
+  assert.equal(target({ state: undefined }), 1);
+  assert.equal(target({ hasPermission: true }), 1);
+  assert.equal(target({ hasPermission: undefined }), 1);
+  assert.equal(target({ reducedMotion: true }), 1);
+  assert.equal(target({ hovering: false }), 1);
+  assert.equal(target({ hovering: 'true' }), 1);
+  assert.equal(spring.hoverScaleTarget(null), 1);
+  assert.equal(spring.hoverScaleTarget(undefined), 1);
+});
+
+// Mola neutra (nudge e escala) parada em `from` que recebe o alvo `to`, com os limiares de cada uma.
+function neutralSpring(from, to, restDistance, restSpeed) {
+  return spring.retargetSpring(
+    { position: from, velocity: 0, target: from, direction: 'neutral', restDistance, restSpeed },
+    to,
+  );
+}
+
+function simulateNeutral(start, style = 'default', speed = 1, frameMs = 16) {
+  let current = start;
+  let peak = current.position;
+  let elapsedMs = 0;
+  while (!spring.isSpringAtRest(current) && elapsedMs < 10_000) {
+    current = spring.springStep(current, frameMs, style, speed);
+    peak = Math.max(peak, current.position);
+    elapsedMs += frameMs;
+  }
+  return { peak, elapsedMs, final: current };
+}
+
+test('o nudge volta a 0 em menos de 1 s com rebote menor que 1 px', () => {
+  const { peak, elapsedMs } = simulateNeutral(neutralSpring(spring.NUDGE_OFFSET_PX, 0, spring.REST_DISTANCE_PX, spring.REST_SPEED_PX_S));
+  assert.ok(peak < 1, `rebote de ${peak} px acima de 0`);
+  assert.ok(elapsedMs < 1000, `assentou em ${elapsedMs} ms`);
+});
+
+test('a escala do hover assenta exatamente em HOVER_SCALE em menos de 1 s', () => {
+  const { final, elapsedMs } = simulateNeutral(neutralSpring(1, spring.HOVER_SCALE, spring.SCALE_REST_DISTANCE, spring.SCALE_REST_SPEED));
+  assert.equal(final.position, spring.HOVER_SCALE);
+  assert.ok(elapsedMs < 1000, `assentou em ${elapsedMs} ms`);
+});
+
+test('a cola liga o nudge e o hover às molas neutras, nunca com pedido na tela', () => {
+  const onState = rendererLf.slice(rendererLf.indexOf('window.island.onState('));
+  const call = onState.indexOf('shouldNudge({');
+  assert.ok(call >= 0 && call < onState.indexOf('current = next;'), 'o nudge decide antes de o estado novo virar o atual');
+  assert.deepEqual(objectArgument(rendererLf, 'shouldNudge({'), [
+    ['previousState', 'current.state'],
+    ['nextState', 'next.state'],
+    ['hasPermission', 'Boolean(next.permission)'],
+    ['reducedMotion', 'reducedMotion.matches'],
+    ['lastNudgeAt', 'lastNudgeAt'],
+    ['now', 'stateChangedAt'],
+  ]);
+  assert.ok(onState.includes('springs.nudge = { ...springs.nudge, position: NUDGE_OFFSET_PX, velocity: 0, target: 0 };'));
+  assert.ok(onState.includes('lastNudgeAt = stateChangedAt;'));
+  assert.deepEqual(objectArgument(rendererLf, 'hoverScaleTarget({'), [
+    ['hovering', 'hovering'],
+    ['hasPermission', 'Boolean(current.permission)'],
+    ['reducedMotion', 'reducedMotion.matches'],
+    ['state', 'current.state'],
+  ]);
+  const render = functionBody('render');
+  assert.ok(render.includes('springs.scale = retargetSpring(springs.scale, hoverScaleTarget({'));
+  assert.ok(render.indexOf('hoverScaleTarget({') < render.indexOf("current.state === 'idle'"), 'o alvo da escala vem antes do ramo do idle');
+  assert.match(rendererLf, /const springs = \{\s*nudge: \{[^}]*direction: 'neutral'[^}]*\},\s*scale: \{[^}]*direction: 'neutral'[^}]*SCALE_REST_DISTANCE[^}]*\},\s*\};/);
+  assert.match(functionBody('applySprings'), /pill\.style\.transform = `translateY\(\$\{springs\.nudge\.position\}px\) scale\(\$\{springs\.scale\.position\}\)`;/);
+  assert.match(rendererLf, /#pill \{[^}]*transform-origin: 50% 0;/);
 });
