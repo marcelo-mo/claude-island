@@ -321,6 +321,8 @@ const SHAPES = Object.freeze(['pill', 'notch', 'win11']);
 const ANIMATION_STYLES = Object.freeze(['smooth', 'default', 'bouncy', 'snappy']);
 const ANIMATION_SPEED_MIN = 0.5;
 const ANIMATION_SPEED_MAX = 2;
+// Velocidades oferecidas no menu; o arquivo continua aceitando qualquer número da faixa acima.
+const ANIMATION_SPEED_STEPS = Object.freeze([0.5, 0.75, 1, 1.5, 2]);
 const DEFAULT_PREFERENCES = Object.freeze({ theme: 'auto', shape: 'pill', animationStyle: 'default', animationSpeed: 1 });
 
 /**
@@ -353,6 +355,43 @@ function normalizePreferences(input) {
   };
 }
 
+// Rótulos do menu em pt-BR, por chave e por valor (o arquivo guarda os valores em inglês). A chave da
+// velocidade é String(valor), porque o objeto só tem chaves de texto.
+const PREFERENCE_LABELS = Object.freeze({
+  theme: Object.freeze({
+    auto: 'Automático', obsidian: 'Obsidian', graphite: 'Graphite', slate: 'Slate', nord: 'Nord',
+    evergreen: 'Evergreen', espresso: 'Espresso', plum: 'Plum', porcelain: 'Porcelain',
+  }),
+  shape: Object.freeze({ pill: 'Pílula', notch: 'Notch', win11: 'Windows 11' }),
+  animationStyle: Object.freeze({ smooth: 'Suave', default: 'Padrão', bouncy: 'Elástico', snappy: 'Rápido' }),
+  animationSpeed: Object.freeze({ 0.5: '0,5×', 0.75: '0,75×', 1: '1×', 1.5: '1,5×', 2: '2×' }),
+});
+
+/**
+ * Modelo do menu de preferências para o main montar com Menu.buildFromTemplate. Devolve um array novo
+ * de submenus `{ label, submenu: [...] }` (Tema, Forma, Estilo da animação, Velocidade da animação),
+ * cada filho um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
+ * atual. `key` e `value` são para o main traduzir o clique em applyPreference; as chaves que ainda
+ * não têm item entram com o efeito delas. A entrada passa por normalizePreferences (lixo vira
+ * padrão). Nunca lança e nunca muta a entrada.
+ */
+function menuTemplate(preferences) {
+  const current = normalizePreferences(preferences);
+  const radios = (key, values) => values.map((value) => ({
+    type: 'radio',
+    label: PREFERENCE_LABELS[key][String(value)],
+    checked: value === current[key],
+    key,
+    value,
+  }));
+  return [
+    { label: 'Tema', submenu: radios('theme', THEMES) },
+    { label: 'Forma', submenu: radios('shape', SHAPES) },
+    { label: 'Estilo da animação', submenu: radios('animationStyle', ANIMATION_STYLES) },
+    { label: 'Velocidade da animação', submenu: radios('animationSpeed', ANIMATION_SPEED_STEPS) },
+  ];
+}
+
 // Explícito protege de regressão: ligar nodeIntegration desligaria o sandbox em silêncio. O renderer
 // só carrega o index.html local, com CSP default-src 'none'.
 const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: true, nodeIntegration: false });
@@ -366,5 +405,5 @@ module.exports = {
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   nextShownPermission,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
-  normalizePreferences, isSessionFile,
+  normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate,
 };

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, screen } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -7,7 +7,7 @@ const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
-  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
+  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset, menuTemplate,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -43,6 +43,9 @@ let decidedPermissionId = null;
 // Preferências visuais, lidas uma vez na subida. O renderer só recebe o valor pelo estado: nunca
 // escolhe nem envia preferência (SEG-08).
 let preferences = DEFAULT_PREFERENCES;
+// Ilha cujo menu de preferências está aberto. Um menu por vez: pedido de menu enquanto há um aberto
+// é descartado.
+let menuIsland = null;
 
 const positionsFile = () => path.join(app.getPath('userData'), 'positions.json');
 
@@ -116,6 +119,64 @@ function writeDecision(permissionId, behavior) {
   fs.mkdirSync(DECISIONS_DIR, { recursive: true });
   fs.writeFileSync(temporaryFile, JSON.stringify({ behavior }));
   fs.renameSync(temporaryFile, decisionFile);
+}
+
+/**
+ * Grava num temporário e renomeia: quem lê nunca vê o arquivo pela metade, e uma queda no meio da
+ * gravação não zera o conteúdo anterior.
+ */
+function writeFileAtomic(file, text) {
+  const temporaryFile = `${file}.tmp`;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(temporaryFile, text);
+  fs.renameSync(temporaryFile, file);
+}
+
+function writePreferences() {
+  try {
+    writeFileAtomic(PREFERENCES_FILE, JSON.stringify(preferences, null, 2));
+  } catch (error) {
+    console.error('Não foi possível salvar as preferências da ilha:', error.message);
+  }
+}
+
+// Só o menu nativo chama isto: o renderer nunca escolhe preferência (SEG-08). Toda mudança pode
+// mover botões sob o cursor, então termina em rearme (SEG-02, D-09).
+function applyPreference(key, value) {
+  const next = normalizePreferences({ ...preferences, [key]: value });
+  if (JSON.stringify(next) === JSON.stringify(preferences)) return;
+  preferences = next;
+  writePreferences();
+  refresh('rearm');
+}
+
+// Item do modelo puro vira item do Menu: o par key/value do rádio vira o clique que aplica a escolha.
+function toMenuItem(item) {
+  if (item.submenu) return { ...item, submenu: item.submenu.map(toMenuItem) };
+  if (item.key === undefined) return { ...item };
+  const { key, value, ...rest } = item;
+  return { ...rest, click: () => applyPreference(key, value) };
+}
+
+// O menu abre sobre a pílula e pode cobrir Permitir e Negar, e o clique que o fecha pode cair num
+// botão: abrir e fechar rearmam os botões (D-09).
+function openMenu(island) {
+  const menu = Menu.buildFromTemplate(menuTemplate(preferences).map(toMenuItem));
+  menu.on('menu-will-show', () => refresh('rearm'));
+  menu.on('menu-will-close', () => {
+    menuIsland = null;
+    refresh('rearm');
+  });
+  menuIsland = island;
+  try {
+    // Sem x nem y: abre no cursor, que é onde o usuário clicou (a janela é focusable: false).
+    menu.popup({ window: island });
+  } catch (error) {
+    // Janela destruída no meio do pedido: sem isto menuIsland ficaria preso e todo pedido seguinte
+    // seria descartado.
+    menuIsland = null;
+    console.error('Não foi possível abrir o menu da ilha:', error.message);
+  }
 }
 
 function readSessions() {
@@ -270,6 +331,13 @@ function registerIpcHandlers() {
     // religar o click-through ali soltaria o arraste.
     if (!island || dragStartPositions.has(island) || !CAN_CLICK_THROUGH) return;
     island.setIgnoreMouseEvents(!isOverPill, { forward: true });
+  });
+
+  // O renderer só pede "abrir"; itens, valores e gravação são do main (SEG-08).
+  ipcMain.on('island:menu', (event) => {
+    const island = islandOf(event);
+    if (!island || menuIsland) return;
+    openMenu(island);
   });
 
   // O renderer manda o deslocamento total desde o pointerdown, em coordenadas de tela;

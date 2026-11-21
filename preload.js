@@ -8,4 +8,5 @@ contextBridge.exposeInMainWorld('island', {
   drag: (deltaX, deltaY) => ipcRenderer.send('island:drag', deltaX, deltaY),
   endDrag: () => ipcRenderer.send('island:drag-end'),
   resetPosition: () => ipcRenderer.send('island:reset-position'),
+  openMenu: () => ipcRenderer.send('island:menu'),
 });

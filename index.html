@@ -1029,6 +1029,12 @@
     if (isOverPill !== hovering) setHovering(isOverPill);
   });
 
+  // O renderer só pede para abrir o menu: quem monta, marca e grava é o main (SEG-08).
+  pill.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    window.island.openMenu();
+  });
+
   pill.addEventListener('dblclick', (event) => {
     if (event.target.closest('button, #permission')) return;
     window.island.resetPosition();

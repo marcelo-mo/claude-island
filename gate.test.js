@@ -235,9 +235,10 @@ test('nenhum canal escapa pela IPC por webContents', () => {
 
 const RENDERER_CHANNELS = [
   'island:state', 'island:hover', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end', 'island:reset-position',
+  'island:menu',
 ];
 
-test('o preload usa só send e on, nos sete canais conhecidos', () => {
+test('o preload usa só send e on, nos oito canais conhecidos', () => {
   const { methods, channels } = collectChannels(preloadSource, 'ipcRenderer');
   assert.deepEqual([...methods].sort(), ['on', 'send']);
   assert.deepEqual([...channels].sort(), [...RENDERER_CHANNELS].sort());
@@ -258,7 +259,7 @@ test('a janela da ilha não navega nem abre janela, e todo canal confere o remet
   assert.equal(mainSource.includes('loadFile('), false, 'a ilha carrega pela mesma URL que confere');
   assert.match(mainSource, /const islandOf = \(event\) => \{[^}]*isIslandSender\(/);
   const handlers = mainSource.split('ipcMain.on(').slice(1);
-  assert.equal(handlers.length, 6);
+  assert.equal(handlers.length, 7);
   for (const handler of handlers) {
     const body = handler.slice(0, handler.indexOf('\n  });'));
     assert.match(body, /islandOf\(event\)/, `canal sem conferir o remetente: ${body.split(',')[0]}`);
@@ -289,7 +290,7 @@ test('o armamento acompanha o retângulo dos próprios botões', () => {
   assert.ok(pointerdown.indexOf(moved) < pointerdown.indexOf('canPress('), 'a conferência vem antes de canPress');
 });
 
-test('o main escuta só com ipcMain.on, nos seis canais do renderer', () => {
+test('o main escuta só com ipcMain.on, nos sete canais do renderer', () => {
   const { methods, channels } = collectChannels(mainSource, 'ipcMain');
   assert.deepEqual([...methods], ['on']);
   assert.deepEqual([...channels].sort(), RENDERER_CHANNELS.filter((channel) => channel !== 'island:state').sort());
@@ -414,13 +415,51 @@ test('com o palco fora da área útil o renderer desabilita os botões e manda r
 // Travas de regressão (texto) das preferências visuais: o main só lê o arquivo, uma vez, sem
 // vigiá-lo nem gravá-lo (a gravação, o menu e a migração são da Fase 4), e o renderer só aplica o
 // que veio no payload. Canal novo para o renderer escolher preferência quebraria RENDERER_CHANNELS.
-test('o main lê as preferências uma única vez e nunca as vigia nem as grava', () => {
+// A gravação passou a existir na Fase 4, só pelo menu nativo, e sempre por .tmp + rename.
+test('o main lê as preferências uma vez, não as vigia e só as grava pelo menu, por .tmp e rename', () => {
   assert.ok(mainSource.includes(
     "preferences = normalizePreferences(JSON.parse(fs.readFileSync(PREFERENCES_FILE, 'utf8')));",
   ), 'main.js sem a leitura normalizada do preferences.json');
   assert.equal(mainSource.split('loadPreferences()').length - 1, 2, 'loadPreferences: definição e uma só chamada');
   assert.equal(/\.watch(?:File)?\(/.test(mainSource), false, 'main.js vigia um arquivo');
-  assert.equal(/writeFileSync\(\s*PREFERENCES_FILE/.test(mainSource), false, 'main.js grava o preferences.json');
+  assert.equal(/writeFileSync\(\s*PREFERENCES_FILE/.test(mainSource), false, 'main.js grava o preferences.json direto');
+  assert.equal(mainSource.split('writeFileAtomic(PREFERENCES_FILE').length - 1, 1, 'uma só gravação das preferências');
+  assert.equal(mainSource.split('writePreferences()').length - 1, 2, 'writePreferences: definição e a chamada de applyPreference');
+  const atomic = mainSource.slice(mainSource.indexOf('function writeFileAtomic('));
+  const atomicBody = atomic.slice(0, atomic.indexOf('\n}'));
+  assert.ok(atomicBody.includes('fs.writeFileSync(temporaryFile, text);'), 'grava o temporário');
+  assert.ok(atomicBody.includes('fs.renameSync(temporaryFile, file);'), 'e renomeia para o arquivo final');
+});
+
+// Trava de regressão (texto): o menu abre sobre Permitir e Negar, e o clique que o fecha pode cair num
+// botão, então abrir e fechar rearmam. O renderer só pede "abrir", sem argumentos, e um menu por vez.
+test('o menu só abre por pedido sem argumentos, um por vez, e rearma ao abrir e ao fechar', () => {
+  assert.ok(preloadSource.includes("openMenu: () => ipcRenderer.send('island:menu'),"));
+  for (const glue of [
+    "ipcMain.on('island:menu', (event) => {",
+    'if (!island || menuIsland) return;',
+    "menu.on('menu-will-show', () => refresh('rearm'));",
+    'menu.popup({ window: island });',
+  ]) {
+    assert.ok(mainSource.includes(glue), `main.js sem a cola do menu: ${glue}`);
+  }
+  assert.equal(mainSource.split('Menu.buildFromTemplate(').length - 1, 1, 'um só menu montado');
+  const willClose = mainSource.slice(mainSource.indexOf("menu.on('menu-will-close'"));
+  const willCloseBody = willClose.slice(0, willClose.indexOf('\n  });'));
+  assert.ok(willCloseBody.includes('menuIsland = null;') && willCloseBody.includes("refresh('rearm');"));
+  const popupCall = 'menu.popup({ window: island });';
+  const popup = mainSource.slice(mainSource.indexOf(popupCall) + popupCall.length);
+  assert.match(mainSource.slice(0, mainSource.indexOf(popupCall)), /try \{[^}]*$/);
+  assert.match(popup, /^[^}]*\}\s*catch \(error\) \{[^}]*menuIsland = null;/);
+  assert.equal(rendererSource.split('window.island.openMenu()').length - 1, 1, 'o menu abre de um só lugar: o contextmenu');
+});
+
+// Trava de regressão (texto): preferência só muda pelo clique no menu nativo, nunca por mensagem.
+test('nenhum handler de IPC muda preferência', () => {
+  for (const handler of mainSource.split('ipcMain.on(').slice(1)) {
+    const body = handler.slice(0, handler.indexOf('\n  });'));
+    assert.equal(body.includes('applyPreference'), false, `canal que muda preferência: ${body.split(',')[0]}`);
+  }
 });
 
 test('o renderer aplica as preferências do payload e rearma se mudaram com pedido na tela', () => {
