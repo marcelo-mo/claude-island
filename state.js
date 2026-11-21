@@ -505,15 +505,39 @@ const PREFERENCE_LABELS = Object.freeze({
   islandMode: Object.freeze({ perDisplay: 'Uma por monitor', primary: 'Só no monitor principal', cursor: 'No monitor do cursor' }),
 });
 
+// O atalho chega normalizado (só letras, números e +), então entra no rótulo sem escape.
+function shortcutInfoLabel(shortcut, shortcutStatus) {
+  if (shortcutStatus === 'ok') return `Atalho para mostrar e esconder: ${shortcut}`;
+  if (shortcutStatus === 'unavailable') return `Atalho ${shortcut} indisponível: outro programa já o usa`;
+  return `Atalho ${shortcut} inválido no preferences.json`;
+}
+
+/**
+ * Registra o atalho global que esconde e mostra a ilha. `register` é o `globalShortcut.register` do
+ * Electron, que entra por parâmetro para esta função não saber do Electron. Chama `register` uma única
+ * vez, sem nova tentativa. Devolve 'ok' se o atalho foi registrado, 'unavailable' se não foi (o Electron
+ * devolve false em silêncio quando outro programa já o usa) e 'invalid' se `register` lançar. Nunca lança.
+ */
+function registerShortcut(register, accelerator, onPress) {
+  try {
+    return register(accelerator, onPress) === true ? 'ok' : 'unavailable';
+  } catch {
+    // o Electron lança com acelerador que não entende (medido com 'Ctrl+Banana')
+    return 'invalid';
+  }
+}
+
 /**
  * Modelo do menu de preferências para o main montar com Menu.buildFromTemplate. Devolve um array novo
  * de submenus `{ label, submenu: [...] }` (Tema, Forma, Estilo da animação, Velocidade da animação,
  * Expandir, Âncora, Ilhas) mais a caixa 'Fixar aberta', cada filho de submenu um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
  * atual. `key` e `value` são para o main traduzir o clique em applyPreference; as chaves que ainda
- * não têm item entram com o efeito delas. A entrada passa por normalizePreferences (lixo vira
- * padrão). Nunca lança e nunca muta a entrada.
+ * não têm item entram com o efeito delas. Depois deles vêm um separador, a informação do atalho
+ * (desabilitada, conforme `shortcutStatus`, o resultado de registerShortcut) e 'Esconder'
+ * (`action: 'hide'`). A entrada passa por normalizePreferences (lixo vira padrão). Nunca lança e nunca
+ * muta a entrada.
  */
-function menuTemplate(preferences) {
+function menuTemplate(preferences, shortcutStatus) {
   const current = normalizePreferences(preferences);
   const radios = (key, values) => values.map((value) => ({
     type: 'radio',
@@ -534,6 +558,12 @@ function menuTemplate(preferences) {
     },
     { label: 'Âncora', submenu: radios('anchor', ANCHORS) },
     { label: 'Ilhas', submenu: radios('islandMode', ISLAND_MODES) },
+    { type: 'separator' },
+    { label: shortcutInfoLabel(current.shortcut, shortcutStatus), enabled: false },
+    // Sem atalho registrado esconder deixaria a ilha inalcançável até reiniciar.
+    shortcutStatus === 'ok'
+      ? { label: 'Esconder', action: 'hide', enabled: true }
+      : { label: 'Esconder (sem atalho para mostrar de novo)', action: 'hide', enabled: false },
   ];
 }
 
@@ -551,7 +581,7 @@ module.exports = {
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
   islandDisplays, nextShownPermission,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
-  normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate,
+  normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate, registerShortcut,
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, SHORTCUT_PATTERN, SHORTCUT_MAX_LENGTH,
   PREFERENCES_VERSION, PREFERENCES_MAX_BYTES, PREFERENCE_VALIDATORS, quarantinePath,
 };

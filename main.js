@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, screen, globalShortcut } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -7,7 +7,7 @@ const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, acceptDecision, anchorPosition, horizontalSlackFor, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
-  WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath,
+  WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -60,6 +60,10 @@ const captureRequests = new Map();
 // se afasta.
 const nearIslands = new Set();
 let cursorTimer = null;
+// Escondida pelo usuário, pelo atalho ou pelo menu. Não é persistida: a ilha sempre sobe visível (D-12).
+let userHidden = false;
+// Resultado do registro do atalho em start ('ok', 'unavailable' ou 'invalid'); o menu o mostra.
+let shortcutStatus = 'unavailable';
 
 const positionsFile = () => path.join(app.getPath('userData'), 'positions.json');
 
@@ -201,14 +205,30 @@ function applyPreference(key, value) {
 function toMenuItem(item) {
   if (item.submenu) return { ...item, submenu: item.submenu.map(toMenuItem) };
   if (item.key === undefined) return { ...item };
+  if (item.action === 'hide') {
+    const { action, ...rest } = item;
+    return { ...rest, click: () => setUserHidden(true) };
+  }
   const { key, value, ...rest } = item;
   return { ...rest, click: () => applyPreference(key, value) };
+}
+
+// Esconder nunca aprova: o gate recusa decisão com a janela escondida (windowVisible). Reexibir passa
+// pelo evento 'show', que chama refresh('rearm'); showInactive não rouba o foco do terminal. Nunca
+// destruir a ilha para esconder: o som do pedido e o rearme dependem da janela viva. O hide() emite
+// 'hide' (solta a captura e reavalia o timer do cursor) e o showInactive() emite 'show' (religa).
+function setUserHidden(hidden) {
+  userHidden = hidden;
+  for (const island of islands.values()) {
+    if (hidden && island.isVisible()) island.hide();
+    else if (!hidden && !island.isVisible()) island.showInactive();
+  }
 }
 
 // O menu abre sobre a pílula e pode cobrir Permitir e Negar, e o clique que o fecha pode cair num
 // botão: abrir e fechar rearmam os botões (D-09).
 function openMenu(island) {
-  const menu = Menu.buildFromTemplate(menuTemplate(preferences).map(toMenuItem));
+  const menu = Menu.buildFromTemplate(menuTemplate(preferences, shortcutStatus).map(toMenuItem));
   menu.on('menu-will-show', () => refresh('rearm'));
   menu.on('menu-will-close', () => {
     menuIsland = null;
@@ -367,6 +387,7 @@ function createIsland(display) {
     ...clampIslandPosition(savedPosition(display), display.workArea, WINDOW_SIZE, horizontalSlackFor(preferences.anchor)),
     frame: false,
     transparent: true,
+    show: !userHidden, // monitor plugado com a ilha escondida já nasce escondido
     resizable: false,
     movable: false, // o arraste é manual (ver island:drag); o do sistema engoliria o hover
     skipTaskbar: true,
@@ -384,8 +405,7 @@ function createIsland(display) {
   // também muda o tamanho.
   moveIsland(island, savedPosition(display), display.workArea);
   // Reexibir ou restaurar de minimizada põe os botões sob o cursor de novo, então o main reinicia
-  // os 0,8 s. Nada esconde nem minimiza a ilha de propósito antes da Fase 4: a prova ponta a ponta
-  // fica para lá (Assumption A9).
+  // os 0,8 s. O atalho e o menu escondem por hide() (setUserHidden) e reexibem por showInactive().
   island.on('show', () => refresh('rearm'));
   island.on('restore', () => refresh('rearm'));
   // Todo caminho que esconde a ilha (atalho e menu na Fase 4, tela cheia quando houver sensor) passa
@@ -573,6 +593,13 @@ function start() {
   writeHeartbeat();
   setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
   registerIpcHandlers();
+  // Uma vez só e sem nova tentativa: o atalho só muda no JSON (D-11). A ilha sobe com qualquer status.
+  shortcutStatus = registerShortcut(
+    (accelerator, onPress) => globalShortcut.register(accelerator, onPress),
+    preferences.shortcut,
+    () => setUserHidden(!userHidden),
+  );
+  if (shortcutStatus !== 'ok') console.error(`Não foi possível registrar o atalho ${preferences.shortcut}: ${shortcutStatus}`);
   syncIslands();
   screen.on('display-added', syncIslands);
   screen.on('display-removed', syncIslands);
@@ -592,6 +619,9 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.whenReady().then(start);
   app.on('window-all-closed', () => app.quit());
-  // Sem isto um permission-hook em espera só perceberia a saída quando o batimento envelhecesse.
-  app.on('will-quit', () => fs.rmSync(HEARTBEAT_FILE, { force: true }));
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+    // Sem isto um permission-hook em espera só perceberia a saída quando o batimento envelhecesse.
+    fs.rmSync(HEARTBEAT_FILE, { force: true });
+  });
 }
