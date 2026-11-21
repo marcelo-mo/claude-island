@@ -7,7 +7,7 @@ const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
   effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES, WINDOW_SIZE, HORIZONTAL_SLACK,
   PERMISSION_TOOL_LIMIT, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, besideFits, anchorPosition, clampIslandPosition,
-  horizontalSlackFor,
+  horizontalSlackFor, BESIDE_GAP_PX, BESIDE_MIN_WORK_AREA_WIDTH_PX,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -1266,4 +1266,16 @@ test('o renderer e o gate conferem a área visível pela mesma função, com a �
   // definição e as duas chamadas (sendState e island:decide); comentário não conta
   const code = mainLf.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
   assert.equal(code.split('fitsVisibleArea(island, display)').length - 1, 3);
+});
+
+for (const vector of vectors.besideFits) {
+  test(`besideFits: ${vector.name}`, () => {
+    assert.equal(besideFits(vector.input.anchor, vector.input.workArea), vector.expect);
+  });
+}
+
+test('a largura mínima ao lado é a soma das duas distâncias ao centro e é a do fixture', () => {
+  assert.equal(BESIDE_MIN_WORK_AREA_WIDTH_PX, 2 * (BESIDE_GAP_PX + EXPANDED_PILL_WIDTH_PX));
+  assert.equal(BESIDE_MIN_WORK_AREA_WIDTH_PX, 1220);
+  assert.equal(BESIDE_MIN_WORK_AREA_WIDTH_PX, vectors.besideMinWorkAreaWidthPx);
 });

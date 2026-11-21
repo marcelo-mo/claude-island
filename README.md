@@ -103,8 +103,11 @@ ociosa, a pílula fica invisível e sem `pointer-events`, e os cliques passam pa
   responda no terminal ou mostre a ilha pelo atalho.
 - **Ao lado da ilha do Windhawk.** Com o mod "Dynamic Island for Windows" no topo da tela, escolha
   *Âncora > Ao lado da ilha do sistema, à direita* (ou *à esquerda*): a nossa pílula fica ao lado da dele,
-  cresce para fora sem cobri-la e o arraste ajusta o lugar. Precisa de 1220 DIP de área útil (abaixo disso não
-  cabe ao lado e fica por cima do mod) e combina com as formas Pílula e Windows 11. A ilha nunca reafirma o
+  cresce para fora sem cobri-la e o arraste ajusta o lugar. Precisa de 1220 DIP de área útil: abaixo disso a pílula
+  não cabe ao lado e fica por cima da do mod, então, com um pedido de permissão na tela, os botões ficam
+  desabilitados com "Responda no terminal" (a pílula do mod cobriria o começo do pedido). Vale em qualquer
+  monitor abaixo desse limite, mesmo sem o mod aberto nele, porque a ilha não enxerga o mod. Combina com as
+  formas Pílula e Windows 11. A ilha nunca reafirma o
   "sempre no topo" por timer. O que foi verificado dessa convivência, do toast do Windows e dos apps de notch está em
   [`docs/INTEGRACOES.md`](docs/INTEGRACOES.md); `scripts/measure-coexistence.ps1` mede as duas ilhas juntas
   por 5 minutos, só lendo as janelas.

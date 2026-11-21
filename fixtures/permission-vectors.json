@@ -2051,5 +2051,23 @@
     { "name": "à direita da ilha do sistema em 1093 DIP de área útil recusa", "input": { "anchor": "right-of-island", "workArea": { "x": 0, "y": 0, "width": 1093, "height": 576 } }, "expect": { "accept": false, "reason": "outside-visible-area" } },
     { "name": "à esquerda da ilha do sistema em 1066 DIP de área útil recusa", "input": { "anchor": "left-of-island", "workArea": { "x": 0, "y": 0, "width": 1066, "height": 568 } }, "expect": { "accept": false, "reason": "outside-visible-area" } },
     { "name": "à direita da ilha do sistema em 1220 DIP de área útil aceita", "input": { "anchor": "right-of-island", "workArea": { "x": 0, "y": 0, "width": 1220, "height": 600 } }, "expect": { "accept": true, "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "behavior": "allow" } }
+  ],
+  "besideMinWorkAreaWidthPx": 1220,
+  "besideFits": [
+    { "name": "à direita do sistema em 1093 DIP não cabe", "input": { "anchor": "right-of-island", "workArea": { "width": 1093 } }, "expect": false },
+    { "name": "à esquerda do sistema em 1066 DIP não cabe", "input": { "anchor": "left-of-island", "workArea": { "width": 1066 } }, "expect": false },
+    { "name": "à direita do sistema em 1219 DIP, um a menos que o limite, não cabe", "input": { "anchor": "right-of-island", "workArea": { "width": 1219 } }, "expect": false },
+    { "name": "à direita do sistema em 1220 DIP cabe", "input": { "anchor": "right-of-island", "workArea": { "width": 1220 } }, "expect": true },
+    { "name": "à esquerda do sistema em 1220 DIP cabe", "input": { "anchor": "left-of-island", "workArea": { "width": 1220 } }, "expect": true },
+    { "name": "à esquerda do sistema em 2560 DIP cabe", "input": { "anchor": "left-of-island", "workArea": { "width": 2560 } }, "expect": true },
+    { "name": "topo centro em 1093 DIP não é afetado", "input": { "anchor": "top-center", "workArea": { "width": 1093 } }, "expect": true },
+    { "name": "base à direita em 800 DIP não é afetada", "input": { "anchor": "bottom-right", "workArea": { "width": 800 } }, "expect": true },
+    { "name": "topo à esquerda em 1066 DIP não é afetado", "input": { "anchor": "top-left", "workArea": { "width": 1066 } }, "expect": true },
+    { "name": "à direita do sistema com área útil ausente não cabe", "input": { "anchor": "right-of-island", "workArea": null }, "expect": false },
+    { "name": "à esquerda do sistema com largura em texto não cabe", "input": { "anchor": "left-of-island", "workArea": { "width": "1220" } }, "expect": false },
+    { "name": "à direita do sistema com largura nula não cabe", "input": { "anchor": "right-of-island", "workArea": { "width": null } }, "expect": false },
+    { "name": "âncora desconhecida em 1093 DIP não é afetada", "input": { "anchor": "beside", "workArea": { "width": 1093 } }, "expect": true },
+    { "name": "âncora nula em 1093 DIP não é afetada", "input": { "anchor": null, "workArea": { "width": 1093 } }, "expect": true },
+    { "name": "topo centro com área útil ausente não é afetado", "input": { "anchor": "top-center", "workArea": null }, "expect": true }
   ]
 }
