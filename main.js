@@ -4,7 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
+  pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -32,10 +32,12 @@ const dragStartPositions = new Map();
 let savedOffsets = {};
 let lastPickedState = { state: 'idle', count: 0 };
 let shownWindowPid = null;
-// Pedido de permissão em exibição e desde quando: é a este id que um clique em "Permitir"
-// ou "Negar" se refere. O renderer só devolve o id como eco, que apenas pode recusar.
-let shownPermissionId = null;
-let shownPermissionSince = 0;
+// Pedido de permissão em exibição, desde quando (performance.now) e a época do armamento: é a este
+// id que um clique em "Permitir" ou "Negar" se refere. O renderer só devolve o id como eco, que
+// apenas pode recusar. Só muda dentro de refresh (invariante I2), para toda troca rearmar.
+let shown = { id: null, since: 0, epoch: 0 };
+// Último estado serializado enviado às ilhas; refresh só reenvia quando algo mudou.
+let lastSent = JSON.stringify(lastPickedState);
 // Último pedido cuja decisão foi gravada. Primeiro clique vence: só o main enxerga as duas ilhas
 // (cada renderer só trava o próprio botão), então é ele que recusa a segunda decisão.
 let decidedPermissionId = null;
@@ -151,8 +153,33 @@ function savedPosition(display) {
 // Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.
 function sendState(island) {
   const isFirstIsland = island === islands.values().next().value;
-  // answeredId faz a outra ilha travar os botões do pedido que uma ilha já decidiu.
-  island.webContents.send('island:state', { ...lastPickedState, answeredId: decidedPermissionId }, isFirstIsland);
+  // answeredId faz a outra ilha travar os botões do pedido que uma ilha já decidiu; armEpoch
+  // sobe a cada troca, reexibição ou mudança de monitor, e o renderer rearma quando ele muda.
+  island.webContents.send(
+    'island:state',
+    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch },
+    isFirstIsland,
+  );
+}
+
+/**
+ * Único lugar que muda o pedido exibido. `reason` 'rearm' (reexibir, restaurar, monitor) reinicia
+ * o armamento mesmo sem o estado das sessões ter mudado, então o retorno antecipado olha o estado
+ * e a época separados: olhar só o estado engoliria o rearme.
+ */
+function refresh(reason) {
+  const picked = pickState(readSessions(), Date.now());
+  const serialized = JSON.stringify(picked);
+  const permissionId = picked.permission ? picked.permission.id : null;
+  // Relógio monotônico: o de parede salta com NTP e suspensão, o que armaria os botões antes da
+  // hora (ou nunca). Só a regra do armamento usa este instante; pickState segue em relógio de parede.
+  const nextShown = nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm');
+  if (serialized === lastSent && nextShown.epoch === shown.epoch) return;
+  lastSent = serialized;
+  lastPickedState = picked;
+  shownWindowPid = picked.windowPid ?? null;
+  shown = nextShown;
+  for (const island of islands.values()) sendState(island);
 }
 
 function createIsland(display) {
@@ -259,8 +286,8 @@ function registerIpcHandlers() {
     const verdict = acceptDecision({
       behavior,
       echoedId: pressedId,
-      shownId: shownPermissionId,
-      shownSince: shownPermissionSince,
+      shownId: shown.id,
+      shownSince: shown.since,
       now: performance.now(),
       decidedId: decidedPermissionId,
       windowVisible: island.isVisible() && !island.isMinimized(),
@@ -295,23 +322,7 @@ function start() {
   // ponytail: polling em vez de fs.watch — são poucos arquivos minúsculos, e o timer
   // é necessário de qualquer jeito para o "concluído" expirar. Trocar por fs.watch
   // se o custo aparecer.
-  let lastSent = JSON.stringify(lastPickedState);
-  setInterval(() => {
-    const picked = pickState(readSessions(), Date.now());
-    const serialized = JSON.stringify(picked);
-    if (serialized === lastSent) return;
-    lastSent = serialized;
-    lastPickedState = picked;
-    shownWindowPid = picked.windowPid ?? null;
-    const permissionId = picked.permission ? picked.permission.id : null;
-    if (permissionId !== shownPermissionId) {
-      shownPermissionId = permissionId;
-      // Relógio monotônico: o de parede salta com NTP e suspensão, o que armaria os botões
-      // antes da hora (ou nunca). Só a regra do armamento usa este instante.
-      shownPermissionSince = performance.now();
-    }
-    for (const island of islands.values()) sendState(island);
-  }, POLL_MS);
+  setInterval(() => refresh('poll'), POLL_MS);
 }
 
 if (!app.requestSingleInstanceLock()) {

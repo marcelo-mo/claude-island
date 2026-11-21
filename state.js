@@ -222,6 +222,16 @@ function isWithinWorkArea(bounds, workArea, horizontalSlack) {
     && bounds.y + bounds.height <= workArea.y + workArea.height + WORK_AREA_TOLERANCE_PX;
 }
 
+/**
+ * Próximo estado do pedido exibido, `{ id, since, epoch }`. Só um id diferente ou `rearm === true`
+ * (exatamente true: reexibir, restaurar ou mudar de monitor) reinicia `since` e sobe `epoch`;
+ * sem isso devolve o próprio `shown`. O renderer reinicia o armamento quando o `epoch` muda.
+ */
+function nextShownPermission(shown, permissionId, now, rearm) {
+  if (permissionId === shown.id && rearm !== true) return shown;
+  return { id: permissionId, since: now, epoch: shown.epoch + 1 };
+}
+
 /** Posição padrão da janela da ilha: topo central da área útil do monitor. */
 function defaultIslandPosition(workArea, windowSize) {
   return { x: Math.round(workArea.x + (workArea.width - windowSize.width) / 2), y: workArea.y };
@@ -245,4 +255,5 @@ module.exports = {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
+  nextShownPermission,
 };
