@@ -149,6 +149,8 @@
     font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text);
     white-space: pre-wrap; overflow-wrap: anywhere; max-height: 105px; overflow-y: auto; padding-right: 6px;
     cursor: default; scrollbar-width: thin; scrollbar-color: var(--muted) transparent;
+    /* A rolagem do texto não vaza para fora dele ao chegar no fim. */
+    overscroll-behavior: contain;
   }
   #permission-text:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
   #permission-hint { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
@@ -285,6 +287,27 @@
       && armed === true
       && Number.isInteger(pressedArmToken) && pressedArmToken === currentArmToken;
   }
+
+  // A inércia do touchpad continua entregando roda por 300 a 400 ms depois de uma troca de conteúdo:
+  // sem esta janela ela rolaria o texto novo, ou o levaria ao fim e contaria como leitura.
+  const WHEEL_SETTLE_MS = 400;
+  // Tolerância de "rolou até o fim" (subpixel e arredondamento de escala de DPI).
+  const READ_TOLERANCE_PX = 2;
+
+  /** Se já passou WHEEL_SETTLE_MS desde a troca de conteúdo. Entrada inválida ou relógio para trás: false. */
+  function isWheelSettled(contentChangedAt, now) {
+    return Number.isFinite(contentChangedAt) && Number.isFinite(now) && now - contentChangedAt >= WHEEL_SETTLE_MS;
+  }
+
+  /**
+   * Se o texto pode contar como lido: fora da janela da roda, com altura visível e a rolagem
+   * a no máximo READ_TOLERANCE_PX do fim (hiddenBelow = o que ainda está escondido embaixo).
+   */
+  function canMarkRead(input) {
+    const { contentChangedAt, now, clientHeight, hiddenBelow } = input || {};
+    return isWheelSettled(contentChangedAt, now)
+      && clientHeight > 0 && Number.isFinite(hiddenBelow) && hiddenBelow <= READ_TOLERANCE_PX;
+  }
   // regras-do-gate:fim
 
   const pill = document.getElementById('pill');
@@ -318,6 +341,8 @@
   let lastPointerMoveAt = 0;
   // Gesto em andamento: null ou { behavior, id, armToken }, capturado no pointerdown.
   let press = null;
+  // Quando o pedido exibido mudou (id, armEpoch ou texto): abre a janela em que a roda é ignorada.
+  let contentChangedAt = 0;
 
   function render() {
     pill.dataset.state = current.state;
@@ -354,7 +379,9 @@
     // Só se permite o que foi visto inteiro: se o texto não coube, "Permitir" espera a rolagem
     // chegar ao fim. Negar não precisa disso.
     const hiddenBelow = permissionText.scrollHeight - permissionText.scrollTop - permissionText.clientHeight;
-    if (permissionText.clientHeight > 0 && hiddenBelow <= 2) readPermissionId = permission.id;
+    if (canMarkRead({
+      contentChangedAt, now: performance.now(), clientHeight: permissionText.clientHeight, hiddenBelow,
+    })) readPermissionId = permission.id;
     const wasRead = readPermissionId === permission.id;
     permissionHint.hidden = wasRead;
     // Depois do clique os botões ficam travados até o pedido sair do estado. answeredId vem do
@@ -364,6 +391,12 @@
     allowButton.disabled = locked || !wasRead;
   }
   permissionText.addEventListener('scroll', render);
+  // passive: false é obrigatório para o preventDefault valer. A roda sobre o texto nunca sai dele
+  // (a Fase 5 usa a roda na ilha para trocar de sessão) e, na janela depois de uma troca, não rola.
+  permissionText.addEventListener('wheel', (event) => {
+    event.stopPropagation();
+    if (!isWheelSettled(contentChangedAt, performance.now())) event.preventDefault();
+  }, { passive: false });
 
   // Volta ao desarmado e só rearma depois de PERMISSION_ARM_MS com o layout assentado. Chamado
   // por pedido novo, reexibição (armEpoch do main), mudança de tamanho e de visibilidade.
@@ -471,11 +504,20 @@
   window.island.onState((next, shouldChime) => {
     if (shouldChime && next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
     const previousPermissionId = current.permission ? current.permission.id : null;
+    const previousText = current.permission ? current.permission.text : null;
     current = next;
     const permissionId = next.permission ? next.permission.id : null;
+    const nextText = next.permission ? next.permission.text : null;
+    const epochChanged = next.armEpoch !== lastArmEpoch;
+    if (permissionId !== previousPermissionId || epochChanged || nextText !== previousText) {
+      contentChangedAt = performance.now();
+      // Um texto curto, que cabe inteiro, não gera mais evento depois da janela: sem este render
+      // ele ficaria sem "lido".
+      setTimeout(render, WHEEL_SETTLE_MS);
+    }
     // O main sobe armEpoch a cada troca, reexibição e mudança de monitor. O id novo também rearma,
     // para o renderer não depender só do contador.
-    if (next.armEpoch !== lastArmEpoch || (permissionId && permissionId !== previousPermissionId)) {
+    if (epochChanged || (permissionId && permissionId !== previousPermissionId)) {
       lastArmEpoch = next.armEpoch;
       restartArming();
     }
