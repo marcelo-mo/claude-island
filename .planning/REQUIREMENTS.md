@@ -114,11 +114,57 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| BASE-01 | Phase 1 | Pending |
+| BASE-02 | Phase 1 | Pending |
+| BASE-03 | Phase 1 | Pending |
+| BASE-04 | Phase 1 | Pending |
+| BASE-05 | Phase 1 | Pending |
+| SEG-01 | Phase 2 | Pending |
+| SEG-02 | Phase 2 | Pending |
+| SEG-03 | Phase 2 | Pending |
+| SEG-04 | Phase 2 | Pending |
+| SEG-05 | Phase 2 | Pending |
+| SEG-06 | Phase 2 | Pending |
+| SEG-07 | Phase 2 | Pending |
+| SEG-08 | Phase 2 | Pending |
+| CONV-04 | Phase 2 | Pending |
+| ANIM-01 | Phase 3 | Pending |
+| ANIM-02 | Phase 3 | Pending |
+| ANIM-03 | Phase 3 | Pending |
+| ANIM-04 | Phase 3 | Pending |
+| ANIM-05 | Phase 3 | Pending |
+| VIS-01 | Phase 3 | Pending |
+| VIS-02 | Phase 3 | Pending |
+| VIS-03 | Phase 3 | Pending |
+| VIS-04 | Phase 3 | Pending |
+| VIS-05 | Phase 3 | Pending |
+| HOV-01 | Phase 4 | Pending |
+| HOV-02 | Phase 4 | Pending |
+| HOV-03 | Phase 4 | Pending |
+| HOV-04 | Phase 4 | Pending |
+| PREF-01 | Phase 4 | Pending |
+| PREF-02 | Phase 4 | Pending |
+| PREF-03 | Phase 4 | Pending |
+| PREF-04 | Phase 4 | Pending |
+| PREF-05 | Phase 4 | Pending |
+| PREF-06 | Phase 4 | Pending |
+| TELA-01 | Phase 4 | Pending |
+| TELA-02 | Phase 4 | Pending |
+| SESS-01 | Phase 5 | Pending |
+| SESS-02 | Phase 5 | Pending |
+| SESS-03 | Phase 5 | Pending |
+| SESS-04 | Phase 5 | Pending |
+| SESS-05 | Phase 5 | Pending |
+| SESS-06 | Phase 5 | Pending |
+| SESS-07 | Phase 5 | Pending |
+| CONV-01 | Phase 6 | Pending |
+| CONV-02 | Phase 6 | Pending |
+| CONV-03 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 46 total
-- Mapped to phases: 0
-- Unmapped: 46 ⚠️
+- Mapped to phases: 46 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-11-21*
