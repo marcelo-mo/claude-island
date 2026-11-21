@@ -1728,3 +1728,24 @@ test('o bloco do pedido não usa o acento: tem tokens próprios e opacos', () =>
   }
   assert.match(rendererLf, /--perm-label: var\(--waiting\);/);
 });
+
+// Cada vetor de sessionSwitch encadeia as funções puras na mesma ordem do main (nextSelection no handler ou
+// no poll, nextShownPermission no refresh, acceptDecision no island:decide). A cola em si, quem chama quem,
+// é coberta pelas travas de texto abaixo: o main.js carrega o Electron e não roda no node --test.
+const switchFacts = { behavior: 'allow', decidedId: null, windowVisible: true, coveredByFullscreen: false, withinVisibleArea: true };
+for (const vector of vectors.sessionSwitch) {
+  test(`sessionSwitch: ${vector.name}`, () => {
+    const { selection, list, wheel, shownBefore, switchAt } = vector.input;
+    const event = wheel ? { type: 'scroll', step: wheelStep(wheel.gesture, wheel.delta, wheel.now).step } : vector.input.event;
+    const next = nextSelection(selection, list, event);
+    const permissionId = list.find((entry) => entry.key === next.key)?.permissionId ?? null;
+    const shown = nextShownPermission(shownBefore, permissionId, switchAt, false);
+    const decide = (echoedId, now) => acceptDecision({ ...switchFacts, echoedId, shownId: shown.id, shownSince: shown.since, now });
+    assert.equal(next.key, vector.expect.key);
+    assert.equal(shown.id, vector.expect.shownId);
+    assert.equal(shown.epoch, vector.expect.epoch);
+    assert.deepEqual(decide(shown.id, switchAt + 799), vector.expect.before);
+    assert.deepEqual(decide(shown.id, switchAt + 800), vector.expect.after);
+    assert.deepEqual(decide(shownBefore.id, switchAt + 800), vector.expect.oldEcho);
+  });
+}

@@ -2069,5 +2069,8 @@
     { "name": "âncora desconhecida em 1093 DIP não é afetada", "input": { "anchor": "beside", "workArea": { "width": 1093 } }, "expect": true },
     { "name": "âncora nula em 1093 DIP não é afetada", "input": { "anchor": null, "workArea": { "width": 1093 } }, "expect": true },
     { "name": "topo centro com área útil ausente não é afetado", "input": { "anchor": "top-center", "workArea": null }, "expect": true }
+  ],
+  "sessionSwitch": [
+    {"name":"clique no ponto: vai à sessão b, recusa aos 799 ms, aceita aos 800 e recusa o eco do pedido de a","input":{"selection":{"key":"sessao-a","requests":[{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","seenAt":100,"handled":true,"shown":true},{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","seenAt":200,"handled":true,"shown":false}]},"list":[{"key":"sessao-a","state":"waiting","updatedAt":900,"permissionId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"},{"key":"sessao-b","state":"waiting","updatedAt":950,"permissionId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}],"wheel":null,"event":{"type":"select","index":1},"shownBefore":{"id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","since":1000,"epoch":3},"switchAt":5000},"expect":{"key":"sessao-b","shownId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","epoch":4,"before":{"accept":false,"reason":"not-armed"},"after":{"accept":true,"permissionId":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","behavior":"allow"},"oldEcho":{"accept":false,"reason":"echo-mismatch"}}}
   ]
 }
