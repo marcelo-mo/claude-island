@@ -45,3 +45,16 @@ test('o pedido exibido só é atribuído na declaração e dentro de refresh (in
   assert.equal(assignments.length, 2);
   assert.ok(mainSource.includes('function refresh(reason)'));
 });
+
+// Trava de regressão (texto exato), não prova de comportamento: o comportamento do rearme é o do
+// vetor "mesmo id com rearm true"; aqui só se garante que os eventos continuam ligados a ele.
+test('toda reexibição rearma o relógio do main', () => {
+  for (const hook of [
+    "island.on('show', () => refresh('rearm'))",
+    "island.on('restore', () => refresh('rearm'))",
+    "['display-added', 'display-removed', 'display-metrics-changed']",
+    "screen.on(eventName, () => refresh('rearm'))",
+  ]) {
+    assert.ok(mainSource.includes(hook), `main.js sem o gancho de rearme: ${hook}`);
+  }
+});
