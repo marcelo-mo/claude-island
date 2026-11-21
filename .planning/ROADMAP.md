@@ -12,8 +12,8 @@ Reformular a ilha com o comportamento e o visual do mod "Dynamic Island for Wind
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Spike de medição e decisão de base** - Decidir Electron × Tauri por medição reproduzível e tirar da ilha parada o custo de animação contínua
-- [ ] **Phase 2: Fundação segura do gate de permissão** - Decisão de Permitir/Negar só atinge o pedido visto, comprovado por testes, antes de qualquer feature mudar a tela
+- [x] **Phase 1: Spike de medição e decisão de base** - Decidir Electron × Tauri por medição reproduzível e tirar da ilha parada o custo de animação contínua
+- [x] **Phase 2: Fundação segura do gate de permissão** - Decisão de Permitir/Negar só atinge o pedido visto, comprovado por testes, antes de qualquer feature mudar a tela
 - [ ] **Phase 3: Palco fixo, animação e visual** - Molas assimétricas, nudge, 8 temas, 3 formas e material com reflexo de estado, sem comprometer a leitura do pedido
 - [ ] **Phase 4: Entrada, preferências e comportamento no sistema** - Hover pela posição do cursor, menu de clique direito, atalho, âncora e esconder em tela cheia
 - [ ] **Phase 5: Sessões** - Scroll entre sessões, pontos, snap para quem pede permissão e fila "1 de N"
@@ -72,7 +72,11 @@ Plans:
   3. Com um pedido na tela a ilha está 100% opaca, a roda sobre o texto só rola o texto, "lido até o fim" zera a cada pedido novo e a inércia da roda nos 300–400 ms após uma troca não conta como leitura; ilha escondida, em tela cheia ou fora da área visível não aceita decisão, esconder nunca aprova e reexibir rearma
   4. A regra de aceite da decisão é uma função pura coberta por `node:test` com vetores compartilháveis (`fixtures/permission-vectors.json`), o caminho `island:decide` deixa de ser o único ponto sem teste, as janelas abrem com `contextIsolation` e `sandbox` ligados e sem `nodeIntegration`, e não existe canal do renderer para gravar preferências
   5. `THIRD_PARTY_NOTICES.md` credita o mod com o texto MIT completo, a versão 1.4.0 e o titular conferido no `LICENSE` do repositório do autor, e existe antes do primeiro commit com constantes portadas
-**Plans**: TBD
+**Plans**: 4/4 plans executed (sequenciais: todos a partir do 02-02 editam `gate.test.js` e o fixture)
+- [x] 02-01-PLAN.md — eco do id ponta a ponta com `acceptDecision` pura e vetores; primeiro clique vence; janela invisível/fora da área não decide
+- [x] 02-02-PLAN.md — funil único `refresh(reason)` com reducer puro; reexibir/restaurar/trocar de monitor rearma o relógio do main
+- [x] 02-03-PLAN.md — armamento do renderer (0,8 s, layout assentado, cursor parado, mesma geração), roda e inércia com predicados puros testados
+- [x] 02-04-PLAN.md — `THIRD_PARTY_NOTICES.md`, `webPreferences` explícitas com canais travados por teste, `effectiveOpacity`
 **Research flag**: não. Código do próprio repositório; exige apenas testes primeiro. O CONV-04 mora aqui, e não na Fase 6, porque a Fase 3 é a primeira a portar constantes (molas) e o aviso de licença precisa existir antes.
 
 ### Phase 3: Palco fixo, animação e visual
@@ -139,8 +143,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 (condicional) → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Spike de medição e decisão de base | 4/4 | In Progress | - |
-| 2. Fundação segura do gate de permissão | 0/TBD | Not started | - |
+| 1. Spike de medição e decisão de base | 4/4 | Complete | 2026-11-21 |
+| 2. Fundação segura do gate de permissão | 4/4 | Complete | 2026-11-21 |
 | 3. Palco fixo, animação e visual | 0/TBD | Not started | - |
 | 4. Entrada, preferências e comportamento no sistema | 0/TBD | Not started | - |
 | 5. Sessões | 0/TBD | Not started | - |

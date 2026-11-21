@@ -120,6 +120,35 @@ function decisionOutput(behavior) {
   return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } });
 }
 
+const refuseDecision = (reason) => ({ accept: false, reason });
+
+/**
+ * Decide se um clique em Permitir/Negar vira uma decisão gravada. Nunca lança. Devolve
+ * { accept: true, permissionId, behavior }, em que permissionId é sempre o pedido exibido
+ * (`shownId`): o eco enviado pelo renderer (`echoedId`) só pode recusar, nunca escolher o
+ * alvo. Ou devolve { accept: false, reason }. A ordem das checagens é contrato, fixada pelos
+ * vetores de fixtures/permission-vectors.json.
+ */
+function acceptDecision({
+  behavior, echoedId, shownId, shownSince, now, decidedId, windowVisible, coveredByFullscreen, withinVisibleArea,
+}) {
+  if (decisionOutput(behavior) === null) return refuseDecision('invalid-behavior');
+  if (typeof shownId !== 'string' || shownId === '') return refuseDecision('nothing-shown');
+  // Igualdade estrita: eco ausente, de outro tipo, de outro pedido ou com outra caixa recusa.
+  if (echoedId !== shownId) return refuseDecision('echo-mismatch');
+  // Duas ilhas podem mostrar o mesmo pedido: só o primeiro clique vale.
+  if (decidedId === shownId) return refuseDecision('already-decided');
+  // Os três fatos abaixo só aceitam o valor exato: fato ausente ou de outro tipo recusa.
+  if (windowVisible !== true) return refuseDecision('window-hidden');
+  if (coveredByFullscreen !== false) return refuseDecision('covered-by-fullscreen');
+  if (withinVisibleArea !== true) return refuseDecision('outside-visible-area');
+  // Cobre também o relógio que andou para trás (delta negativo) e dado que não é número.
+  if (!Number.isFinite(now) || !Number.isFinite(shownSince) || now - shownSince < PERMISSION_ARM_MS) {
+    return refuseDecision('not-armed');
+  }
+  return { accept: true, permissionId: shownId, behavior };
+}
+
 /** A ilha está no ar se o batimento dela é recente (e não veio do futuro). */
 function isHeartbeatFresh(heartbeatAt, now) {
   return Number.isFinite(heartbeatAt) && heartbeatAt <= now + HEARTBEAT_STALE_MS && now - heartbeatAt <= HEARTBEAT_STALE_MS;
@@ -170,6 +199,39 @@ function pickState(sessions, now) {
   };
 }
 
+// getBounds() arredonda com escala de DPI fracionária (como 125%), e a janela pode medir 1 ou 2 px
+// a mais que o esperado. Recusar por engano é seguro (o terminal segue valendo), mas não pode
+// virar recusa permanente de uma janela que está de fato na tela.
+const WORK_AREA_TOLERANCE_PX = 2;
+
+/**
+ * A janela está dentro da área útil do monitor? `horizontalSlack` é a folga lateral que a
+ * janela transparente já tem (ver clampIslandPosition). Devolve false quando `bounds` ou
+ * `workArea` não têm todos os campos numéricos: dado que não confere não decide. Num monitor
+ * menor que a janela também devolve false, que é o lado seguro.
+ */
+function isWithinWorkArea(bounds, workArea, horizontalSlack) {
+  const fields = [bounds && bounds.x, bounds && bounds.y, bounds && bounds.width, bounds && bounds.height,
+    workArea && workArea.x, workArea && workArea.y, workArea && workArea.width, workArea && workArea.height,
+    horizontalSlack];
+  if (!fields.every(Number.isFinite)) return false;
+  const sideMargin = horizontalSlack + WORK_AREA_TOLERANCE_PX;
+  return bounds.x >= workArea.x - sideMargin
+    && bounds.x + bounds.width <= workArea.x + workArea.width + sideMargin
+    && bounds.y >= workArea.y - WORK_AREA_TOLERANCE_PX
+    && bounds.y + bounds.height <= workArea.y + workArea.height + WORK_AREA_TOLERANCE_PX;
+}
+
+/**
+ * Próximo estado do pedido exibido, `{ id, since, epoch }`. Só um id diferente ou `rearm === true`
+ * (exatamente true: reexibir, restaurar ou mudar de monitor) reinicia `since` e sobe `epoch`;
+ * sem isso devolve o próprio `shown`. O renderer reinicia o armamento quando o `epoch` muda.
+ */
+function nextShownPermission(shown, permissionId, now, rearm) {
+  if (permissionId === shown.id && rearm !== true) return shown;
+  return { id: permissionId, since: now, epoch: shown.epoch + 1 };
+}
+
 /** Posição padrão da janela da ilha: topo central da área útil do monitor. */
 function defaultIslandPosition(workArea, windowSize) {
   return { x: Math.round(workArea.x + (workArea.width - windowSize.width) / 2), y: workArea.y };
@@ -189,8 +251,46 @@ function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
   };
 }
 
+/**
+ * Opacidade com que a ilha deve aparecer. Devolve 1 quando há pedido na tela ou o fato é
+ * desconhecido (`hasPermission !== false`, fail-safe) e quando a preferência não é um número em
+ * (0, 1]; senão devolve a preferência. Ainda sem consumidor: a transparência de 100/85/70/55% da
+ * Fase 4 (PREF-06) a usa, e com pedido na tela a transparência nunca vale (invariante I5).
+ */
+function effectiveOpacity(preferredOpacity, hasPermission) {
+  if (hasPermission !== false) return 1;
+  if (typeof preferredOpacity !== 'number' || !(preferredOpacity > 0 && preferredOpacity <= 1)) return 1;
+  return preferredOpacity;
+}
+
+// Mesma URL de arquivo escrita de dois jeitos que o Chromium e o Node produzem: letra de unidade em
+// caixa diferente e trecho com ou sem percent-encoding. Lança com codificação malformada.
+const canonicalFileUrl = (url) => decodeURI(url).replace(/^file:\/\/\/([a-z]):/i, (_match, drive) => `file:///${drive.toUpperCase()}:`);
+
+/**
+ * O remetente de uma mensagem IPC é a página da ilha? Só o frame principal (`isMainFrame` exatamente
+ * true) com a URL do index.html, sem query nem fragmento. Uma página para a qual a janela navegasse
+ * (arrastar um link ou arquivo) herdaria o preload e aprovaria pedidos. Devolve false para qualquer
+ * entrada que não confira, inclusive URL ausente ou com codificação malformada.
+ */
+function isIslandSender(input) {
+  const { isMainFrame, url, islandUrl } = input || {};
+  if (isMainFrame !== true || typeof url !== 'string' || typeof islandUrl !== 'string' || islandUrl === '') return false;
+  try {
+    return canonicalFileUrl(url) === canonicalFileUrl(islandUrl);
+  } catch {
+    return false; // decodeURI recusou a URL: dado que não confere não decide
+  }
+}
+
+// Explícito protege de regressão: ligar nodeIntegration desligaria o sandbox em silêncio. O renderer
+// só carrega o index.html local, com CSP default-src 'none'.
+const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: true, nodeIntegration: false });
+
 module.exports = {
+  SECURE_WEB_PREFERENCES, effectiveOpacity, isIslandSender,
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
-  eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh,
-  pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
+  eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
+  pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
+  nextShownPermission,
 };

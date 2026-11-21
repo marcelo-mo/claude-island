@@ -2,9 +2,11 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const {
-  STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS,
-  pickState, decisionOutput, defaultIslandPosition, clampIslandPosition,
+  STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
+  pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  SECURE_WEB_PREFERENCES, isIslandSender,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -15,6 +17,8 @@ const WINDOW_SIZE = { width: 440, height: 324 };
 // cada lado, que podem sair da tela para a pílula encostar na borda do monitor.
 const HORIZONTAL_SLACK = 20;
 const POLL_MS = 400;
+// A ilha carrega por esta URL e só aceita mensagens da página que está nela (ver islandOf).
+const ISLAND_URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
 
 // Em Linux o "forward" de setIgnoreMouseEvents não existe, então não dá para
 // deixar o clique atravessar a área transparente e ainda detectar o hover.
@@ -32,10 +36,15 @@ const dragStartPositions = new Map();
 let savedOffsets = {};
 let lastPickedState = { state: 'idle', count: 0 };
 let shownWindowPid = null;
-// Pedido de permissão em exibição e desde quando: é a este id que um clique em "Permitir"
-// ou "Negar" se refere. O renderer nunca informa o id.
-let shownPermissionId = null;
-let shownPermissionSince = 0;
+// Pedido de permissão em exibição, desde quando (performance.now) e a época do armamento: é a este
+// id que um clique em "Permitir" ou "Negar" se refere. O renderer só devolve o id como eco, que
+// apenas pode recusar. Só muda dentro de refresh (invariante I2), para toda troca rearmar.
+let shown = { id: null, since: 0, epoch: 0 };
+// Último estado serializado enviado às ilhas; refresh só reenvia quando algo mudou.
+let lastSent = JSON.stringify(lastPickedState);
+// Último pedido cuja decisão foi gravada. Primeiro clique vence: só o main enxerga as duas ilhas
+// (cada renderer só trava o próprio botão), então é ele que recusa a segunda decisão.
+let decidedPermissionId = null;
 
 const positionsFile = () => path.join(app.getPath('userData'), 'positions.json');
 
@@ -147,8 +156,36 @@ function savedPosition(display) {
 
 // Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.
 function sendState(island) {
+  // O estado leva o texto do pedido: só vai para a página da ilha, nunca para uma que a substituísse.
+  if (!isIslandSender({ isMainFrame: true, url: island.webContents.getURL(), islandUrl: ISLAND_URL })) return;
   const isFirstIsland = island === islands.values().next().value;
-  island.webContents.send('island:state', lastPickedState, isFirstIsland);
+  // answeredId faz a outra ilha travar os botões do pedido que uma ilha já decidiu; armEpoch
+  // sobe a cada troca, reexibição ou mudança de monitor, e o renderer rearma quando ele muda.
+  island.webContents.send(
+    'island:state',
+    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch },
+    isFirstIsland,
+  );
+}
+
+/**
+ * Único lugar que muda o pedido exibido. `reason` 'rearm' (reexibir, restaurar, monitor) reinicia
+ * o armamento mesmo sem o estado das sessões ter mudado, então o retorno antecipado olha o estado
+ * e a época separados: olhar só o estado engoliria o rearme.
+ */
+function refresh(reason) {
+  const picked = pickState(readSessions(), Date.now());
+  const serialized = JSON.stringify(picked);
+  const permissionId = picked.permission ? picked.permission.id : null;
+  // Relógio monotônico: o de parede salta com NTP e suspensão, o que armaria os botões antes da
+  // hora (ou nunca). Só a regra do armamento usa este instante; pickState segue em relógio de parede.
+  const nextShown = nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm');
+  if (serialized === lastSent && nextShown.epoch === shown.epoch) return;
+  lastSent = serialized;
+  lastPickedState = picked;
+  shownWindowPid = picked.windowPid ?? null;
+  shown = nextShown;
+  for (const island of islands.values()) sendState(island);
 }
 
 function createIsland(display) {
@@ -165,15 +202,27 @@ function createIsland(display) {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       autoplayPolicy: 'no-user-gesture-required', // o aviso sonoro toca sem clique
+      // Por último, para nada acima sobrescrever.
+      ...SECURE_WEB_PREFERENCES,
     },
   });
+  // Reexibir ou restaurar de minimizada põe os botões sob o cursor de novo, então o main reinicia
+  // os 0,8 s. Nada esconde nem minimiza a ilha de propósito antes da Fase 4: a prova ponta a ponta
+  // fica para lá (Assumption A9).
+  island.on('show', () => refresh('rearm'));
+  island.on('restore', () => refresh('rearm'));
+  // Por padrão o Chromium navega a janela quando um link ou arquivo é solto nela, e a página nova
+  // herdaria o preload (window.island). A ilha nunca sai do index.html nem abre outra janela.
+  island.webContents.on('will-navigate', (event) => event.preventDefault());
+  island.webContents.on('will-redirect', (event) => event.preventDefault());
+  island.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   island.setAlwaysOnTop(true, 'screen-saver'); // acima de apps em tela cheia
   island.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   if (CAN_CLICK_THROUGH) island.setIgnoreMouseEvents(true, { forward: true });
   islands.set(display.id, island);
   // Janela criada depois (monitor plugado) não pode esperar a próxima mudança de estado.
   island.webContents.on('did-finish-load', () => sendState(island));
-  island.loadFile('index.html');
+  island.loadURL(ISLAND_URL);
 }
 
 // Reconciliação única para monitor adicionado, removido ou alterado (resolução, escala,
@@ -198,7 +247,15 @@ function syncIslands() {
 }
 
 function registerIpcHandlers() {
-  const islandOf = (event) => BrowserWindow.fromWebContents(event.sender);
+  // Fronteira de confiança: só o index.html, no frame principal, fala com o main. Bloquear a navegação
+  // (createIsland) é a primeira camada; esta é a segunda, para todo canal. Remetente estranho: null,
+  // e o handler ignora a mensagem.
+  const islandOf = (event) => {
+    const frame = event.senderFrame;
+    const isMainFrame = Boolean(frame) && frame === event.sender.mainFrame;
+    if (!isIslandSender({ isMainFrame, url: frame?.url, islandUrl: ISLAND_URL })) return null;
+    return BrowserWindow.fromWebContents(event.sender);
+  };
 
   ipcMain.on('island:hover', (event, isOverPill) => {
     const island = islandOf(event);
@@ -239,23 +296,47 @@ function registerIpcHandlers() {
   });
 
   // O renderer só diz "focar"; o PID é o da sessão em exibição, guardado aqui.
-  ipcMain.on('island:focus', () => {
+  ipcMain.on('island:focus', (event) => {
+    if (!islandOf(event)) return;
     focusWindow(shownWindowPid, (error) => {
       if (error) console.error('Não foi possível focar a janela da sessão:', error.message);
     });
   });
 
-  // Fronteira de confiança: isto aprova a execução de um comando. O renderer só diz
-  // 'allow' ou 'deny'; o pedido é o que está em exibição, guardado aqui.
-  ipcMain.on('island:decide', (event, behavior) => {
-    if (![...islands.values()].includes(islandOf(event))) return;
-    if (!shownPermissionId || !decisionOutput(behavior)) return;
-    // Pedido recém-trocado: o clique foi dado olhando para o anterior (ver PERMISSION_ARM_MS).
-    if (Date.now() - shownPermissionSince < PERMISSION_ARM_MS) return;
+  // Fronteira de confiança: isto aprova a execução de um comando. O renderer envia a intenção
+  // ('allow' ou 'deny') e o eco do id que ele estava mostrando; o eco só serve para recusar
+  // (o pedido mudou entre ver e clicar). O alvo é sempre o pedido em exibição, guardado aqui.
+  ipcMain.on('island:decide', (event, behavior, pressedId) => {
+    const island = islandOf(event);
+    if (![...islands.values()].includes(island)) return;
+    const display = displayOf(island);
+    const verdict = acceptDecision({
+      behavior,
+      echoedId: pressedId,
+      shownId: shown.id,
+      shownSince: shown.since,
+      now: performance.now(),
+      decidedId: decidedPermissionId,
+      windowVisible: island.isVisible() && !island.isMinimized(),
+      // ponytail: sem sonda de tela cheia até a Fase 4 (TELA-01); a entrada já existe no contrato e nos vetores.
+      coveredByFullscreen: false,
+      withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK),
+    });
+    // Recusa e falha de gravação reenviam o estado a quem clicou: o renderer trava os botões ao enviar
+    // e só os solta quando o main responde. Ele nunca reenvia sozinho; o próximo clique é do usuário.
+    if (!verdict.accept) {
+      sendState(island);
+      return;
+    }
     try {
-      writeDecision(shownPermissionId, behavior);
+      writeDecision(verdict.permissionId, verdict.behavior);
+      // Só depois de gravar: marcar antes impediria tentar de novo se a gravação falhar. O handler
+      // roda num turno síncrono do event loop, sem intercalação entre checar e marcar.
+      decidedPermissionId = verdict.permissionId;
+      for (const each of islands.values()) sendState(each);
     } catch (error) {
       console.error('Não foi possível gravar a decisão do pedido de permissão:', error.message);
+      sendState(island);
     }
   });
 }
@@ -270,25 +351,14 @@ function start() {
   screen.on('display-added', syncIslands);
   screen.on('display-removed', syncIslands);
   screen.on('display-metrics-changed', syncIslands);
+  // A janela muda de lugar e os botões andam sob o cursor; rearmar a mais é o lado seguro. Os
+  // listeners rodam na ordem de registro, então syncIslands reposiciona antes do rearme.
+  for (const eventName of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(eventName, () => refresh('rearm'));
 
   // ponytail: polling em vez de fs.watch — são poucos arquivos minúsculos, e o timer
   // é necessário de qualquer jeito para o "concluído" expirar. Trocar por fs.watch
   // se o custo aparecer.
-  let lastSent = JSON.stringify(lastPickedState);
-  setInterval(() => {
-    const picked = pickState(readSessions(), Date.now());
-    const serialized = JSON.stringify(picked);
-    if (serialized === lastSent) return;
-    lastSent = serialized;
-    lastPickedState = picked;
-    shownWindowPid = picked.windowPid ?? null;
-    const permissionId = picked.permission ? picked.permission.id : null;
-    if (permissionId !== shownPermissionId) {
-      shownPermissionId = permissionId;
-      shownPermissionSince = Date.now();
-    }
-    for (const island of islands.values()) sendState(island);
-  }, POLL_MS);
+  setInterval(() => refresh('poll'), POLL_MS);
 }
 
 if (!app.requestSingleInstanceLock()) {

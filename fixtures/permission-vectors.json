@@ -1,0 +1,1833 @@
+{
+  "version": 1,
+  "armMs": 800,
+  "acceptReasons": [
+    "invalid-behavior",
+    "nothing-shown",
+    "echo-mismatch",
+    "already-decided",
+    "window-hidden",
+    "covered-by-fullscreen",
+    "outside-visible-area",
+    "not-armed"
+  ],
+  "acceptDecision": [
+    {
+      "name": "aceita allow com eco igual e 800 ms exatos",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "allow"
+      }
+    },
+    {
+      "name": "aceita deny com eco igual e 800 ms exatos",
+      "input": {
+        "behavior": "deny",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "deny"
+      }
+    },
+    {
+      "name": "aceita allow com 801 ms",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1801,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "allow"
+      }
+    },
+    {
+      "name": "aceita allow com o pedido na tela há 10 000 ms",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 11000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "allow"
+      }
+    },
+    {
+      "name": "recusa behavior em maiúsculas",
+      "input": {
+        "behavior": "ALLOW",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa behavior com espaço no fim",
+      "input": {
+        "behavior": "allow ",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa behavior nulo",
+      "input": {
+        "behavior": null,
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa behavior objeto",
+      "input": {
+        "behavior": {},
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa behavior ausente",
+      "input": {
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa quando nada está exibido (shownId nulo)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": null,
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "nothing-shown"
+      }
+    },
+    {
+      "name": "recusa quando nada está exibido (shownId ausente)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "nothing-shown"
+      }
+    },
+    {
+      "name": "recusa quando nada está exibido (shownId vazio)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "nothing-shown"
+      }
+    },
+    {
+      "name": "recusa eco de outro pedido",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa eco do mesmo UUID em maiúsculas",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa eco ausente",
+      "input": {
+        "behavior": "allow",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa eco numérico",
+      "input": {
+        "behavior": "allow",
+        "echoedId": 42,
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa eco nulo",
+      "input": {
+        "behavior": "allow",
+        "echoedId": null,
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa clique dado olhando A quando B tomou a tela (pedido mudou no instante do clique)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownSince": 1000,
+        "now": 11000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa com 0 ms na tela",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa com 799 ms na tela",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1799,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa quando o relógio andou para trás",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 900,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa com shownSince ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa com now ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa pedido novo logo após o clique (eco igual ao novo, há 100 ms)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownSince": 1700,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "behavior inválido vence nada exibido",
+      "input": {
+        "behavior": "ALLOW",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": null,
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "eco divergente vence o relógio (0 ms)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa pedido já decidido (primeiro clique vence)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "already-decided"
+      }
+    },
+    {
+      "name": "aceita quando o pedido decidido é outro",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "allow"
+      }
+    },
+    {
+      "name": "recusa janela invisível",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": false,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "window-hidden"
+      }
+    },
+    {
+      "name": "recusa fato de visibilidade ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "window-hidden"
+      }
+    },
+    {
+      "name": "recusa visibilidade em texto \"true\"",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": "true",
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "window-hidden"
+      }
+    },
+    {
+      "name": "recusa janela marcada como coberta por tela cheia",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": true,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "covered-by-fullscreen"
+      }
+    },
+    {
+      "name": "recusa fato de tela cheia ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "covered-by-fullscreen"
+      }
+    },
+    {
+      "name": "recusa janela fora da área visível",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": false
+      },
+      "expect": {
+        "accept": false,
+        "reason": "outside-visible-area"
+      }
+    },
+    {
+      "name": "recusa fato de área visível ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false
+      },
+      "expect": {
+        "accept": false,
+        "reason": "outside-visible-area"
+      }
+    },
+    {
+      "name": "eco divergente vence pedido já decidido",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "pedido já decidido vence janela invisível",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "windowVisible": false,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "already-decided"
+      }
+    },
+    {
+      "name": "janela invisível vence o relógio (0 ms)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1000,
+        "decidedId": null,
+        "windowVisible": false,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "window-hidden"
+      }
+    },
+    {
+      "name": "fora da área visível vence o relógio (0 ms)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": false
+      },
+      "expect": {
+        "accept": false,
+        "reason": "outside-visible-area"
+      }
+    }
+  ],
+  "isWithinWorkArea": [
+    {
+      "name": "posição padrão no topo central",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "encostada na folga esquerda",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -20,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "2 px além da folga esquerda (tolerância de arredondamento)",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -22,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "3 px além da folga esquerda",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -23,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "encostada na folga direita",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 1500,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "2 px além da folga direita",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 1502,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "3 px além da folga direita",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 1503,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "2 px acima do topo",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": -2,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "3 px acima do topo",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": -3,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "2 px abaixo do fim",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": 718,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "3 px abaixo do fim",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": 719,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "monitor secundário à esquerda: posição padrão",
+      "input": {
+        "workArea": {
+          "x": -1920,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -1180,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "monitor secundário à esquerda: 2 px além da folga",
+      "input": {
+        "workArea": {
+          "x": -1920,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -1942,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "monitor secundário à esquerda: 3 px além da folga",
+      "input": {
+        "workArea": {
+          "x": -1920,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -1943,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "janela inteira em outro monitor",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -1180,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "bounds ausente",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20
+      },
+      "expect": false
+    },
+    {
+      "name": "bounds com campo em texto",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": "10",
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "workArea ausente",
+      "input": {
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    }
+  ],
+  "nextShownPermission": [
+    {
+      "name": "pedido novo A a partir do vazio reinicia o instante e sobe a época",
+      "input": {
+        "shown": {
+          "id": null,
+          "since": 0,
+          "epoch": 0
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 1000,
+        "rearm": false
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 1000,
+        "epoch": 1
+      }
+    },
+    {
+      "name": "mesmo id com rearm false não muda nada",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 5000,
+        "rearm": false
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 1000,
+        "epoch": 1
+      }
+    },
+    {
+      "name": "mesmo id com rearm ausente não muda nada",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 5000
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 1000,
+        "epoch": 1
+      }
+    },
+    {
+      "name": "mesmo id com rearm true reinicia o instante e sobe a época",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 5000,
+        "rearm": true
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 5000,
+        "epoch": 2
+      }
+    },
+    {
+      "name": "troca de A para B reinicia o instante e sobe a época",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "now": 3000,
+        "rearm": false
+      },
+      "expect": {
+        "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "since": 3000,
+        "epoch": 2
+      }
+    },
+    {
+      "name": "A some (id nulo) reinicia o instante e sobe a época",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": null,
+        "now": 4000,
+        "rearm": false
+      },
+      "expect": {
+        "id": null,
+        "since": 4000,
+        "epoch": 2
+      }
+    },
+    {
+      "name": "nulo para nulo sem rearm não muda nada",
+      "input": {
+        "shown": {
+          "id": null,
+          "since": 4000,
+          "epoch": 2
+        },
+        "permissionId": null,
+        "now": 6000,
+        "rearm": false
+      },
+      "expect": {
+        "id": null,
+        "since": 4000,
+        "epoch": 2
+      }
+    },
+    {
+      "name": "nulo para nulo com rearm true sobe a época",
+      "input": {
+        "shown": {
+          "id": null,
+          "since": 4000,
+          "epoch": 2
+        },
+        "permissionId": null,
+        "now": 6000,
+        "rearm": true
+      },
+      "expect": {
+        "id": null,
+        "since": 6000,
+        "epoch": 3
+      }
+    },
+    {
+      "name": "rearm com a string \"true\" é tratado como sem rearm",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 5000,
+        "rearm": "true"
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 1000,
+        "epoch": 1
+      }
+    }
+  ],
+  "settleStableMs": 100,
+  "pressDwellMs": 200,
+  "settleStep": [
+    {
+      "name": "primeiro quadro parado, sem stableSince, ainda não assentou",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": null,
+        "now": 1000
+      },
+      "expect": {
+        "stableSince": 1000,
+        "settled": false
+      }
+    },
+    {
+      "name": "parado desde 1000, em 1099 ainda não assentou",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1099
+      },
+      "expect": {
+        "stableSince": 1000,
+        "settled": false
+      }
+    },
+    {
+      "name": "parado desde 1000, em 1100 assentou",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": 1000,
+        "settled": true
+      }
+    },
+    {
+      "name": "retângulo andou 1 px recomeça a contagem",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 21,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "sem retângulo anterior não assenta",
+      "input": {
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "pílula com opacidade 0.98 não assenta",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "0.98",
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "botões com opacidade 0.5 não assentam",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "0.5",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "opacidade como número (não string) não assenta",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": 1,
+        "actionsOpacity": "1",
+        "stableSince": 1000,
+        "now": 1100
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    },
+    {
+      "name": "sem now não assenta",
+      "input": {
+        "previousRect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "rect": {
+          "left": 20,
+          "top": 62,
+          "width": 400,
+          "height": 180
+        },
+        "pillOpacity": "1",
+        "actionsOpacity": "1",
+        "stableSince": 1000
+      },
+      "expect": {
+        "stableSince": null,
+        "settled": false
+      }
+    }
+  ],
+  "canPress": [
+    {
+      "name": "sem movimento do cursor, 200 ms depois de armar, vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 1200
+      },
+      "expect": true
+    },
+    {
+      "name": "199 ms depois de armar, ainda não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 1199
+      },
+      "expect": false
+    },
+    {
+      "name": "cursor mexeu em 1500, 150 ms depois não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 1500,
+        "now": 1650
+      },
+      "expect": false
+    },
+    {
+      "name": "cursor mexeu em 1500, 200 ms depois vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 1500,
+        "now": 1700
+      },
+      "expect": true
+    },
+    {
+      "name": "desarmado não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": false,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 1200
+      },
+      "expect": false
+    },
+    {
+      "name": "sem pedido não vale",
+      "input": {
+        "hasPermission": false,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 1200
+      },
+      "expect": false
+    },
+    {
+      "name": "sem armedAt não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "lastPointerMoveAt": 0,
+        "now": 1200
+      },
+      "expect": false
+    },
+    {
+      "name": "lastPointerMoveAt que não é número não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": "x",
+        "now": 1200
+      },
+      "expect": false
+    },
+    {
+      "name": "relógio antes de armedAt não vale",
+      "input": {
+        "hasPermission": true,
+        "armed": true,
+        "armedAt": 1000,
+        "lastPointerMoveAt": 0,
+        "now": 900
+      },
+      "expect": false
+    }
+  ],
+  "isValidRelease": [
+    {
+      "name": "allow apertado e solto em allow, mesmo pedido, vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": true
+    },
+    {
+      "name": "deny apertado e solto em deny vale",
+      "input": {
+        "pressedBehavior": "deny",
+        "releasedBehavior": "deny",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": true
+    },
+    {
+      "name": "apertou allow e soltou em deny não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "deny",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "soltou fora de um botão não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": null,
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "sem pointerdown válido (teclado, element.click) não vale",
+      "input": {
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "pedido mudou no meio do gesto não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p2",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "sem pedido atual não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": null,
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "id apertado vazio não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "armamento recomeçou e ainda não voltou não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": false,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "armamento recomeçou durante o gesto e voltou a armar antes de soltar não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 4
+      },
+      "expect": false
+    },
+    {
+      "name": "sem geração de armamento no pointerdown não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "geração de armamento como string não vale",
+      "input": {
+        "pressedBehavior": "allow",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": "3",
+        "currentArmToken": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "comportamento em maiúsculas não vale",
+      "input": {
+        "pressedBehavior": "ALLOW",
+        "releasedBehavior": "allow",
+        "pressedId": "p1",
+        "currentId": "p1",
+        "armed": true,
+        "pressedArmToken": 3,
+        "currentArmToken": 3
+      },
+      "expect": false
+    }
+  ],
+  "wheelSettleMs": 400,
+  "isWheelSettled": [
+    {
+      "name": "no instante da troca ainda não assentou",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1000
+      },
+      "expect": false
+    },
+    {
+      "name": "399 ms depois da troca ainda não assentou",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1399
+      },
+      "expect": false
+    },
+    {
+      "name": "400 ms depois da troca assentou",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1400
+      },
+      "expect": true
+    },
+    {
+      "name": "relógio antes da troca não assentou",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 900
+      },
+      "expect": false
+    },
+    {
+      "name": "sem contentChangedAt não assentou",
+      "input": {
+        "now": 1500
+      },
+      "expect": false
+    }
+  ],
+  "canMarkRead": [
+    {
+      "name": "rolou até o fim depois da janela da roda marca lido",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 105,
+        "hiddenBelow": 0
+      },
+      "expect": true
+    },
+    {
+      "name": "faltando 2 px ainda conta como fim",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 105,
+        "hiddenBelow": 2
+      },
+      "expect": true
+    },
+    {
+      "name": "faltando 3 px não conta como fim",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 105,
+        "hiddenBelow": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "texto sem altura visível não marca lido",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 0,
+        "hiddenBelow": 0
+      },
+      "expect": false
+    },
+    {
+      "name": "dentro da janela da roda não marca lido",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1300,
+        "clientHeight": 105,
+        "hiddenBelow": 0
+      },
+      "expect": false
+    },
+    {
+      "name": "sem hiddenBelow não marca lido",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 105
+      },
+      "expect": false
+    }
+  ],
+  "effectiveOpacity": [
+    { "name": "pedido na tela com 0.55 vale 1", "input": { "preferredOpacity": 0.55, "hasPermission": true }, "expect": 1 },
+    { "name": "pedido na tela com 0.85 vale 1", "input": { "preferredOpacity": 0.85, "hasPermission": true }, "expect": 1 },
+    { "name": "sem pedido com 0.85 vale 0.85", "input": { "preferredOpacity": 0.85, "hasPermission": false }, "expect": 0.85 },
+    { "name": "sem pedido com 1 vale 1", "input": { "preferredOpacity": 1, "hasPermission": false }, "expect": 1 },
+    { "name": "sem pedido com 0.55 vale 0.55", "input": { "preferredOpacity": 0.55, "hasPermission": false }, "expect": 0.55 },
+    { "name": "fato hasPermission ausente é desconhecido e vale 1", "input": { "preferredOpacity": 0.7 }, "expect": 1 },
+    { "name": "preferência ausente vale 1", "input": { "hasPermission": false }, "expect": 1 },
+    { "name": "preferência acima de 1 vale 1", "input": { "preferredOpacity": 1.5, "hasPermission": false }, "expect": 1 },
+    { "name": "preferência 0 vale 1", "input": { "preferredOpacity": 0, "hasPermission": false }, "expect": 1 },
+    { "name": "preferência negativa vale 1", "input": { "preferredOpacity": -0.2, "hasPermission": false }, "expect": 1 },
+    { "name": "preferência em string vale 1", "input": { "preferredOpacity": "0.5", "hasPermission": false }, "expect": 1 }
+  ],
+  "isIslandSender": [
+    { "name": "frame principal com a URL exata da ilha", "input": { "isMainFrame": true, "url": "file:///D:/ilha/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": true },
+    { "name": "letra de unidade em caixa diferente é o mesmo arquivo", "input": { "isMainFrame": true, "url": "file:///d:/ilha/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": true },
+    { "name": "espaço codificado e não codificado é o mesmo arquivo", "input": { "isMainFrame": true, "url": "file:///D:/minha%20ilha/index.html", "islandUrl": "file:///D:/minha ilha/index.html" }, "expect": true },
+    { "name": "subframe com a URL da ilha recusa", "input": { "isMainFrame": false, "url": "file:///D:/ilha/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "isMainFrame que não é exatamente true recusa", "input": { "isMainFrame": 1, "url": "file:///D:/ilha/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "outro arquivo local recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/outra.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "página remota recusa", "input": { "isMainFrame": true, "url": "https://exemplo.com/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "mesma página com query recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/index.html?x=1", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "mesma página com fragmento recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/index.html#x", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "caixa diferente fora da letra de unidade recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/INDEX.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "frame sem URL (destruído) recusa", "input": { "isMainFrame": true, "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "URL esperada vazia recusa", "input": { "isMainFrame": true, "url": "", "islandUrl": "" }, "expect": false },
+    { "name": "codificação malformada recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/%E0%A4%A/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "entrada ausente recusa", "input": null, "expect": false }
+  ]
+}
