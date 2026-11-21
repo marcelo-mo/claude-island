@@ -52,13 +52,13 @@ Esta fase **não existe agora**. Ela só é criada se a Fase 1 decidir por Tauri
   3. Existe uma tabela comparando o Electron atual, o Electron otimizado (sem animação contínua de `box-shadow`, uma janela) e uma casca Tauri com a mesma interface, e o caminho de permissão ponta a ponta só foi portado para o Tauri se ele passou a primeira etapa
   4. Com a ilha parada ou escondida nenhuma animação CSS roda (o brilho do contorno anima só `opacity`/`transform`), e o script mostra a CPU ociosa abaixo da medição do Electron atual
   5. `PROJECT.md` (Key Decisions) registra a decisão e os números, e, se o Tauri venceu, este roadmap ganhou a fase de port antes da Fase 4
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans executed
 
 Plans:
 - [x] 01-01-PLAN.md — Regra de decisão commitada primeiro, medidor + veredito de ponta a ponta, brilho só por opacity (BASE-01, BASE-02, BASE-05)
 - [x] 01-02-PLAN.md — Casca Tauri T0 com a mesma interface, validada nos dois monitores (BASE-03)
 - [x] 01-03-PLAN.md — Medição de E0/E1/E3/E2/T0 com tentativas registradas, veredito da Etapa 1 e decisão no PROJECT.md (BASE-01..04)
-- [ ] 01-04-PLAN.md — Etapa 2 condicional (F6 e F5 no Tauri, resultado pela D-09) ou autopulo, e o checkpoint humano único da fase (BASE-03, BASE-04)
+- [x] 01-04-PLAN.md — Etapa 2 condicional (F6 e F5 no Tauri, resultado pela D-09) ou autopulo, e o checkpoint humano único da fase (BASE-03, BASE-04)
 **Research flag**: sim. Método e casca Tauri nunca foram compilados; verificar `in-process-gpu` no Electron 45, `focusable`/`shadow` do Tauri 2.12 e foco do tao 0.37.1. Medir o Electron atual de novo com o mesmo script: não comparar com os 426 MB antigos.
 
 ### Phase 2: Fundação segura do gate de permissão
@@ -139,7 +139,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 (condicional) → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Spike de medição e decisão de base | 3/4 | In Progress | - |
+| 1. Spike de medição e decisão de base | 4/4 | In Progress | - |
 | 2. Fundação segura do gate de permissão | 0/TBD | Not started | - |
 | 3. Palco fixo, animação e visual | 0/TBD | Not started | - |
 | 4. Entrada, preferências e comportamento no sistema | 0/TBD | Not started | - |
