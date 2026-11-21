@@ -1316,7 +1316,7 @@ test('a seleção só muda por nextSelection e o refresh a calcula antes de esco
   const body = mainFunctionBody('refresh');
   const order = [
     'sessionList(sessions, now)',
-    "nextSelection(selection, list, { type: 'poll'",
+    "nextSelection(selection, list, {\n    type: 'poll'",
     'lastSessionList = list;',
     'pickState(sessions, now, selection)',
   ].map((piece) => {

@@ -5,7 +5,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, sessionList, nextSelection, wheelStep, WHEEL_DELTA_MAX, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  pickState, sessionList, nextSelection, wheelStep, WHEEL_DELTA_MAX, SNAP_WHEEL_LOCK_MS, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
   effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem,
@@ -52,6 +52,12 @@ let selection = { key: null, requests: [] };
 let lastSessionList = [];
 // O gesto da roda em curso, nos instantes do relógio monotônico (performance.now).
 let wheelGesture = { accumulated: 0, lastEventAt: null, lastStepAt: null };
+// Instante da última roda sobre a pílula, no relógio monotônico: o snap para um pedido novo não acontece
+// no meio do gesto. Conta também a roda ignorada pela trava abaixo.
+let lastWheelAt = null;
+// Até quando a roda fica ignorada depois de um snap, para a inércia não afastar o usuário do pedido que
+// acabou de aparecer.
+let wheelLockedUntil = 0;
 // Último estado serializado enviado às ilhas; refresh só reenvia quando algo mudou.
 let lastSent = JSON.stringify(lastPickedState);
 // Último pedido cuja decisão foi gravada. Primeiro clique vence: só o main enxerga as duas ilhas
@@ -426,10 +432,20 @@ function sendState(island) {
  */
 function refresh(reason) {
   const now = Date.now();
+  const monotonicNow = performance.now();
   const sessions = readSessions();
   const list = sessionList(sessions, now);
-  // A lista do refresh anterior serve para achar a vizinha da sessão que saiu.
-  selection = nextSelection(selection, list, { type: 'poll', previousKeys: lastSessionList.map((entry) => entry.key) });
+  // A lista do refresh anterior serve para achar a vizinha da sessão que saiu. O pedido na tela (shown.id,
+  // ainda o de antes deste refresh) diz se um pedido novo entra na fila ou leva a ilha até ele. Um snap só
+  // muda a seleção: a ilha escondida ou em tela cheia não reaparece.
+  selection = nextSelection(selection, list, {
+    type: 'poll',
+    previousKeys: lastSessionList.map((entry) => entry.key),
+    now: monotonicNow,
+    lastWheelAt,
+    shownPermissionId: shown.id,
+  });
+  if (selection.snapped) wheelLockedUntil = monotonicNow + SNAP_WHEEL_LOCK_MS;
   lastSessionList = list;
   const picked = pickState(sessions, now, selection);
   const serialized = JSON.stringify(picked);
@@ -659,6 +675,9 @@ function registerIpcHandlers() {
     if (!island || !Number.isFinite(delta) || Math.abs(delta) > WHEEL_DELTA_MAX) return;
     if (lastPickedState.state === 'idle') return;
     const now = performance.now();
+    // A roda ignorada pela trava ainda é gesto: um pedido que chega na inércia espera o fim dela.
+    lastWheelAt = now;
+    if (now < wheelLockedUntil) return;
     const { gesture, step } = wheelStep(wheelGesture, delta, now);
     wheelGesture = gesture;
     if (step === 0) return;

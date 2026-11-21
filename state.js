@@ -348,16 +348,84 @@ function keyAfterPoll(key, list, previousKeys) {
   return previous.slice(at + 1).find((candidate) => remaining.has(candidate)) ?? list[0].key;
 }
 
+// Quanto tempo sem roda para o gesto ter acabado e o snap poder acontecer, e por quanto tempo a roda fica
+// ignorada depois de um snap. Escolha do projeto, pela pesquisa de UX: a inércia do touchpad continua
+// entregando roda por 300 a 400 ms depois do último toque, e um snap no meio dela, ou a inércia logo depois,
+// afastaria o usuário do pedido que acabou de aparecer.
+const SNAP_GESTURE_GAP_MS = 400;
+const SNAP_WHEEL_LOCK_MS = 400;
+
+const byRequestOrder = (a, b) => (a.seenAt - b.seenAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+// O poll de nextSelection: reconstrói os pedidos pendentes, decide se a ilha vai a um deles e marca o que
+// já esteve na tela. Ver o JSDoc de nextSelection para as regras.
+function pollSelection(key, previous, entries, event) {
+  const { now, lastWheelAt, shownPermissionId, previousKeys } = event;
+  const known = new Map(previous.filter((request) => request && typeof request.id === 'string').map((request) => [request.id, request]));
+  const sessionOf = new Map();
+  const requests = [];
+  for (const entry of entries) {
+    const id = entry && entry.permissionId;
+    if (typeof id !== 'string' || sessionOf.has(id)) continue;
+    const old = known.get(id);
+    // Sem um instante válido não há como datar a chegada: o pedido novo espera o próximo ciclo.
+    if (!old && !Number.isFinite(now)) continue;
+    sessionOf.set(id, entry.key);
+    requests.push(old
+      ? { id, seenAt: old.seenAt, handled: old.handled === true, shown: old.shown === true }
+      : { id, seenAt: now, handled: false, shown: false });
+  }
+  requests.sort(byRequestOrder);
+
+  let chosen = keyAfterPoll(key, entries, previousKeys);
+  let snapped = false;
+  const markAllHandled = () => requests.forEach((request) => { request.handled = true; });
+  const hasShownRequest = typeof shownPermissionId === 'string';
+  const shownIsPending = hasShownRequest && sessionOf.has(shownPermissionId);
+  const inGesture = Number.isFinite(lastWheelAt) && Number.isFinite(now) && now - lastWheelAt < SNAP_GESTURE_GAP_MS;
+  const unhandled = requests.filter((request) => !request.handled);
+
+  if (key !== null && entries.some((entry) => entry.key === key) && hasShownRequest && !shownIsPending && requests.length > 0) {
+    // O pedido exibido saiu e a sessão dele continua viva: vai ao mais antigo restante. Não espera o gesto
+    // (quem respondeu na ilha acabou de clicar, não de rolar) e rearma como toda troca.
+    markAllHandled();
+    chosen = sessionOf.get(requests[0].id);
+    snapped = true;
+  } else if (unhandled.length > 0 && !inGesture) {
+    markAllHandled();
+    if (!shownIsPending) {
+      chosen = sessionOf.get(unhandled[0].id);
+      snapped = true;
+    }
+  }
+
+  for (const request of requests) {
+    if (request.id === shownPermissionId || sessionOf.get(request.id) === chosen) request.shown = true;
+  }
+  return { key: chosen, requests, snapped };
+}
+
 /**
  * Qual sessão a ilha exibe depois de um evento. `selection` é `{ key, requests }`, `list` é o que
- * sessionList devolveu e `event` é `{ type: 'poll', previousKeys }` (um ciclo de leitura; `previousKeys`
- * são as chaves da lista do ciclo anterior, na mesma ordem) ou `{ type: 'select', index }` (clique num
- * ponto: só um índice inteiro dentro da lista vale) ou `{ type: 'scroll', step }` (roda: `step` exatamente
- * -1 ou 1 vai ao vizinho; no começo ou no fim da lista, ou com a chave fora dela, mantém). A sessão exibida só muda por um evento do usuário
- * ou quando sai da lista, e então a ilha vai à vizinha dela, nunca à mais urgente: por isso "concluído"
- * e "voltou a trabalhar" não trocam a sessão (SESS-06). A urgência só decide sem sessão exibida.
- * Devolve sempre um objeto novo `{ key, requests, snapped }` (`requests` é cópia; `snapped` ainda é
- * sempre false). Evento ausente, desconhecido ou índice inválido mantém a chave. Nunca lança nem muta.
+ * sessionList devolveu e `event` é `{ type: 'poll', previousKeys, now, lastWheelAt, shownPermissionId }`
+ * (um ciclo de leitura; `previousKeys` são as chaves da lista do ciclo anterior, na mesma ordem; `now`,
+ * `lastWheelAt` e o instante de chegada de cada pedido são do relógio monotônico, `lastWheelAt` null sem
+ * roda e `shownPermissionId` o pedido que estava na tela antes deste ciclo) ou `{ type: 'select', index }`
+ * (clique num ponto: só um índice inteiro dentro da lista vale) ou `{ type: 'scroll', step }` (roda: `step`
+ * exatamente -1 ou 1 vai ao vizinho; no começo ou no fim da lista, ou com a chave fora dela, mantém).
+ * A sessão exibida só muda por um evento do usuário, por um pedido de permissão ou quando sai da lista, e
+ * então a ilha vai à vizinha dela, nunca à mais urgente: por isso "concluído" e "voltou a trabalhar" não
+ * trocam a sessão (SESS-06). A urgência só decide sem sessão exibida.
+ * No poll, `requests` é reconstruída a cada ciclo, um `{ id, seenAt, handled, shown }` por pedido pendente
+ * da lista, por ordem de chegada (empate pelo id). `handled` diz que a decisão de puxar ou enfileirar o
+ * pedido já foi tomada; `shown` diz que ele já esteve na tela e nunca volta a false. Um pedido novo leva a
+ * ilha à sessão dele uma só vez, nunca no meio de um gesto de roda (fica para o primeiro ciclo depois dele)
+ * e nunca por cima de um pedido que está na tela (entra na fila, sem snap). Quando o pedido exibido sai
+ * (respondido na ilha ou no terminal), a ilha vai ao mais antigo restante, sem esperar o gesto; se o
+ * usuário estava numa sessão sem pedido, nada se move.
+ * Devolve sempre um objeto novo `{ key, requests, snapped }` (`requests` é cópia; `snapped` é true só
+ * quando o poll levou a seleção a um pedido). Evento ausente, desconhecido ou índice inválido mantém a
+ * chave. Nunca lança nem muta.
  */
 function nextSelection(selection, list, event) {
   const valid = selection && typeof selection === 'object';
@@ -367,7 +435,7 @@ function nextSelection(selection, list, event) {
   const result = (chosen) => ({ key: chosen, requests, snapped: false });
   switch (event?.type) {
     case 'poll':
-      return result(keyAfterPoll(key, entries, event.previousKeys));
+      return pollSelection(key, requests, entries, event);
     case 'select': {
       const { index } = event;
       return result(Number.isInteger(index) && index >= 0 && index < entries.length ? entries[index].key : key);
@@ -888,6 +956,7 @@ module.exports = {
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
   sessionList, nextSelection,
   wheelStep, WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX,
+  SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
   BESIDE_GAP_PX, BESIDE_TOP_OFFSET_PX,
