@@ -176,6 +176,50 @@ function nextUserHidden(input) {
   return ids.every((id) => covered.includes(id)) ? current : !current;
 }
 
+// A área cliente de um vídeo em tela cheia bate com o monitor a 100% e a 125% (medido); 1 px absorve
+// arredondamento de escala.
+const FULLSCREEN_TOLERANCE_PX = 1;
+// Área de trabalho e barras de tarefas cobrem o monitor sem serem app em tela cheia (TELA-01).
+const SHELL_WINDOW_CLASSES = Object.freeze(['Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd']);
+// Estilo estendido de janela que deixa o mouse passar (overlay): não conta como primeiro plano.
+const WS_EX_TRANSPARENT = 0x20;
+
+/**
+ * Regra de D-18, o contrato do sensor de tela cheia, que ainda não existe (pendente da escolha do autor,
+ * D-20). Devolve um Map novo de id de monitor para o HWND que o cobre; nunca lança nem muta `previous`.
+ * `probe` é null ou { foreground, gone }: `foreground` é null ou { hwnd, className, pid, exStyle, visible,
+ * minimized, cloaked, clientRect, monitorRect } (retângulos { left, top, right, bottom } em pixels físicos)
+ * e `gone` lista os HWND lembrados que sumiram. `displays` é [{ id, rect }] em pixels físicos. Começa do
+ * mapa anterior, solta o que sumiu ou saiu de `displays` e então olha o primeiro plano: o próprio pid e
+ * janela invisível, minimizada, cloaked ou transparente não mudam nada; no monitor do primeiro plano, a
+ * janela que cobre a área inteira (com a tolerância) fica lembrada e qualquer outra solta o monitor.
+ * ponytail: sem enumerar janelas, uma janela em tela cheia totalmente coberta por outra maximizada no
+ * mesmo monitor continua lembrada até o foco voltar a ela ou o HWND sumir.
+ */
+function nextFullscreen(input) {
+  const { previous, probe, ownPid, displays } = input ?? {};
+  const result = new Map(previous instanceof Map ? previous : []);
+  const knownDisplays = Array.isArray(displays) ? displays : [];
+  const gone = Array.isArray(probe?.gone) ? probe.gone : [];
+  for (const [displayId, hwnd] of result) {
+    if (gone.includes(hwnd) || !knownDisplays.some((display) => display?.id === displayId)) result.delete(displayId);
+  }
+  const foreground = probe?.foreground;
+  if (!foreground || !Number.isInteger(foreground.hwnd) || foreground.pid === ownPid) return result;
+  if (foreground.visible !== true || foreground.minimized !== false || foreground.cloaked !== false) return result;
+  if (!Number.isInteger(foreground.exStyle) || (foreground.exStyle & WS_EX_TRANSPARENT) !== 0) return result;
+  const sameRect = (a, b) => ['left', 'top', 'right', 'bottom'].every((side) => a?.[side] === b?.[side]);
+  const display = knownDisplays.find((candidate) => sameRect(candidate?.rect, foreground.monitorRect));
+  if (!display) return result;
+  const client = foreground.clientRect;
+  const coversMonitor = ['left', 'top', 'right', 'bottom'].every((side) => (
+    Number.isFinite(client?.[side]) && Math.abs(client[side] - display.rect[side]) <= FULLSCREEN_TOLERANCE_PX
+  ));
+  if (SHELL_WINDOW_CLASSES.includes(foreground.className) || !coversMonitor) result.delete(display.id);
+  else result.set(display.id, foreground.hwnd);
+  return result;
+}
+
 /** A ilha está no ar se o batimento dela é recente (e não veio do futuro). */
 function isHeartbeatFresh(heartbeatAt, now) {
   return Number.isFinite(heartbeatAt) && heartbeatAt <= now + HEARTBEAT_STALE_MS && now - heartbeatAt <= HEARTBEAT_STALE_MS;
@@ -606,6 +650,7 @@ module.exports = {
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
   islandDisplays, nextShownPermission, isIslandVisible, nextUserHidden,
+  FULLSCREEN_TOLERANCE_PX, SHELL_WINDOW_CLASSES, WS_EX_TRANSPARENT, nextFullscreen,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
   normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate, registerShortcut,
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, SHORTCUT_PATTERN, SHORTCUT_MAX_LENGTH,

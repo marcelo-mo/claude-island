@@ -65,6 +65,13 @@ let cursorTimer = null;
 let userHidden = false;
 // Monitor coberto por app em tela cheia -> HWND que o cobre. Só o main calcula, nunca o renderer (D-19).
 // Vazio enquanto não houver sensor: nenhum monitor conhecido conta como coberto.
+// ponytail: não há sensor de tela cheia porque o autor não autorizou o pacote nativo (D-20). Ele entraria
+// aqui: a 2 Hz, uma amostra do primeiro plano do Windows vai para nextFullscreen (state.js) com este mapa,
+// process.pid e os monitores em pixels físicos (screen.dipToScreenRect(null, display.bounds)); o mapa novo
+// troca este e, se mudou, chama applyVisibility(). Duas opções, medidas na pesquisa da Fase 4: (1)
+// koffi@3.3.8 com allowBuilds: { koffi: false } (+5,0 a 5,1 MB, 7,8 µs por sondagem); (2) sem dependência
+// nova, um processo PowerShell filho único e persistente com P/Invoke em user32, no padrão do window.js,
+// consultado por stdin (28,3 MB numa amostra; um spawn por sondagem custa cerca de 0,45 s e está descartado).
 const fullscreenByDisplay = new Map();
 // Resultado do registro do atalho em start ('ok', 'unavailable' ou 'invalid'); o menu o mostra.
 let shortcutStatus = 'unavailable';

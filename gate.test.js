@@ -1160,3 +1160,31 @@ test('esconder combina o usuário e a tela cheia, só no main, e o atalho respei
   ), 'o atalho passa por nextUserHidden');
   assert.ok(mainSource.includes("island.on('hide', () => {"), 'o ouvinte de hide continua');
 });
+
+// Trava de regressão (texto): D-20, o autor não autorizou o pacote nativo. Sem sensor, a regra pura fica
+// pronta e o ponto de entrada marcado; os hooks, que rodam dentro da sessão do Claude Code, seguem leves
+// (T-04-19, T-04-20).
+test('sem sensor nem dependência nativa, e os hooks continuam leves', () => {
+  const native = 'koffi';
+  const read = (file) => fs.readFileSync(path.join(__dirname, file), 'utf8');
+  for (const file of ['hook.js', 'permission-hook.js', 'window.js', 'state.js', 'install.js']) {
+    assert.equal(read(file).includes(native), false, `${file} cita o pacote nativo`);
+  }
+  for (const file of ['hook.js', 'permission-hook.js', 'window.js', 'state.js', 'install.js', 'main.js', 'preload.js']) {
+    assert.equal(read(file).includes(`require('${native}`), false, `${file} carrega o pacote nativo`);
+  }
+  assert.equal(fs.existsSync(path.join(__dirname, 'fullscreen.js')), false, 'fullscreen.js não deve existir');
+  const manifest = JSON.parse(read('package.json'));
+  for (const group of ['dependencies', 'devDependencies']) {
+    assert.equal(native in (manifest[group] ?? {}), false, `package.json tem o pacote em ${group}`);
+  }
+  const lines = mainSource.split(/\r?\n/);
+  const declaration = lines.findIndex((line) => line.startsWith('const fullscreenByDisplay'));
+  assert.ok(declaration > 0, 'fullscreenByDisplay ausente no main.js');
+  let first = declaration;
+  while (first > 0 && lines[first - 1].startsWith('//')) first -= 1;
+  const comment = lines.slice(first, declaration).join(' ');
+  for (const needle of ['ponytail:', 'nextFullscreen', 'applyVisibility', 'PowerShell']) {
+    assert.ok(comment.includes(needle), `o comentário do ponto de entrada do sensor não cita ${needle}`);
+  }
+});
