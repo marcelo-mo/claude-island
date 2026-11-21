@@ -17,13 +17,13 @@ Escopo deste milestone: reformular a ilha com o comportamento e o visual do mod 
 
 ### Segurança da permissão (SEG)
 
-- [ ] **SEG-01**: Uma decisão (Permitir/Negar) sempre se aplica ao pedido que o processo principal registrou como exibido; o renderer envia só a intenção e um eco do id exibido, que pode apenas recusar a decisão quando diverge, nunca escolher o alvo
+- [x] **SEG-01**: Uma decisão (Permitir/Negar) sempre se aplica ao pedido que o processo principal registrou como exibido; o renderer envia só a intenção e um eco do id exibido, que pode apenas recusar a decisão quando diverge, nunca escolher o alvo
 - [ ] **SEG-02**: O pedido exibido só muda por um caminho único no processo principal (`refresh()`), e qualquer troca do que está na tela (pedido novo, troca de sessão, scroll, snap, mudança de tema/forma que mova botões, reexibição) reinicia o armamento dos botões
 - [ ] **SEG-03**: Os botões só armam depois de 0,8 s com o pedido na tela **e** com a animação assentada e o cursor parado sobre eles por um instante; botões não sofrem ampliação de hover nem nudge
-- [ ] **SEG-04**: Permitir/Negar só vale se o clique começa e termina no mesmo botão do mesmo pedido; com duas ilhas, o primeiro clique vence e o segundo é ignorado
+- [x] **SEG-04**: Permitir/Negar só vale se o clique começa e termina no mesmo botão do mesmo pedido; com duas ilhas, o primeiro clique vence e o segundo é ignorado
 - [ ] **SEG-05**: Com um pedido na tela, a ilha fica 100% opaca, a rolagem sobre o texto do pedido só rola o texto, e o estado "lido até o fim" zera a cada pedido novo, ignorando a inércia da roda por ~300–400 ms após qualquer troca de conteúdo
-- [ ] **SEG-06**: Ilha escondida, em tela cheia ou fora da área visível não aceita decisão; esconder nunca aprova, e reexibir rearma
-- [ ] **SEG-07**: A regra de aceite da decisão é uma função pura testada (`node:test`), com vetores de teste compartilháveis caso a base mude; o caminho `island:decide` deixa de ser o único ponto sem teste
+- [x] **SEG-06**: Ilha escondida, em tela cheia ou fora da área visível não aceita decisão; esconder nunca aprova, e reexibir rearma
+- [x] **SEG-07**: A regra de aceite da decisão é uma função pura testada (`node:test`), com vetores de teste compartilháveis caso a base mude; o caminho `island:decide` deixa de ser o único ponto sem teste
 - [ ] **SEG-08**: As janelas usam `webPreferences` explícitas e seguras (`contextIsolation`, `sandbox`, sem `nodeIntegration`), e as preferências só podem ser alteradas pelo menu nativo do processo principal, nunca por um canal do renderer
 
 ### Animação (ANIM)
@@ -119,13 +119,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BASE-03 | Phase 1 | Pending |
 | BASE-04 | Phase 1 | Pending |
 | BASE-05 | Phase 1 | Pending |
-| SEG-01 | Phase 2 | Pending |
+| SEG-01 | Phase 2 | Complete |
 | SEG-02 | Phase 2 | Pending |
 | SEG-03 | Phase 2 | Pending |
-| SEG-04 | Phase 2 | Pending |
+| SEG-04 | Phase 2 | Complete |
 | SEG-05 | Phase 2 | Pending |
-| SEG-06 | Phase 2 | Pending |
-| SEG-07 | Phase 2 | Pending |
+| SEG-06 | Phase 2 | Complete |
+| SEG-07 | Phase 2 | Complete |
 | SEG-08 | Phase 2 | Pending |
 | CONV-04 | Phase 2 | Pending |
 | ANIM-01 | Phase 3 | Pending |
