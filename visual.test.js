@@ -310,6 +310,88 @@ test('o bloco de permissão lê os tokens próprios', () => {
   assert.equal(rulesFor('#actions #deny, #pill.has-permission #open')[0]['box-shadow'], 'inset 0 0 0 1px var(--perm-deny-border)');
 });
 
+// ---------------------------------------------------------------------------------------------
+// Material da pílula e tipografia (VIS-03, VIS-05). Tudo estático: só o brilho da Fase 1 anima.
+// ---------------------------------------------------------------------------------------------
+
+const WASH_PATTERN = /radial-gradient\(ellipse 75% 56px at 50% 0, color-mix\(in srgb, var\(--accent\) ([\d.]+)%, transparent\), transparent\)/;
+const pillBackgrounds = () => rulesFor('#pill').map((found) => found.background).filter(Boolean);
+
+test('o fundo da pílula tem lavagem do acento de 56 px fixos, profundidade e o preenchimento do tema', () => {
+  const backgrounds = pillBackgrounds();
+  assert.equal(backgrounds.length, 1);
+  const [background] = backgrounds;
+  assert.match(background, WASH_PATTERN);
+  assert.match(background, /linear-gradient\(to bottom, rgb\(0 0 0 \/ 0\), rgb\(0 0 0 \/ calc\(\.25 \* var\(--depth\)\)\) 45%, rgb\(0 0 0 \/ var\(--depth\)\)\)/);
+  assert.ok(background.endsWith('var(--surface)'), 'o preenchimento é a camada de baixo');
+  assert.ok(background.indexOf('radial-gradient') < background.indexOf('linear-gradient'), 'a lavagem fica por cima da profundidade');
+});
+
+test('contorno de 35% do acento e sombra estática; a transição não inclui o fundo', () => {
+  const shadows = rulesFor('#pill').map((found) => found['box-shadow']).filter(Boolean);
+  assert.deepEqual(shadows, ['0 0 0 1px var(--contour), var(--shadow)']);
+  // --contour depende do acento do estado, então é declarado na #pill e nunca no :root.
+  const contours = rulesFor('#pill').map((found) => found['--contour']).filter(Boolean);
+  assert.deepEqual(contours, ['color-mix(in srgb, var(--accent) 35%, var(--border))']);
+  assert.ok(rulesFor(':root').every((found) => !('--contour' in found)));
+  assert.equal(style.includes('--ring'), false, 'o anel de 40% deu lugar ao contorno');
+  const transition = rulesFor('#pill').map((found) => found.transition).find(Boolean);
+  assert.ok(transition);
+  for (const part of transition.split(',')) assert.ok(!part.trim().startsWith('background'), `transição de ${part.trim()}`);
+});
+
+test('profundidade e sombra são tokens por esquema, escuros no :root e claros nos dois casos claros', () => {
+  const darkShadow = '0 5px 14px rgb(0 0 0 / .30), 0 1px 3px rgb(0 0 0 / .20)';
+  const lightShadow = '0 5px 14px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .12)';
+  for (const found of CASES) {
+    const variables = themeVariables(found.theme, found.scheme);
+    const light = found.scheme === 'light';
+    assert.equal(variables['--depth'], light ? '.033' : '.06', `${caseName(found)}: --depth`);
+    assert.equal(variables['--shadow'], light ? lightShadow : darkShadow, `${caseName(found)}: --shadow`);
+  }
+});
+
+test('nenhum pseudo-elemento além do brilho da Fase 1', () => {
+  const pseudo = new Set([...style.matchAll(/::[\w-]+/g)].map((match) => match[0]));
+  assert.deepEqual([...pseudo], ['::before']);
+  assert.equal(rulesFor('#pill::before').length, 1);
+});
+
+test('contraste com a profundidade no rodapé e com a lavagem do acento, nos 10 casos', () => {
+  const wash = Number(pillBackgrounds()[0].match(WASH_PATTERN)[1]) / 100;
+  const failures = [];
+  for (const found of CASES) {
+    const variables = themeVariables(found.theme, found.scheme);
+    const resolve = (value) => resolveColor(value, variables);
+    // O rodapé é o preto a --depth sobre a superfície (último ponto do gradiente de profundidade).
+    const depth = parseFloat(variables['--depth']);
+    const footer = resolve('var(--surface)').map((channel) => channel * (1 - depth));
+    const check = (pair, foreground, background, minimum) => {
+      const ratio = contrastRatio(foreground, background);
+      if (ratio < minimum) failures.push(`${caseName(found)}: ${pair} mede ${ratio.toFixed(2)}:1, mínimo ${minimum}:1`);
+    };
+    check('--muted sobre o rodapé', resolve('var(--muted)'), footer, 4.5);
+    check('--button sobre o rodapé (controle)', resolve('var(--button)'), footer, 3);
+    check('--perm-deny-border sobre o rodapé (controle)', resolve('var(--perm-deny-border)'), footer, 3);
+    for (const state of ['running', 'waiting', 'done']) {
+      const accent = resolve(`var(--${state})`);
+      const washed = resolve('var(--surface)').map((channel, index) => accent[index] * wash + channel * (1 - wash));
+      check(`--text sobre a superfície com a lavagem de ${state}`, resolve('var(--text)'), washed, 4.5);
+    }
+  }
+  assert.deepEqual(failures, []);
+});
+
+test('pesos só 400 e 600, contador em 12 px e fontes do sistema, sem fonte embarcada', () => {
+  const weights = [...style.matchAll(/font-weight:\s*(\d+)/g)].map((match) => match[1]);
+  assert.ok(weights.length > 0);
+  for (const weight of weights) assert.ok(weight === '400' || weight === '600', `font-weight: ${weight}`);
+  assert.equal(rulesFor('#count')[0]['font-size'], '12px');
+  assert.match(rulesFor('body')[0].font, /^\d+px\/[\d.]+ system-ui\b/);
+  assert.match(rulesFor('#permission-text')[0].font, /^\d+px\/[\d.]+ ui-monospace\b/);
+  assert.equal(/@font-face|url\(/.test(style), false);
+});
+
 test('o tema só vem do payload e o script grava data-theme com auto como padrão', () => {
   const apply = script.slice(script.indexOf('function applyPreferences('));
   const body = apply.slice(0, apply.indexOf('\n  }\n'));
