@@ -47,7 +47,8 @@ até 50%, amarelo de 50% a 80% e vermelho acima disso. O dado vem do arquivo
 `claude-ctx-<sessão>.json` que o statusline do GSD grava na pasta temporária; sem o GSD, o
 anel não aparece. O percentual é o do GSD, medido até o ponto de compactação automática.
 
-Passar o mouse sobre a pílula expande e mostra o projeto e o que está rodando.
+Passar o mouse sobre a pílula (ou clicar nela, conforme a escolha no menu) expande e mostra o
+projeto e o que está rodando.
 
 Com mais de um monitor, cada um ganha a sua ilha, e elas acompanham quando um monitor é
 conectado, removido ou muda de resolução. O aviso sonoro toca uma vez só.
@@ -82,3 +83,29 @@ Por baixo: o hook `PermissionRequest` chama `permission-hook.js`, que grava o pe
 de estado da sessão e espera até 5 minutos pelo arquivo de decisão que a ilha grava em
 `~/.claude/island/decisions/`. Ele só participa se a ilha estiver no ar (ela grava um batimento
 em `~/.claude/island/.heartbeat` a cada 2 s); senão, sai na hora e nada muda no Claude Code.
+
+### Menu, atalho e tela cheia
+
+**Clique direito na pílula** abre o menu: tema, forma, estilo e velocidade da animação, expandir (ao
+passar o mouse ou ao clicar), fixar aberta, transparência, âncora, ilhas (uma por monitor, só no
+principal ou no monitor do cursor) e esconder. O menu e o arraste só existem com uma sessão na tela:
+ociosa, a pílula fica invisível e sem `pointer-events`, e os cliques passam para as janelas de baixo.
+
+- **As escolhas ficam em `~/.claude/island/preferences.json`.** Se o arquivo estiver corrompido ou
+  passar de 64 KB, ele é guardado como `preferences.json.<carimbo>.bad` (uma cópia a cada vez que
+  isso acontece) e a ilha sobe com os padrões.
+- **`Ctrl+Alt+Shift+C` esconde e mostra a ilha.** O padrão não é `Ctrl+Alt+C` porque, no teclado ABNT2,
+  ele é o AltGr+C, que digita `¢`. O atalho é editável no campo `shortcut` do arquivo de preferências, e
+  o menu avisa se ele não puder ser registrado (tomado por outro programa ou texto inválido), com
+  "Esconder" desabilitado. Esconder não é lembrado ao reiniciar: a ilha sempre sobe visível.
+- **Transparência.** Vale para a ilha inteira, mas nunca com um pedido de permissão na tela: ele fica
+  100% opaco e, ao terminar, a ilha volta à escolhida. Com a ilha escondida, um pedido só toca o som;
+  responda no terminal ou mostre a ilha pelo atalho.
+- **Tela cheia: ainda não está ativo.** A regra de esconder a ilha do monitor ocupado por um app em tela
+  cheia está pronta, mas o sensor depende de uma decisão pendente. Por enquanto a ilha continua por
+  cima de app em tela cheia, e o atalho é o jeito de tirá-la do caminho.
+
+O que só uma pessoa na tela confirma (hover com terminal elevado e AltGr+C) está em
+`scripts/human-checks.js`, que só escuta, não gera entrada e exige a ilha parada:
+`node_modules\electron\dist\electron.exe scripts\human-checks.js --mode=hover` ou `--mode=hotkey`.
+O uso completo está no cabeçalho do arquivo.
