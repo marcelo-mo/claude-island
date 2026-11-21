@@ -7,15 +7,10 @@ const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences,
+  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
 } = require('./state');
 const { focusWindow } = require('./window');
 
-// A janela é maior que a pílula para caber a versão expandida; a sobra é transparente.
-// A altura é a da pílula com um pedido de permissão no tamanho máximo (texto com rolagem).
-const WINDOW_SIZE = { width: 440, height: 324 };
-// A pílula expandida (400px) fica centrada na janela (440px): sobram 20px transparentes de
-// cada lado, que podem sair da tela para a pílula encostar na borda do monitor.
-const HORIZONTAL_SLACK = 20;
 const POLL_MS = 400;
 // A ilha carrega por esta URL e só aceita mensagens da página que está nela (ver islandOf).
 const ISLAND_URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
@@ -158,11 +153,7 @@ function moveIsland(island, position, workArea) {
 }
 
 function savedPosition(display) {
-  const standard = defaultIslandPosition(display.workArea, WINDOW_SIZE);
-  const offset = savedOffsets[display.id];
-  // O arquivo é editável à mão: só vale deslocamento numérico.
-  if (!offset || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return standard;
-  return { x: standard.x + offset.x, y: standard.y + offset.y };
+  return positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id]);
 }
 
 // Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.

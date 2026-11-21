@@ -235,9 +235,35 @@ function nextShownPermission(shown, permissionId, now, rearm) {
   return { id: permissionId, since: now, epoch: shown.epoch + 1 };
 }
 
+// A janela é um palco fixo, maior que a pílula, e a sobra é transparente. O tamanho cobre o pico da mola do
+// estilo Elástico a 2× com a ampliação do hover, o nudge e a sombra (conferido por simulação em
+// gate.test.js) e nunca muda durante a animação, para a pílula nunca ser recortada (D-13).
+// ponytail: um palco só para todos os monitores e escalas de DPI (cada monitor tem o seu renderer e as
+// suas molas). Não validado em hardware com DPI misto; se recortar, dimensionar o palco por monitor.
+const WINDOW_SIZE = Object.freeze({ width: 520, height: 410 });
+// A pílula expandida (400 px) fica centrada no palco e sobram 60 px transparentes de cada lado, que podem
+// sair da tela para a pílula encostar na borda do monitor. O valor subiu de 20 para 60 junto com a largura
+// do palco (440 → 520) e mantém (largura − 400) / 2: a borda da pílula no mesmo lugar de antes.
+const HORIZONTAL_SLACK = 60;
+
 /** Posição padrão da janela da ilha: topo central da área útil do monitor. */
 function defaultIslandPosition(workArea, windowSize) {
   return { x: Math.round(workArea.x + (workArea.width - windowSize.width) / 2), y: workArea.y };
+}
+
+/**
+ * Posição da janela a partir do deslocamento salvo pelo usuário. O deslocamento é relativo à posição
+ * padrão, que centra pela largura da janela, então trocar o tamanho do palco preserva o centro
+ * horizontal e o topo da pílula sem converter nada (D-14). Devolve a posição padrão quando o
+ * deslocamento não é um objeto com x e y numéricos: o arquivo é editável à mão, e dado em disco não é
+ * confiável. Não muta nada. Quem prende a janela na área útil é clampIslandPosition, e por isso uma
+ * ilha salva nos últimos ~86 px de baixo do monitor sobe até caber (exceção aceita: o gate exige a
+ * janela inteira na área útil, ver isWithinWorkArea).
+ */
+function positionFromSavedOffset(workArea, windowSize, offset) {
+  const standard = defaultIslandPosition(workArea, windowSize);
+  if (!offset || typeof offset !== 'object' || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return standard;
+  return { x: standard.x + offset.x, y: standard.y + offset.y };
 }
 
 /**
@@ -325,6 +351,7 @@ module.exports = {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
+  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   nextShownPermission,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
   normalizePreferences,
