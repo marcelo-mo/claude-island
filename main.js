@@ -263,7 +263,9 @@ function openMenu(island) {
 // terminam, vale o último pedido do renderer. Sem a opção forward de setIgnoreMouseEvents: ela para de
 // funcionar sob janela elevada (UIPI, doc do Electron), e o hover vem do cursor do main de qualquer jeito.
 function applyCapture(island) {
-  if (!CAN_CLICK_THROUGH) return;
+  // O menu pode fechar depois de syncIslands ter destruído a ilha dona (escolher "Só no monitor principal"
+  // na ilha de um monitor secundário): setIgnoreMouseEvents numa janela destruída lança.
+  if (!CAN_CLICK_THROUGH || island.isDestroyed()) return;
   const capture = captureRequests.get(island) === true || dragStartPositions.has(island) || island === menuIsland;
   island.setIgnoreMouseEvents(!capture);
 }
@@ -496,6 +498,8 @@ function syncIslands() {
     dragStartPositions.delete(island);
     captureRequests.delete(island);
     nearIslands.delete(island);
+    // Sem isto o menuIsland preso numa janela destruída descartaria todo pedido de menu seguinte.
+    if (island === menuIsland) menuIsland = null;
     island.destroy();
   }
   // Uma ilha reaproveitada pode ter ido para um monitor coberto por tela cheia.

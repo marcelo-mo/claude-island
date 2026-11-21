@@ -1156,6 +1156,18 @@ test('todo caminho que move a ilha termina em refresh rearm', () => {
   );
 });
 
+// Trava de regressão (texto): fechar o menu depois de syncIslands destruir a ilha dona não pode lançar nem
+// deixar menuIsland preso (WR-02).
+test('a ilha destruída com o menu aberto não quebra o fechamento do menu', () => {
+  const start = mainSource.indexOf('function applyCapture(');
+  assert.ok(start >= 0, 'applyCapture ausente no main.js');
+  const capture = mainSource.slice(start, mainSource.indexOf('\n}', start));
+  assert.ok(capture.indexOf('island.isDestroyed()') >= 0 && capture.indexOf('island.isDestroyed()') < capture.indexOf('setIgnoreMouseEvents('));
+  const sync = mainSource.slice(mainSource.indexOf('function syncIslands('), mainSource.indexOf('\nfunction registerIpcHandlers('));
+  const nulled = sync.indexOf('if (island === menuIsland) menuIsland = null;');
+  assert.ok(nulled >= 0 && nulled < sync.indexOf('island.destroy();'), 'syncIslands não solta menuIsland antes de destruir');
+});
+
 // Trava de regressão (texto): o main é dono do fato "há pedido", então a opacidade sai do mesmo passo do
 // refresh que decide o pedido exibido e chega antes do estado ao renderer; nenhum outro caminho mexe nela
 // (invariante I5, T-04-16).
