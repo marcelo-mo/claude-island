@@ -4,11 +4,11 @@ current_phase: 4
 current_phase_name: Entrada, preferências e comportamento no sistema
 current_plan: 6
 status: human_needed
-stopped_at: "Fase 4 executada, revisada e auditada; PR aberto sem merge"
-last_updated: "2026-11-21T17:20:01.260Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-11-21T17:46:41.335Z"
 last_activity: 2026-11-21
-last_activity_desc: "Fase 4 executada (6 planos), revisão com 4 correções, verificação gaps_found só por D-20 (TELA-01 parcial), segurança 26/26; PR aberto"
-state_head: f3549f7d07ffe368b80756d0f6d3824d528f8585
+last_activity_desc: Fase 4 executada (6 planos), revisão com 4 correções, verificação gaps_found só por D-20 (TELA-01 parcial), segurança 26/26; PR aberto
+state_head: 650cf2470ffcdcf778769c07e7607c1033f05384
 progress:
   total_phases: 6
   completed_phases: 2
@@ -135,6 +135,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T17:20:00.921Z
-Stopped at: Completed 04-06-PLAN.md
-Resume file: None
+Last session: 2026-11-21T17:46:40.833Z
+Stopped at: Phase 5 context gathered
+Resume file: .planning/phases/05-sess-es/05-CONTEXT.md
