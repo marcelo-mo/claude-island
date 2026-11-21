@@ -71,7 +71,7 @@ Escopo deste milestone: reformular a ilha com o comportamento e o visual do mod 
 ### Tela cheia (TELA)
 
 - [ ] **TELA-01**: No Windows, quando um app ocupa o monitor inteiro, a ilha daquele monitor some, e volta quando ele sai; a área de trabalho e a própria ilha não contam como tela cheia
-- [x] **TELA-02**: Um pedido de permissão com a ilha escondida ou em tela cheia só toca o som; a ilha não reaparece por cima e o terminal segue valendo
+- [ ] **TELA-02** (parcial): Um pedido de permissão com a ilha escondida ou em tela cheia só toca o som; a ilha não reaparece por cima e o terminal segue valendo — vale no ramo "escondida pelo usuário"; o ramo "em tela cheia" espera o sensor do TELA-01 (D-20, escolha do autor pendente)
 
 ### Convivência com a ilha do sistema (CONV)
 
@@ -149,7 +149,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PREF-05 | Phase 4 | Complete |
 | PREF-06 | Phase 4 | Complete |
 | TELA-01 | Phase 4 | Pending |
-| TELA-02 | Phase 4 | Complete |
+| TELA-02 | Phase 4 | Partial (ramo em tela cheia espera o sensor do TELA-01) |
 | SESS-01 | Phase 5 | Pending |
 | SESS-02 | Phase 5 | Pending |
 | SESS-03 | Phase 5 | Pending |

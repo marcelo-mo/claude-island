@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Entrada, preferências e comportamento no sistema
 current_plan: 6
-status: executing
-stopped_at: Completed 04-05-PLAN.md
-last_updated: "2026-11-21T17:15:06.923Z"
+status: verifying
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-11-21T17:20:01.260Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 4 execution started
-state_head: c00b5874cfd4d47af325b068976864efd299eee7
+state_head: f3549f7d07ffe368b80756d0f6d3824d528f8585
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
   percent: 33
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 Phase: 4 (Entrada, preferências e comportamento no sistema) — EXECUTING
 Current Plan: 6
 Total Plans in Phase: 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-21 — Phase 4 execution started
 
 Progress: [███░░░░░░░] 33%
@@ -71,6 +71,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 04 P03 | 12min | 3 tasks | 8 files |
 | Phase 4 P04 | 4min | 2 tasks | 4 files |
 | Phase 04 P05 | 8min | 2 tasks | 4 files |
+| Phase 4 P06 | 4 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,7 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Phase 04]: applyVisibility é o único lugar que esconde e mostra a ilha; coveredByFullscreen vem do main por monitor (desconhecido = coberto)
 - [Phase 04]: Atalho passa por nextUserHidden e não inverte com toda ilha coberta por tela cheia
 - [Phase 04]: Sem sensor de tela cheia por D-20 (autorização NÃO CONCEDIDA): regra pura nextFullscreen pronta; TELA-01 parcial
+- [Phase 4]: TELA-02 volta a parcial no REQUIREMENTS.md: o ramo em tela cheia espera o sensor do TELA-01 (D-20)
 
 ### Pending Todos
 
@@ -133,6 +135,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T17:15:06.589Z
-Stopped at: Completed 04-05-PLAN.md
+Last session: 2026-11-21T17:20:00.921Z
+Stopped at: Completed 04-06-PLAN.md
 Resume file: None
