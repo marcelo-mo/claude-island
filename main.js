@@ -5,7 +5,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, acceptDecision, anchorPosition, horizontalSlackFor, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  pickState, acceptDecision, anchorPosition, horizontalSlackFor, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath,
 } = require('./state');
@@ -249,6 +249,13 @@ function releaseCapture(island) {
 
 function cursorTick() {
   const point = screen.getCursorScreenPoint();
+  // No modo 'cursor' a ilha vai para o monitor do cursor, nunca com ilha sendo arrastada nem com pedido na
+  // tela (D-15). Trocar de monitor move os botões, então rearma depois de mover.
+  if (preferences.islandMode === 'cursor' && dragStartPositions.size === 0 && !lastPickedState.permission
+    && !islands.has(screen.getDisplayNearestPoint(point).id)) {
+    syncIslands();
+    refresh('rearm');
+  }
   for (const island of islands.values()) {
     if (!island.isVisible()) continue;
     const bounds = island.getBounds();
@@ -410,19 +417,48 @@ function syncIslands() {
   // ali encerraria o app (window-all-closed).
   if (displays.length === 0) return;
 
-  for (const display of displays) {
+  const wanted = islandDisplays({
+    mode: preferences.islandMode,
+    displayIds: displays.map((display) => display.id),
+    primaryId: screen.getPrimaryDisplay().id,
+    cursorDisplayId: screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id,
+    currentIds: [...islands.keys()],
+    // Com pedido na tela a ilha não troca de monitor (D-15): o botão pararia sob o cursor.
+    hasPermission: Boolean(lastPickedState.permission),
+  });
+  // Ilhas de monitor que não deve mais ter ilha (outro modo, monitor removido): sobram para reaproveitar.
+  const leftovers = [...islands].filter(([displayId]) => !wanted.includes(displayId));
+  for (const display of displays.filter((candidate) => wanted.includes(candidate.id))) {
     const island = islands.get(display.id);
-    if (!island) createIsland(display);
-    else if (!dragStartPositions.has(island)) moveIsland(island, savedPosition(display), display.workArea);
+    if (island) {
+      if (!dragStartPositions.has(island)) moveIsland(island, savedPosition(display), display.workArea);
+      continue;
+    }
+    // ponytail: a janela sobrando é reaproveitada por setBounds, mesmo entre monitores de DPI diferente (na
+    // pesquisa da Fase 4 manteve o tamanho físico certo, uma tentativa por sentido). Se a janela crescer cerca
+    // de 25% ao trocar de escala, recriar em vez de mover.
+    const reusable = leftovers.findIndex(([, candidate]) => !dragStartPositions.has(candidate));
+    if (reusable < 0) {
+      createIsland(display);
+      continue;
+    }
+    const [[previousId, reused]] = leftovers.splice(reusable, 1);
+    islands.delete(previousId);
+    islands.set(display.id, reused);
+    // Num monitor novo o pedido de captura e o ponto do cursor antigos não valem mais.
+    releaseCapture(reused);
+    moveIsland(reused, savedPosition(display), display.workArea);
   }
-  for (const [displayId, island] of islands) {
-    if (displays.some((display) => display.id === displayId)) continue;
+  // Nunca destrói para esconder: só sobra de modo ou de monitor removido.
+  for (const [displayId, island] of leftovers) {
     islands.delete(displayId);
     dragStartPositions.delete(island);
     captureRequests.delete(island);
     nearIslands.delete(island);
     island.destroy();
   }
+  // A ilha destruída pode ter sido a última visível, e destruir não emite o evento 'hide'.
+  updateCursorTick();
 }
 
 function registerIpcHandlers() {

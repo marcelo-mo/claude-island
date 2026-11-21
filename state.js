@@ -335,6 +335,30 @@ function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
 }
 
 /**
+ * Ids de monitor que têm ilha, num array novo, a partir de `{ mode, displayIds, primaryId,
+ * cursorDisplayId, currentIds, hasPermission }`. 'perDisplay' (o padrão, e também o que vale para modo
+ * desconhecido ou ausente) devolve todos os ids numéricos, na ordem dada; 'primary' devolve só o monitor
+ * principal (o primeiro da lista se ele não estiver nela); 'cursor' devolve o monitor do cursor, ou o
+ * principal se o cursor não estiver em nenhum. No modo 'cursor' a ilha só segue o cursor com
+ * `hasPermission === false`: com pedido na tela, ou com o fato desconhecido, o botão pararia sob o
+ * cursor num monitor novo, então ela fica num monitor que já ocupa (o do cursor, se for um deles).
+ * Sem monitores, ou com a entrada ausente, devolve []. Nunca lança e nunca muta a entrada.
+ */
+function islandDisplays(input) {
+  const { mode, displayIds, primaryId, cursorDisplayId, currentIds, hasPermission } = input || {};
+  const ids = Array.isArray(displayIds) ? displayIds.filter(Number.isFinite) : [];
+  if (ids.length === 0) return [];
+  const primary = ids.includes(primaryId) ? primaryId : ids[0];
+  if (mode === 'primary') return [primary];
+  if (mode !== 'cursor') return [...ids];
+  const cursor = ids.includes(cursorDisplayId) ? cursorDisplayId : primary;
+  if (hasPermission === false) return [cursor];
+  const occupied = Array.isArray(currentIds) ? currentIds.filter((id) => ids.includes(id)) : [];
+  if (occupied.length === 0 || occupied.includes(cursor)) return [cursor];
+  return [occupied[0]];
+}
+
+/**
  * Opacidade com que a ilha deve aparecer. Devolve 1 quando há pedido na tela ou o fato é
  * desconhecido (`hasPermission !== false`, fail-safe) e quando a preferência não é um número em
  * (0, 1]; senão devolve a preferência. Ainda sem consumidor: a transparência de 100/85/70/55% da
@@ -478,12 +502,13 @@ const PREFERENCE_LABELS = Object.freeze({
     'top-center': 'Topo, centro', 'top-left': 'Topo, esquerda', 'top-right': 'Topo, direita',
     'bottom-center': 'Base, centro', 'bottom-left': 'Base, esquerda', 'bottom-right': 'Base, direita',
   }),
+  islandMode: Object.freeze({ perDisplay: 'Uma por monitor', primary: 'Só no monitor principal', cursor: 'No monitor do cursor' }),
 });
 
 /**
  * Modelo do menu de preferências para o main montar com Menu.buildFromTemplate. Devolve um array novo
  * de submenus `{ label, submenu: [...] }` (Tema, Forma, Estilo da animação, Velocidade da animação,
- * Expandir, Âncora) mais a caixa 'Fixar aberta', cada filho de submenu um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
+ * Expandir, Âncora, Ilhas) mais a caixa 'Fixar aberta', cada filho de submenu um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
  * atual. `key` e `value` são para o main traduzir o clique em applyPreference; as chaves que ainda
  * não têm item entram com o efeito delas. A entrada passa por normalizePreferences (lixo vira
  * padrão). Nunca lança e nunca muta a entrada.
@@ -508,6 +533,7 @@ function menuTemplate(preferences) {
       type: 'checkbox', label: 'Fixar aberta', checked: current.pinExpanded, key: 'pinExpanded', value: !current.pinExpanded,
     },
     { label: 'Âncora', submenu: radios('anchor', ANCHORS) },
+    { label: 'Ilhas', submenu: radios('islandMode', ISLAND_MODES) },
   ];
 }
 
@@ -523,7 +549,7 @@ module.exports = {
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
-  nextShownPermission,
+  islandDisplays, nextShownPermission,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
   normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate,
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, SHORTCUT_PATTERN, SHORTCUT_MAX_LENGTH,
