@@ -2,17 +2,33 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { SHAPES } = require('./state');
+const { SHAPES, THEMES } = require('./state');
 
 // O arquivo no disco pode ser CRLF (core.autocrlf): as regexes abaixo assumem LF.
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8').replace(/\r\n/g, '\n');
 const style = html.slice(html.indexOf('<style>') + '<style>'.length, html.indexOf('</style>'));
 const script = html.slice(html.indexOf('<script>') + '<script>'.length, html.indexOf('</script>'));
 
+const styleNoComments = style.replace(/\/\*[^]*?\*\//g, '');
+
+// O @media do esquema claro sai do texto por contagem de chaves (molde de keyframeBlocks em
+// animation.test.js): a regra de dentro só vale no auto, e não pode se misturar às regras de topo.
+const LIGHT_MEDIA = '@media (prefers-color-scheme: light) {';
+const lightStart = styleNoComments.indexOf(LIGHT_MEDIA);
+let lightEnd = lightStart + LIGHT_MEDIA.length;
+for (let depth = 1; depth > 0 && lightEnd < styleNoComments.length; lightEnd += 1) {
+  if (styleNoComments[lightEnd] === '{') depth += 1;
+  if (styleNoComments[lightEnd] === '}') depth -= 1;
+}
+const lightBody = lightStart < 0 ? '' : styleNoComments.slice(lightStart + LIGHT_MEDIA.length, lightEnd - 1);
+const topLevelStyle = lightStart < 0 ? styleNoComments : styleNoComments.slice(0, lightStart) + styleNoComments.slice(lightEnd);
+
 // Regras planas do <style> (sem comentários): seletor sem espaços nas pontas e corpo como texto. Regra
 // dentro de @media entra pelo seletor próprio; o @media em si não é plano e fica de fora.
-const rules = [...style.replace(/\/\*[^]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+const flatRules = (css) => [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
   .map(([, selector, body]) => ({ selector: selector.trim(), body }));
+const rules = flatRules(topLevelStyle);
+const lightRules = flatRules(lightBody);
 
 // Propriedade → valor de um corpo de regra.
 function declarations(body) {
@@ -71,5 +87,233 @@ test('a forma só vem do payload e trocá-la com pedido na tela rearma', () => {
   const apply = script.slice(script.indexOf('function applyPreferences('));
   const body = apply.slice(0, apply.indexOf('\n  }\n'));
   assert.ok(body.includes('root.dataset.shape = shape;'));
+  assert.ok(body.includes('if (changed && current.permission) restartArming();'));
+});
+
+// ---------------------------------------------------------------------------------------------
+// Temas e contraste. O teste resolve os tokens do próprio index.html (sem dependência: a conversão
+// de cor é JS puro) para provar que o que o usuário lê antes de aprovar continua legível.
+// ---------------------------------------------------------------------------------------------
+
+const LIGHT_AUTO_SELECTOR = ':root:not([data-theme]), :root[data-theme="auto"]';
+
+/**
+ * Mapa propriedade → valor de um caso (tema + esquema do sistema), na ordem em que o CSS aplica:
+ * toda regra de topo com seletor exatamente :root, depois a do auto claro (só com tema auto e esquema
+ * claro) ou a do tema. Falha com mensagem clara se o tema não tiver regra.
+ */
+function themeVariables(theme, scheme) {
+  const variables = {};
+  for (const found of rulesFor(':root')) Object.assign(variables, found);
+  if (theme === 'auto') {
+    if (scheme === 'light') {
+      const light = lightRules.filter((rule) => rule.selector === LIGHT_AUTO_SELECTOR);
+      assert.equal(light.length, 1, `regra do auto claro (${LIGHT_AUTO_SELECTOR})`);
+      Object.assign(variables, declarations(light[0].body));
+    }
+  } else {
+    const themed = rulesFor(`:root[data-theme="${theme}"]`);
+    assert.equal(themed.length, 1, `falta a regra :root[data-theme="${theme}"]`);
+    Object.assign(variables, themed[0]);
+  }
+  return variables;
+}
+
+// Oklab de Björn Ottosson (domínio público): OKLCH → OKLab → LMS → sRGB linear → codificação gama.
+function oklchToSrgb(lightness, chroma, hueDegrees) {
+  const hue = (hueDegrees * Math.PI) / 180;
+  const a = chroma * Math.cos(hue);
+  const b = chroma * Math.sin(hue);
+  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const linear = [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  ];
+  return linear.map((value) => {
+    const clipped = Math.min(1, Math.max(0, value));
+    return clipped <= 0.0031308 ? 12.92 * clipped : 1.055 * clipped ** (1 / 2.4) - 0.055;
+  });
+}
+
+// Divide nas vírgulas de nível zero (a de dentro de um var(), oklch() ou color-mix() aninhado não conta).
+function splitTopLevel(text) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '(') depth += 1;
+    if (text[index] === ')') depth -= 1;
+    if (text[index] === ',' && depth === 0) {
+      parts.push(text.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(text.slice(start).trim());
+  return parts;
+}
+
+/**
+ * Resolve um valor de cor do CSS para [r, g, b] em 0..1 (sRGB codificado). Só entende o que o index.html
+ * usa nos tokens checados: var(--x), #rgb, #rrggbb, oklch(L C H) e color-mix(in srgb, A P%, B) com dois
+ * operandos opacos. Qualquer outra coisa, inclusive transparent e rgb(...), lança: é o que também prova
+ * que um token checado é opaco.
+ */
+function resolveColor(value, variables, depth = 0) {
+  const text = String(value).trim();
+  const unsupported = () => new Error(`formato de cor não suportado no teste de contraste: ${text}`);
+  if (depth > 12) throw new Error(`ciclo ou aninhamento demais ao resolver a cor: ${text}`);
+  const reference = text.match(/^var\(\s*(--[\w-]+)\s*\)$/);
+  if (reference) {
+    if (!(reference[1] in variables)) throw new Error(`token sem valor no caso: ${reference[1]}`);
+    return resolveColor(variables[reference[1]], variables, depth + 1);
+  }
+  const hex = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    const digits = hex[1].length === 3 ? [...hex[1]].map((digit) => digit + digit).join('') : hex[1];
+    return [0, 2, 4].map((offset) => parseInt(digits.slice(offset, offset + 2), 16) / 255);
+  }
+  const oklch = text.match(/^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/);
+  if (oklch) return oklchToSrgb(Number(oklch[1]), Number(oklch[2]), Number(oklch[3]));
+  const mix = text.match(/^color-mix\(\s*in srgb\s*,(.*)\)$/);
+  if (mix) {
+    const [first, second, ...extra] = splitTopLevel(mix[1]);
+    const weighted = first && first.match(/^(.*\S)\s+([\d.]+)%$/);
+    if (!weighted || !second || extra.length > 0) throw unsupported();
+    const weight = Number(weighted[2]) / 100;
+    const one = resolveColor(weighted[1], variables, depth + 1);
+    const other = resolveColor(second, variables, depth + 1);
+    return one.map((channel, index) => channel * weight + other[index] * (1 - weight));
+  }
+  throw unsupported();
+}
+
+const channelToLinear = (channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+const luminance = ([r, g, b]) => 0.2126 * channelToLinear(r) + 0.7152 * channelToLinear(g) + 0.0722 * channelToLinear(b);
+
+/** Razão de contraste da WCAG 2.x entre duas cores [r, g, b] em 0..1. */
+function contrastRatio(first, second) {
+  const [lighter, darker] = [luminance(first), luminance(second)].sort((a, b) => b - a);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+const to8Bit = (color) => color.map((channel) => Math.round(channel * 255));
+
+test('o conversor de cor bate com os valores conhecidos e recusa o que não sabe medir', () => {
+  const near = (actual, expected) => actual.every((channel, index) => Math.abs(channel - expected[index]) <= 1);
+  assert.ok(near(to8Bit(resolveColor('oklch(0.646 0.222 41.116)', {})), [0xf5, 0x49, 0x00]));
+  assert.ok(near(to8Bit(resolveColor('oklch(0.705 0.213 47.604)', {})), [0xff, 0x69, 0x00]));
+  assert.ok(near(to8Bit(resolveColor('oklch(0.98 0.016 73.684)', {})), [0xff, 0xf7, 0xed]));
+  assert.deepEqual(to8Bit(resolveColor('color-mix(in srgb, #000 50%, var(--x))', { '--x': '#fff' })), [128, 128, 128]);
+  assert.ok(Math.abs(contrastRatio([0, 0, 0], [1, 1, 1]) - 21) < 1e-9);
+  for (const value of ['transparent', 'rgb(0 0 0 / .5)', 'hsl(0 0% 0%)', 'color-mix(in srgb, #000 55%, transparent)']) {
+    assert.throws(() => resolveColor(value, {}), /formato de cor não suportado no teste de contraste: .+/, value);
+  }
+});
+
+const DARK_THEMES = THEMES.filter((theme) => theme !== 'auto' && theme !== 'porcelain');
+const CASES = [
+  ...DARK_THEMES.map((theme) => ({ theme, scheme: 'dark' })),
+  { theme: 'porcelain', scheme: 'light' },
+  { theme: 'auto', scheme: 'dark' },
+  { theme: 'auto', scheme: 'light' },
+];
+const caseName = ({ theme, scheme }) => `${theme}/${scheme}`;
+
+test('os 10 casos de tema são os 8 temas mais o auto claro e escuro', () => {
+  assert.equal(CASES.length, 10);
+  assert.equal(THEMES.length, 9, 'tema novo pede caso novo aqui');
+});
+
+test('cada tema de THEMES, fora o auto, tem a sua regra, e nenhuma regra mira tema desconhecido', () => {
+  for (const theme of THEMES.filter((name) => name !== 'auto')) {
+    assert.equal(rulesFor(`:root[data-theme="${theme}"]`).length, 1, `regra do tema ${theme}`);
+  }
+  const named = [...style.matchAll(/\[data-theme="([^"]*)"\]/g)].map((match) => match[1]);
+  assert.ok(named.length > 0);
+  for (const theme of named) assert.ok(THEMES.includes(theme), `tema fora de THEMES: ${theme}`);
+});
+
+test('as cores claras só valem no auto: um tema escuro num sistema claro não as herda', () => {
+  assert.equal(lightRules.length, 1);
+  assert.equal(lightRules[0].selector, LIGHT_AUTO_SELECTOR);
+});
+
+// Key Decision das cores (2026-11-21): cada cor de estado é um par escuro/claro e nenhum tema o troca.
+const FIXED_DARK = {
+  '--running': 'oklch(0.705 0.213 47.604)', '--waiting': '#ff9f0a', '--done': '#30d158',
+  '--context-warn': '#ffd60a', '--context-critical': '#ff453a', '--icon-ink': '#000',
+};
+const FIXED_LIGHT = {
+  '--running': 'oklch(0.646 0.222 41.116)', '--waiting': '#f08c00', '--done': '#248a3d',
+  '--context-warn': '#c79200', '--context-critical': '#d70015', '--icon-ink': '#fff',
+};
+// Os botões têm um valor só, igual nos dois esquemas: o laranja escuro derrubaria o contraste do rótulo.
+const FIXED_BUTTONS = {
+  '--button': 'oklch(0.646 0.222 41.116)', '--button-text': 'oklch(0.98 0.016 73.684)', '--done-button': '#248a3d',
+};
+
+test('as cores de estado são o par escuro ou claro da Key Decision e os botões não mudam, nos 10 casos', () => {
+  for (const found of CASES) {
+    const variables = themeVariables(found.theme, found.scheme);
+    const expected = found.scheme === 'light' ? FIXED_LIGHT : FIXED_DARK;
+    for (const [token, value] of Object.entries({ ...expected, ...FIXED_BUTTONS })) {
+      assert.equal(variables[token], value, `${caseName(found)}: ${token}`);
+    }
+  }
+});
+
+test('nenhuma regra :root declara token derivado do acento (ele seria resolvido no :root, sempre laranja)', () => {
+  for (const { selector, body } of rules.filter((rule) => rule.selector.startsWith(':root'))) {
+    for (const [property, value] of Object.entries(declarations(body))) {
+      assert.equal(value.includes('var(--accent)'), false, `${selector} ${property}`);
+    }
+  }
+});
+
+test('contraste do bloco de permissão e dos controles nos 10 casos', () => {
+  const failures = [];
+  const check = (found, pair, foreground, background, minimum) => {
+    const variables = themeVariables(found.theme, found.scheme);
+    const ratio = contrastRatio(resolveColor(foreground, variables), resolveColor(background, variables));
+    if (ratio < minimum) failures.push(`${caseName(found)}: ${pair} mede ${ratio.toFixed(2)}:1, mínimo ${minimum}:1`);
+  };
+  for (const found of CASES) {
+    for (const token of ['--perm-text', '--perm-hint', '--perm-label']) {
+      check(found, `${token} sobre --perm-bg`, `var(${token})`, 'var(--perm-bg)', 4.5);
+    }
+    check(found, '--muted sobre --surface', 'var(--muted)', 'var(--surface)', 4.5);
+    check(found, '--button sobre --surface (controle)', 'var(--button)', 'var(--surface)', 3);
+    check(found, '--perm-deny-border sobre --surface (controle)', 'var(--perm-deny-border)', 'var(--surface)', 3);
+    // As duas cores são travadas pela Key Decision e medem ~3,38:1: cumprem controle, não texto de 13 px
+    // (decisão registrada na UI-SPEC); o teste não deixa piorar.
+    check(found, '--button-text sobre --button (controle)', 'var(--button-text)', 'var(--button)', 3);
+  }
+  assert.deepEqual(failures, []);
+});
+
+test('--perm-bg é uma cor opaca nos 10 casos', () => {
+  for (const found of CASES) {
+    const color = resolveColor('var(--perm-bg)', themeVariables(found.theme, found.scheme));
+    assert.equal(color.length, 3, caseName(found));
+    assert.ok(color.every((channel) => Number.isFinite(channel) && channel >= 0 && channel <= 1), caseName(found));
+  }
+});
+
+test('o bloco de permissão lê os tokens próprios', () => {
+  assert.equal(rulesFor('#permission')[0].background, 'var(--perm-bg)');
+  assert.equal(rulesFor('#permission-tool')[0].color, 'var(--perm-label)');
+  assert.equal(rulesFor('#permission-text')[0].color, 'var(--perm-text)');
+  assert.equal(rulesFor('#permission-hint')[0].color, 'var(--perm-hint)');
+  assert.equal(rulesFor('#actions #deny, #pill.has-permission #open')[0]['box-shadow'], 'inset 0 0 0 1px var(--perm-deny-border)');
+});
+
+test('o tema só vem do payload e o script grava data-theme com auto como padrão', () => {
+  const apply = script.slice(script.indexOf('function applyPreferences('));
+  const body = apply.slice(0, apply.indexOf('\n  }\n'));
+  assert.ok(body.includes("const theme = preferences?.theme || 'auto';"));
+  assert.ok(body.includes('root.dataset.theme = theme;'));
   assert.ok(body.includes('if (changed && current.permission) restartArming();'));
 });
