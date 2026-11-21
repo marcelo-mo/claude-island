@@ -5,6 +5,7 @@ const path = require('node:path');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  SECURE_WEB_PREFERENCES,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -196,6 +197,8 @@ function createIsland(display) {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       autoplayPolicy: 'no-user-gesture-required', // o aviso sonoro toca sem clique
+      // Por último, para nada acima sobrescrever.
+      ...SECURE_WEB_PREFERENCES,
     },
   });
   // Reexibir ou restaurar de minimizada põe os botões sob o cursor de novo, então o main reinicia

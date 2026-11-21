@@ -251,7 +251,12 @@ function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
   };
 }
 
+// Explícito protege de regressão: ligar nodeIntegration desligaria o sandbox em silêncio. O renderer
+// só carrega o index.html local, com CSP default-src 'none'.
+const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: true, nodeIntegration: false });
+
 module.exports = {
+  SECURE_WEB_PREFERENCES,
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
