@@ -432,6 +432,8 @@ coveredByFullscreen: display ? fullscreenByDisplay.has(display.id) : true,
 - [ ] sem instalar framework novo
 
 **Verificação manual (checklist de PR, humano):**
+
+> O `human-checks.js` citado em CHK-01 e CHK-02 ficou na pasta temporária da pesquisa e não foi versionado (este PR é só de documentação). O plano da fase precisa recriá-lo numa task própria, em `scripts/`, antes do checkpoint humano.
 - **CHK-01 UIPI/hover:** `node_modules\electron\dist\electron.exe <scratch>\koffi-probe\human-checks.js --mode=hover --user-data-dir=<tmp>` (pílula de teste laranja, 40 s): foque um terminal comum e passe o cursor; depois o Gerenciador de Tarefas (elevado) e repita. O JSON `human-hover-out.json` compara `domMovesForward` (caminho atual) com `pollHitsAcumulados` (caminho novo). Esperado: o segundo continua contando com o elevado em foco.
 - **CHK-02 AltGr+C:** `--mode=hotkey` (20 s): digite AltGr+C (e Ctrl+Alt+C com a mão esquerda). `hits > 0` confirma A1.
 - **CHK-03 menu:** botão direito na pílula: abre perto do cursor? clicar fora fecha? o clique que fecha atravessa para a janela de baixo? o Terminal mantém o cursor de texto? escolher um item funciona sem tirar o foco?
@@ -493,7 +495,7 @@ Fonte: `.claude/CLAUDE.md` do projeto e `~/.claude/CLAUDE.md` (SDD-WORKFLOW). Tr
 ## Sources
 
 ### Primary (HIGH confidence)
-- Sondas executadas nesta sessão, em `C:/Users/marce/AppData/Local/Temp/claude/389cc417882bb777/f3adb4b2-0b4e-4fd2-a948-65a62e363da8/scratchpad/fase4/koffi-probe/` (`p1.js` bounds/koffi/áudio/eventos, `p2.js` menu, `p3.js` atalho, `p4.js` opacidade por pixel, `p5.js` monitor/cobertura/mover, `p6.js` memória, `p7.js` hide/show com komorebi, `layout.ps1` teclado, `psmem.ps1`) e `human-checks.js` (testado só com `--selftest`)
+- Sondas executadas nesta sessão, em `scratchpad/fase4/koffi-probe/` (pasta temporária da sessão de pesquisa, não versionada; os trechos que importam estão neste documento) (`p1.js` bounds/koffi/áudio/eventos, `p2.js` menu, `p3.js` atalho, `p4.js` opacidade por pixel, `p5.js` monitor/cobertura/mover, `p6.js` memória, `p7.js` hide/show com komorebi, `layout.ps1` teclado, `psmem.ps1`) e `human-checks.js` (testado só com `--selftest`)
 - Código lido: `main.js`, `index.html`, `preload.js`, `state.js`, `window.js`, `gate.test.js`, `fixtures/permission-vectors.json`, `package.json`, `pnpm-workspace.yaml`
 - Documentação do projeto: `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, `PROJECT.md`, `research/{ARCHITECTURE,SUMMARY,PITFALLS,STACK,WINDHAWK-MOD}.md`, fase 3 em `claude-island-fase2/.planning/phases/03-*/`
 - https://www.electronjs.org/docs/latest/api/browser-window (`setIgnoreMouseEvents` forward/UIPI, `showInactive`, `hide`, eventos)
