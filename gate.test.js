@@ -6,7 +6,8 @@ const vm = require('node:vm');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
   effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES, WINDOW_SIZE, HORIZONTAL_SLACK,
-  PERMISSION_TOOL_LIMIT, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
+  PERMISSION_TOOL_LIMIT, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, besideFits, anchorPosition, clampIslandPosition,
+  horizontalSlackFor,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -1231,3 +1232,26 @@ test('sem sensor nem dependência nativa, e os hooks continuam leves', () => {
     assert.ok(comment.includes(needle), `o comentário do ponto de entrada do sensor não cita ${needle}`);
   }
 });
+
+// Ao lado da ilha do sistema, numa área útil estreita, o clamp põe a nossa janela sob a pílula do mod: a janela
+// ainda cabe na área útil, então só besideFits recusa. Reproduz a conta do main com as funções puras.
+for (const vector of vectors.besideDecision) {
+  test(`besideDecision: ${vector.name}`, () => {
+    const { anchor, workArea } = vector.input;
+    const slack = horizontalSlackFor(anchor);
+    const position = clampIslandPosition(anchorPosition(anchor, workArea, WINDOW_SIZE), workArea, WINDOW_SIZE, slack);
+    const bounds = { ...position, ...WINDOW_SIZE };
+    const verdict = acceptDecision({
+      behavior: 'allow',
+      echoedId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      shownId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      shownSince: 1000,
+      now: 1800,
+      decidedId: null,
+      windowVisible: true,
+      coveredByFullscreen: false,
+      withinVisibleArea: isWithinWorkArea(bounds, workArea, slack) && besideFits(anchor, workArea),
+    });
+    assert.deepEqual(verdict, vector.expect);
+  });
+}

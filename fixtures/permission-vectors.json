@@ -2046,5 +2046,10 @@
     { "name": "springsAtRest em texto não arma", "input": { "settled": true, "springsAtRest": "true" }, "expect": false },
     { "name": "settled em texto não arma", "input": { "settled": "true", "springsAtRest": true }, "expect": false },
     { "name": "entrada ausente não arma", "input": null, "expect": false }
+  ],
+  "besideDecision": [
+    { "name": "à direita da ilha do sistema em 1093 DIP de área útil recusa", "input": { "anchor": "right-of-island", "workArea": { "x": 0, "y": 0, "width": 1093, "height": 576 } }, "expect": { "accept": false, "reason": "outside-visible-area" } },
+    { "name": "à esquerda da ilha do sistema em 1066 DIP de área útil recusa", "input": { "anchor": "left-of-island", "workArea": { "x": 0, "y": 0, "width": 1066, "height": 568 } }, "expect": { "accept": false, "reason": "outside-visible-area" } },
+    { "name": "à direita da ilha do sistema em 1220 DIP de área útil aceita", "input": { "anchor": "right-of-island", "workArea": { "x": 0, "y": 0, "width": 1220, "height": 600 } }, "expect": { "accept": true, "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "behavior": "allow" } }
   ]
 }
