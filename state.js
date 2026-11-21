@@ -7,8 +7,8 @@ const STATE_DIR = path.join(os.homedir(), '.claude', 'island');
 const DECISIONS_DIR = path.join(STATE_DIR, 'decisions');
 // Batimento da ilha: sem ele o permission-hook não espera por botões que ninguém vai ver.
 const HEARTBEAT_FILE = path.join(STATE_DIR, '.heartbeat');
-// Preferências visuais (tema, forma, estilo e velocidade da animação). Nesta fase só o main lê o
-// arquivo; quem grava é o menu da Fase 4.
+// Preferências da ilha. O main lê na subida e grava pelo menu (por .tmp + rename); o .tmp e a
+// quarentena .bad ficam fora da leitura de sessões por não terminarem em .json.
 const PREFERENCES_FILE = path.join(STATE_DIR, 'preferences.json');
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const HEARTBEAT_STALE_MS = 6_000;
@@ -152,6 +152,74 @@ function acceptDecision({
   return { accept: true, permissionId: shownId, behavior };
 }
 
+/**
+ * A ilha deve estar na tela? Só com o usuário não a escondendo e sem app em tela cheia no monitor dela:
+ * o atalho não vence a tela cheia (D-12). Entrada ausente ou de outro tipo esconde (lado seguro).
+ */
+function isIslandVisible(facts) {
+  const { userHidden, covered } = facts ?? {};
+  return userHidden === false && covered === false;
+}
+
+/**
+ * Próximo valor de `userHidden` quando o atalho é apertado. Nunca lança nem muta. Com toda ilha
+ * coberta por tela cheia (inclusive sem nenhuma ilha) devolve o valor atual: o atalho não teria efeito
+ * visível e, ao sair da tela cheia, a ilha voltaria escondida contra a intenção. `userHidden` é global,
+ * então basta uma ilha não coberta para o atalho inverter. `userHidden` que não é `true` conta como
+ * falso; ids que não são lista contam como vazios.
+ */
+function nextUserHidden(input) {
+  const { userHidden, displayIds, coveredDisplayIds } = input ?? {};
+  const current = userHidden === true;
+  const ids = Array.isArray(displayIds) ? displayIds : [];
+  const covered = Array.isArray(coveredDisplayIds) ? coveredDisplayIds : [];
+  return ids.every((id) => covered.includes(id)) ? current : !current;
+}
+
+// A área cliente de um vídeo em tela cheia bate com o monitor a 100% e a 125% (medido); 1 px absorve
+// arredondamento de escala.
+const FULLSCREEN_TOLERANCE_PX = 1;
+// Área de trabalho e barras de tarefas cobrem o monitor sem serem app em tela cheia (TELA-01).
+const SHELL_WINDOW_CLASSES = Object.freeze(['Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd']);
+// Estilo estendido de janela que deixa o mouse passar (overlay): não conta como primeiro plano.
+const WS_EX_TRANSPARENT = 0x20;
+
+/**
+ * Regra de D-18, o contrato do sensor de tela cheia, que ainda não existe (pendente da escolha do autor,
+ * D-20). Devolve um Map novo de id de monitor para o HWND que o cobre; nunca lança nem muta `previous`.
+ * `probe` é null ou { foreground, gone }: `foreground` é null ou { hwnd, className, pid, exStyle, visible,
+ * minimized, cloaked, clientRect, monitorRect } (retângulos { left, top, right, bottom } em pixels físicos)
+ * e `gone` lista os HWND lembrados que sumiram. `displays` é [{ id, rect }] em pixels físicos. Começa do
+ * mapa anterior, solta o que sumiu ou saiu de `displays` e então olha o primeiro plano: o próprio pid e
+ * janela invisível, minimizada, cloaked ou transparente não mudam nada; no monitor do primeiro plano, a
+ * janela que cobre a área inteira (com a tolerância) fica lembrada e qualquer outra solta o monitor.
+ * ponytail: sem enumerar janelas, uma janela em tela cheia totalmente coberta por outra maximizada no
+ * mesmo monitor continua lembrada até o foco voltar a ela ou o HWND sumir.
+ */
+function nextFullscreen(input) {
+  const { previous, probe, ownPid, displays } = input ?? {};
+  const result = new Map(previous instanceof Map ? previous : []);
+  const knownDisplays = Array.isArray(displays) ? displays : [];
+  const gone = Array.isArray(probe?.gone) ? probe.gone : [];
+  for (const [displayId, hwnd] of result) {
+    if (gone.includes(hwnd) || !knownDisplays.some((display) => display?.id === displayId)) result.delete(displayId);
+  }
+  const foreground = probe?.foreground;
+  if (!foreground || !Number.isInteger(foreground.hwnd) || foreground.pid === ownPid) return result;
+  if (foreground.visible !== true || foreground.minimized !== false || foreground.cloaked !== false) return result;
+  if (!Number.isInteger(foreground.exStyle) || (foreground.exStyle & WS_EX_TRANSPARENT) !== 0) return result;
+  const sameRect = (a, b) => ['left', 'top', 'right', 'bottom'].every((side) => a?.[side] === b?.[side]);
+  const display = knownDisplays.find((candidate) => sameRect(candidate?.rect, foreground.monitorRect));
+  if (!display) return result;
+  const client = foreground.clientRect;
+  const coversMonitor = ['left', 'top', 'right', 'bottom'].every((side) => (
+    Number.isFinite(client?.[side]) && Math.abs(client[side] - display.rect[side]) <= FULLSCREEN_TOLERANCE_PX
+  ));
+  if (SHELL_WINDOW_CLASSES.includes(foreground.className) || !coversMonitor) result.delete(display.id);
+  else result.set(display.id, foreground.hwnd);
+  return result;
+}
+
 /** A ilha está no ar se o batimento dela é recente (e não veio do futuro). */
 function isHeartbeatFresh(heartbeatAt, now) {
   return Number.isFinite(heartbeatAt) && heartbeatAt <= now + HEARTBEAT_STALE_MS && now - heartbeatAt <= HEARTBEAT_STALE_MS;
@@ -205,22 +273,28 @@ function pickState(sessions, now) {
 // getBounds() arredonda com escala de DPI fracionária (como 125%), e a janela pode medir 1 ou 2 px
 // a mais que o esperado. Recusar por engano é seguro (o terminal segue valendo), mas não pode
 // virar recusa permanente de uma janela que está de fato na tela.
+// Decisão da Fase 4 (D-14): a tolerância continua 2 px. Depois do setBounds com o tamanho explícito a
+// 125% a deriva é de +2 DIP, que cabe; +3 só aparece com setPosition, que a ilha não usa, e recusar essa
+// por engano é o lado seguro. Os vetores de 125% do fixture fixam os dois lados do limite.
 const WORK_AREA_TOLERANCE_PX = 2;
 
 /**
  * A janela está dentro da área útil do monitor? `horizontalSlack` é a folga lateral que a
- * janela transparente já tem (ver clampIslandPosition). Devolve false quando `bounds` ou
- * `workArea` não têm todos os campos numéricos: dado que não confere não decide. Num monitor
- * menor que a janela também devolve false, que é o lado seguro.
+ * janela transparente já tem (ver clampIslandPosition): um número vale para os dois lados e um objeto
+ * `{ left, right }` para cada lado. Devolve false quando `bounds` ou `workArea` não têm todos os campos
+ * numéricos, ou quando a folga em objeto não traz os dois lados numéricos: dado que não confere não
+ * decide. Num monitor menor que a janela também devolve false, que é o lado seguro.
  */
 function isWithinWorkArea(bounds, workArea, horizontalSlack) {
+  const slack = typeof horizontalSlack === 'object' && horizontalSlack !== null
+    ? horizontalSlack
+    : { left: horizontalSlack, right: horizontalSlack };
   const fields = [bounds && bounds.x, bounds && bounds.y, bounds && bounds.width, bounds && bounds.height,
     workArea && workArea.x, workArea && workArea.y, workArea && workArea.width, workArea && workArea.height,
-    horizontalSlack];
+    slack.left, slack.right];
   if (!fields.every(Number.isFinite)) return false;
-  const sideMargin = horizontalSlack + WORK_AREA_TOLERANCE_PX;
-  return bounds.x >= workArea.x - sideMargin
-    && bounds.x + bounds.width <= workArea.x + workArea.width + sideMargin
+  return bounds.x >= workArea.x - slack.left - WORK_AREA_TOLERANCE_PX
+    && bounds.x + bounds.width <= workArea.x + workArea.width + slack.right + WORK_AREA_TOLERANCE_PX
     && bounds.y >= workArea.y - WORK_AREA_TOLERANCE_PX
     && bounds.y + bounds.height <= workArea.y + workArea.height + WORK_AREA_TOLERANCE_PX;
 }
@@ -247,6 +321,15 @@ const WINDOW_SIZE = Object.freeze({ width: 520, height: 410 });
 // sair da tela para a pílula encostar na borda do monitor. O valor subiu de 20 para 60 junto com a largura
 // do palco (440 → 520) e mantém (largura − 400) / 2: a borda da pílula no mesmo lugar de antes.
 const HORIZONTAL_SLACK = 60;
+// Distância da pílula à lateral e à base da área útil nas âncoras (valores do mod Dynamic Island for
+// Windows, MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md).
+const ANCHOR_SIDE_GAP_PX = 16;
+const ANCHOR_BOTTOM_GAP_PX = 40;
+// Margem do palco do lado ancorado para a sombra, que alcança 14 px para os lados e 19 px para baixo. O CSS
+// a repete em --stage-shadow.
+const STAGE_SHADOW_PX = 20;
+// Largura da pílula expandida no CSS (#pill.expanded).
+const EXPANDED_PILL_WIDTH_PX = 400;
 
 /** Posição padrão da janela da ilha: topo central da área útil do monitor. */
 function defaultIslandPosition(workArea, windowSize) {
@@ -254,39 +337,100 @@ function defaultIslandPosition(workArea, windowSize) {
 }
 
 /**
- * Posição da janela a partir do deslocamento salvo pelo usuário. O deslocamento é relativo à posição
- * padrão, que centra pela largura da janela, então trocar o tamanho do palco preserva o centro
- * horizontal e o topo da pílula sem converter nada. Devolve a posição padrão quando o
- * deslocamento não é um objeto com x e y numéricos: o arquivo é editável à mão, e dado em disco não é
- * confiável. Não muta nada. Quem prende a janela na área útil é clampIslandPosition, e por isso uma
- * ilha salva nos últimos ~86 px de baixo do monitor sobe até caber (exceção aceita: o gate exige a
- * janela inteira na área útil, ver isWithinWorkArea).
+ * Posição da janela para a âncora escolhida, `{ x, y }`; âncora fora de ANCHORS vale 'top-center', que é
+ * igual a defaultIslandPosition. A pílula encosta no lado ancorado do palco, deixando só a margem da
+ * sombra, então a janela sai STAGE_SHADOW_PX além da distância de 16 px à lateral e de 40 px à base. Em
+ * cima a janela começa na área útil e o respiro vem do --stage-top do CSS. Embaixo a janela fica 20 px
+ * acima da área útil, o que sobra para a deriva de getBounds() com escala de DPI de 125%.
  */
-function positionFromSavedOffset(workArea, windowSize, offset) {
-  const standard = defaultIslandPosition(workArea, windowSize);
+function anchorPosition(anchor, workArea, windowSize) {
+  const valid = ANCHORS.includes(anchor) ? anchor : 'top-center';
+  let x = Math.round(workArea.x + (workArea.width - windowSize.width) / 2);
+  if (valid.endsWith('-left')) x = workArea.x + ANCHOR_SIDE_GAP_PX - STAGE_SHADOW_PX;
+  if (valid.endsWith('-right')) x = workArea.x + workArea.width - ANCHOR_SIDE_GAP_PX + STAGE_SHADOW_PX - windowSize.width;
+  const y = valid.startsWith('bottom-')
+    ? workArea.y + workArea.height - ANCHOR_BOTTOM_GAP_PX + STAGE_SHADOW_PX - windowSize.height
+    : workArea.y;
+  return { x, y };
+}
+
+/**
+ * Folga lateral `{ left, right }` da janela para a âncora, sempre um objeto novo; âncora fora de ANCHORS
+ * vale 'top-center'. No centro a pílula expandida fica centrada e sobram 60 px de cada lado. Numa âncora de
+ * canto ela encosta no lado ancorado do palco, com só a margem da sombra: a folga simétrica deixaria a
+ * pílula sair 40 px da tela e o gate aceitaria a decisão fora da área visível. Daí 20 px do lado ancorado e
+ * o resto do outro, de modo que a folga mais a pílula expandida some sempre a largura do palco.
+ */
+function horizontalSlackFor(anchor) {
+  const valid = ANCHORS.includes(anchor) ? anchor : 'top-center';
+  const free = WINDOW_SIZE.width - STAGE_SHADOW_PX - EXPANDED_PILL_WIDTH_PX;
+  if (valid.endsWith('-left')) return { left: STAGE_SHADOW_PX, right: free };
+  if (valid.endsWith('-right')) return { left: free, right: STAGE_SHADOW_PX };
+  return { left: HORIZONTAL_SLACK, right: HORIZONTAL_SLACK };
+}
+
+/**
+ * Posição da janela a partir do deslocamento salvo pelo usuário. O deslocamento é relativo à posição
+ * da âncora (topo centro quando `anchor` falta ou é inválido), que centra pela largura da janela, então
+ * trocar o tamanho do palco preserva o centro horizontal e o topo da pílula sem converter nada. Devolve a
+ * posição da âncora quando o deslocamento não é um objeto com x e y numéricos: o arquivo é editável à
+ * mão, e dado em disco não é confiável. Não muta nada. Quem prende a janela na área útil é
+ * clampIslandPosition, e por isso uma ilha salva nos últimos ~86 px de baixo do monitor sobe até caber
+ * (exceção aceita: o gate exige a janela inteira na área útil, ver isWithinWorkArea).
+ */
+function positionFromSavedOffset(workArea, windowSize, offset, anchor) {
+  const standard = anchorPosition(anchor, workArea, windowSize);
   if (!offset || typeof offset !== 'object' || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return standard;
   return { x: standard.x + offset.x, y: standard.y + offset.y };
 }
 
 /**
- * Mantém a janela da ilha dentro da área útil do monitor dela. `horizontalSlack` é quanto
- * da janela pode sair pelos lados: a janela é mais larga que a pílula, e sem essa folga a
- * pílula nunca encostaria na borda da tela.
+ * Mantém a janela da ilha dentro da área útil do monitor dela. `horizontalSlack` é quanto da janela pode
+ * sair pelos lados: um número vale para os dois lados e um objeto `{ left, right }` (horizontalSlackFor)
+ * para cada lado. A janela é mais larga que a pílula, e sem essa folga a pílula nunca encostaria na
+ * borda da tela.
  */
 function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
+  const { left, right } = typeof horizontalSlack === 'object' && horizontalSlack !== null
+    ? horizontalSlack
+    : { left: horizontalSlack, right: horizontalSlack };
   // Monitor menor que a janela: o máximo cairia abaixo do mínimo; vence o mínimo.
   const clamp = (value, min, max) => Math.round(Math.max(min, Math.min(value, max)));
   return {
-    x: clamp(position.x, workArea.x - horizontalSlack, workArea.x + workArea.width - windowSize.width + horizontalSlack),
+    x: clamp(position.x, workArea.x - left, workArea.x + workArea.width - windowSize.width + right),
     y: clamp(position.y, workArea.y, workArea.y + workArea.height - windowSize.height),
   };
 }
 
 /**
+ * Ids de monitor que têm ilha, num array novo, a partir de `{ mode, displayIds, primaryId,
+ * cursorDisplayId, currentIds, hasPermission }`. 'perDisplay' (o padrão, e também o que vale para modo
+ * desconhecido ou ausente) devolve todos os ids numéricos, na ordem dada; 'primary' devolve só o monitor
+ * principal (o primeiro da lista se ele não estiver nela); 'cursor' devolve o monitor do cursor, ou o
+ * principal se o cursor não estiver em nenhum. No modo 'cursor' a ilha só segue o cursor com
+ * `hasPermission === false`: com pedido na tela, ou com o fato desconhecido, o botão pararia sob o
+ * cursor num monitor novo, então ela fica num monitor que já ocupa (o do cursor, se for um deles).
+ * Sem monitores, ou com a entrada ausente, devolve []. Nunca lança e nunca muta a entrada.
+ */
+function islandDisplays(input) {
+  const { mode, displayIds, primaryId, cursorDisplayId, currentIds, hasPermission } = input || {};
+  const ids = Array.isArray(displayIds) ? displayIds.filter(Number.isFinite) : [];
+  if (ids.length === 0) return [];
+  const primary = ids.includes(primaryId) ? primaryId : ids[0];
+  if (mode === 'primary') return [primary];
+  if (mode !== 'cursor') return [...ids];
+  const cursor = ids.includes(cursorDisplayId) ? cursorDisplayId : primary;
+  if (hasPermission === false) return [cursor];
+  const occupied = Array.isArray(currentIds) ? currentIds.filter((id) => ids.includes(id)) : [];
+  if (occupied.length === 0 || occupied.includes(cursor)) return [cursor];
+  return [occupied[0]];
+}
+
+/**
  * Opacidade com que a ilha deve aparecer. Devolve 1 quando há pedido na tela ou o fato é
  * desconhecido (`hasPermission !== false`, fail-safe) e quando a preferência não é um número em
- * (0, 1]; senão devolve a preferência. Ainda sem consumidor: a transparência de 100/85/70/55% da
- * Fase 4 (PREF-06) a usa, e com pedido na tela a transparência nunca vale (invariante I5).
+ * (0, 1]; senão devolve a preferência. Quem a usa é applyOpacity no main (transparência de
+ * 100/85/70/55%, PREF-06); com pedido na tela a transparência nunca vale (invariante I5).
  */
 function effectiveOpacity(preferredOpacity, hasPermission) {
   if (hasPermission !== false) return 1;
@@ -321,7 +465,62 @@ const SHAPES = Object.freeze(['pill', 'notch', 'win11']);
 const ANIMATION_STYLES = Object.freeze(['smooth', 'default', 'bouncy', 'snappy']);
 const ANIMATION_SPEED_MIN = 0.5;
 const ANIMATION_SPEED_MAX = 2;
-const DEFAULT_PREFERENCES = Object.freeze({ theme: 'auto', shape: 'pill', animationStyle: 'default', animationSpeed: 1 });
+const EXPAND_ON = Object.freeze(['hover', 'click']);
+// Degraus de transparência do mod Dynamic Island for Windows (MIT, ver THIRD_PARTY_NOTICES.md).
+const OPACITY_LEVELS = Object.freeze([1, 0.85, 0.7, 0.55]);
+// As seis âncoras do mesmo mod (MIT, ver THIRD_PARTY_NOTICES.md).
+const ANCHORS = Object.freeze(['top-center', 'top-left', 'top-right', 'bottom-center', 'bottom-left', 'bottom-right']);
+const ISLAND_MODES = Object.freeze(['perDisplay', 'primary', 'cursor']);
+// Ctrl+Alt+C produz ¢ com AltGr+C no ABNT2 do autor e o register() do Electron não enxerga esse
+// conflito; com Ctrl+Alt+Shift nenhuma letra produz caractere no ABNT2 nem no US (medido).
+const DEFAULT_SHORTCUT = 'Control+Alt+Shift+C';
+// ponytail: só letras, números e +; teclas de pontuação ficam de fora até alguém pedir. Um
+// acelerador com forma válida que o Electron recusa vira status 'invalid' no registro do atalho.
+const SHORTCUT_PATTERN = /^[A-Za-z0-9]+(?:\+[A-Za-z0-9]+)*$/;
+// Uma tecla sozinha só vale se for de função (F1 a F24): uma letra ou um número sem modificador viraria
+// atalho global e engoliria aquela tecla em todo programa.
+const SHORTCUT_LONE_KEY_PATTERN = /^F(?:[1-9]|1\d|2[0-4])$/;
+const SHORTCUT_MAX_LENGTH = 64;
+// Sobe quando uma chave muda de nome ou de sentido, para a leitura poder migrar o arquivo antigo.
+const PREFERENCES_VERSION = 1;
+// Arquivo de preferências acima disto não é lido: vai para a quarentena.
+const PREFERENCES_MAX_BYTES = 64 * 1024;
+// Velocidades oferecidas no menu; o arquivo continua aceitando qualquer número da faixa acima.
+const ANIMATION_SPEED_STEPS = Object.freeze([0.5, 0.75, 1, 1.5, 2]);
+const DEFAULT_PREFERENCES = Object.freeze({
+  theme: 'auto',
+  shape: 'pill',
+  animationStyle: 'default',
+  animationSpeed: 1,
+  expandOn: 'hover',
+  pinExpanded: false,
+  opacity: 1,
+  anchor: 'top-center',
+  islandMode: 'perDisplay',
+  shortcut: DEFAULT_SHORTCUT,
+  version: PREFERENCES_VERSION,
+});
+
+const isOneOf = (list) => (value) => typeof value === 'string' && list.includes(value);
+
+// Um predicado por chave do esquema: decide se o valor vindo do arquivo vale. Valor que não passa
+// volta ao padrão da chave.
+const PREFERENCE_VALIDATORS = Object.freeze({
+  theme: isOneOf(THEMES),
+  shape: isOneOf(SHAPES),
+  animationStyle: isOneOf(ANIMATION_STYLES),
+  // NaN e Infinity falham na comparação.
+  animationSpeed: (value) => typeof value === 'number' && value >= ANIMATION_SPEED_MIN && value <= ANIMATION_SPEED_MAX,
+  expandOn: isOneOf(EXPAND_ON),
+  pinExpanded: (value) => typeof value === 'boolean',
+  // includes já recusa string e NaN; a ilha nunca fica invisível.
+  opacity: (value) => OPACITY_LEVELS.includes(value),
+  anchor: isOneOf(ANCHORS),
+  islandMode: isOneOf(ISLAND_MODES),
+  shortcut: (value) => typeof value === 'string' && value.length <= SHORTCUT_MAX_LENGTH && SHORTCUT_PATTERN.test(value)
+    && (value.includes('+') || SHORTCUT_LONE_KEY_PATTERN.test(value)),
+  version: (value) => Number.isInteger(value) && value >= 1,
+});
 
 /**
  * Diz se um nome de arquivo da pasta da ilha é o estado de uma sessão. O preferences.json mora na
@@ -333,24 +532,131 @@ function isSessionFile(fileName) {
 }
 
 /**
- * Preferências visuais válidas a partir do que veio do arquivo, que pode estar ausente, corrompido
- * ou ter sido editado à mão. Devolve sempre um objeto novo com só as quatro chaves
- * { theme, shape, animationStyle, animationSpeed }; cada chave inválida ou ausente cai sozinha no
- * valor de DEFAULT_PREFERENCES. A velocidade só vale como número entre ANIMATION_SPEED_MIN e
- * ANIMATION_SPEED_MAX. Nunca lança e nunca muta a entrada.
+ * Preferências válidas a partir do que veio do arquivo, que pode estar ausente, corrompido ou ter
+ * sido editado à mão. Devolve sempre um objeto novo e completo, com as 11 chaves de
+ * DEFAULT_PREFERENCES na mesma ordem; cada chave inválida ou ausente cai sozinha no padrão dela.
+ * Só as chaves do esquema são lidas, e só se forem próprias da entrada: chave extra, `__proto__` e
+ * valor herdado são ignorados. Nunca lança e nunca muta a entrada.
  */
 function normalizePreferences(input) {
-  const { theme, shape, animationStyle, animationSpeed } = input || {};
-  const pick = (value, list, fallback) => (typeof value === 'string' && list.includes(value) ? value : fallback);
-  return {
-    theme: pick(theme, THEMES, DEFAULT_PREFERENCES.theme),
-    shape: pick(shape, SHAPES, DEFAULT_PREFERENCES.shape),
-    animationStyle: pick(animationStyle, ANIMATION_STYLES, DEFAULT_PREFERENCES.animationStyle),
-    // NaN e Infinity falham na comparação.
-    animationSpeed: typeof animationSpeed === 'number' && animationSpeed >= ANIMATION_SPEED_MIN && animationSpeed <= ANIMATION_SPEED_MAX
-      ? animationSpeed
-      : DEFAULT_PREFERENCES.animationSpeed,
-  };
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const result = {};
+  for (const key of Object.keys(DEFAULT_PREFERENCES)) {
+    result[key] = Object.hasOwn(source, key) && PREFERENCE_VALIDATORS[key](source[key])
+      ? source[key]
+      : DEFAULT_PREFERENCES[key];
+  }
+  return result;
+}
+
+/**
+ * Caminho de quarentena de um arquivo estragado: `<arquivo>.<carimbo>.bad`, com `now` truncado.
+ * Cada arquivo estragado ganha a sua cópia e uma quarentena nunca sobrescreve a anterior. O nome não
+ * termina em .json, então isSessionFile o ignora. Se `now` não for um número finito, cai em
+ * `<arquivo>.bad`. Nunca lança.
+ */
+function quarantinePath(file, now) {
+  return Number.isFinite(now) ? `${file}.${Math.trunc(now)}.bad` : `${file}.bad`;
+}
+
+// Rótulos do menu em pt-BR, por chave e por valor (o arquivo guarda os valores em inglês). A chave da
+// velocidade é String(valor), porque o objeto só tem chaves de texto.
+const PREFERENCE_LABELS = Object.freeze({
+  theme: Object.freeze({
+    auto: 'Automático', obsidian: 'Obsidian', graphite: 'Graphite', slate: 'Slate', nord: 'Nord',
+    evergreen: 'Evergreen', espresso: 'Espresso', plum: 'Plum', porcelain: 'Porcelain',
+  }),
+  shape: Object.freeze({ pill: 'Pílula', notch: 'Notch', win11: 'Windows 11' }),
+  animationStyle: Object.freeze({ smooth: 'Suave', default: 'Padrão', bouncy: 'Elástico', snappy: 'Rápido' }),
+  animationSpeed: Object.freeze({ 0.5: '0,5×', 0.75: '0,75×', 1: '1×', 1.5: '1,5×', 2: '2×' }),
+  expandOn: Object.freeze({ hover: 'Ao passar o mouse', click: 'Ao clicar' }),
+  opacity: Object.freeze({ 1: '100%', 0.85: '85%', 0.7: '70%', 0.55: '55%' }),
+  anchor: Object.freeze({
+    'top-center': 'Topo, centro', 'top-left': 'Topo, esquerda', 'top-right': 'Topo, direita',
+    'bottom-center': 'Base, centro', 'bottom-left': 'Base, esquerda', 'bottom-right': 'Base, direita',
+  }),
+  islandMode: Object.freeze({ perDisplay: 'Uma por monitor', primary: 'Só no monitor principal', cursor: 'No monitor do cursor' }),
+});
+
+// O atalho chega normalizado (só letras, números e +), então entra no rótulo sem escape.
+function shortcutInfoLabel(shortcut, shortcutStatus) {
+  if (shortcutStatus === 'ok') return `Atalho para mostrar e esconder: ${shortcut}`;
+  if (shortcutStatus === 'unavailable') return `Atalho ${shortcut} indisponível: outro programa já o usa`;
+  return `Atalho ${shortcut} inválido no preferences.json`;
+}
+
+/**
+ * Registra o atalho global que esconde e mostra a ilha. `register` é o `globalShortcut.register` do
+ * Electron, que entra por parâmetro para esta função não saber do Electron. Chama `register` uma única
+ * vez, sem nova tentativa. Devolve 'ok' se o atalho foi registrado, 'unavailable' se não foi (o Electron
+ * devolve false em silêncio quando outro programa já o usa) e 'invalid' se `register` lançar. Nunca lança.
+ */
+function registerShortcut(register, accelerator, onPress) {
+  try {
+    return register(accelerator, onPress) === true ? 'ok' : 'unavailable';
+  } catch {
+    // o Electron lança com acelerador que não entende (medido com 'Ctrl+Banana')
+    return 'invalid';
+  }
+}
+
+/**
+ * Modelo do menu de preferências para o main montar com Menu.buildFromTemplate. Devolve um array novo
+ * de submenus `{ label, submenu: [...] }` (Tema, Forma, Estilo da animação, Velocidade da animação,
+ * Expandir, Transparência, Âncora, Ilhas) mais a caixa 'Fixar aberta', cada filho de submenu um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
+ * atual. `key` e `value` são para o main traduzir o clique em applyPreference; as chaves que ainda
+ * não têm item entram com o efeito delas. Depois deles vêm um separador, a informação do atalho
+ * (desabilitada, conforme `shortcutStatus`, o resultado de registerShortcut) e 'Esconder'
+ * (`action: 'hide'`). A entrada passa por normalizePreferences (lixo vira padrão). Nunca lança e nunca
+ * muta a entrada.
+ */
+function menuTemplate(preferences, shortcutStatus) {
+  const current = normalizePreferences(preferences);
+  const radios = (key, values) => values.map((value) => ({
+    type: 'radio',
+    label: PREFERENCE_LABELS[key][String(value)],
+    checked: value === current[key],
+    key,
+    value,
+  }));
+  return [
+    { label: 'Tema', submenu: radios('theme', THEMES) },
+    { label: 'Forma', submenu: radios('shape', SHAPES) },
+    { label: 'Estilo da animação', submenu: radios('animationStyle', ANIMATION_STYLES) },
+    { label: 'Velocidade da animação', submenu: radios('animationSpeed', ANIMATION_SPEED_STEPS) },
+    { label: 'Expandir', submenu: radios('expandOn', EXPAND_ON) },
+    // O clique grava o oposto do valor atual; o main não muda: todo item com key vira applyPreference.
+    {
+      type: 'checkbox', label: 'Fixar aberta', checked: current.pinExpanded, key: 'pinExpanded', value: !current.pinExpanded,
+    },
+    { label: 'Transparência', submenu: radios('opacity', OPACITY_LEVELS) },
+    { label: 'Âncora', submenu: radios('anchor', ANCHORS) },
+    { label: 'Ilhas', submenu: radios('islandMode', ISLAND_MODES) },
+    { type: 'separator' },
+    { label: shortcutInfoLabel(current.shortcut, shortcutStatus), enabled: false },
+    // Sem atalho registrado esconder deixaria a ilha inalcançável até reiniciar.
+    shortcutStatus === 'ok'
+      ? { label: 'Esconder', action: 'hide', enabled: true }
+      : { label: 'Esconder (sem atalho para mostrar de novo)', action: 'hide', enabled: false },
+  ];
+}
+
+/**
+ * Traduz um item do modelo de menuTemplate para o item que o Menu do Electron monta. Os efeitos entram por
+ * parâmetro (`onHide`, `onPreference(key, value)`), como em registerShortcut, para esta função não saber do
+ * Electron. Submenus são traduzidos recursivamente. A ação 'hide' vem antes do teste de `key`: o item de
+ * Esconder não tem `key`, e testar `key` primeiro o deixaria sem clique. Item desabilitado nunca ganha
+ * clique. Devolve um objeto novo e nunca muta a entrada.
+ */
+function toMenuItem(item, { onHide, onPreference }) {
+  if (item.submenu) return { ...item, submenu: item.submenu.map((child) => toMenuItem(child, { onHide, onPreference })) };
+  if (item.action === 'hide') {
+    const { action, ...rest } = item;
+    return item.enabled === false ? rest : { ...rest, click: () => onHide() };
+  }
+  if (item.key === undefined) return { ...item };
+  const { key, value, ...rest } = item;
+  return { ...rest, click: () => onPreference(key, value) };
 }
 
 // Explícito protege de regressão: ligar nodeIntegration desligaria o sandbox em silêncio. O renderer
@@ -364,7 +670,11 @@ module.exports = {
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
-  nextShownPermission,
+  ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
+  islandDisplays, nextShownPermission, isIslandVisible, nextUserHidden,
+  FULLSCREEN_TOLERANCE_PX, SHELL_WINDOW_CLASSES, WS_EX_TRANSPARENT, nextFullscreen,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
-  normalizePreferences, isSessionFile,
+  normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate, registerShortcut, toMenuItem,
+  EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, SHORTCUT_PATTERN, SHORTCUT_MAX_LENGTH,
+  PREFERENCES_VERSION, PREFERENCES_MAX_BYTES, PREFERENCE_VALIDATORS, quarantinePath,
 };

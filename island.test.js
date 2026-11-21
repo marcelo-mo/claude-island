@@ -7,7 +7,10 @@ const {
   eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
   keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh, PERMISSION_TEXT_LIMIT,
   normalizePreferences, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES, isSessionFile,
+  EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES,
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
+  anchorPosition, horizontalSlackFor, ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
+  islandDisplays, isIslandVisible, nextUserHidden, nextFullscreen,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -250,14 +253,15 @@ test('normalizePreferences: entrada que não é objeto devolve o padrão', () =>
 
 test('normalizePreferences: objeto válido completo volta igual', () => {
   const valid = { theme: 'nord', shape: 'notch', animationStyle: 'bouncy', animationSpeed: 2 };
-  assert.deepEqual(normalizePreferences(valid), valid);
+  assert.deepEqual(normalizePreferences(valid), { ...DEFAULT_PREFERENCES, ...valid });
 });
 
 test('normalizePreferences: cada chave inválida cai sozinha no padrão', () => {
   const valid = { theme: 'nord', shape: 'notch', animationStyle: 'bouncy', animationSpeed: 2 };
-  assert.deepEqual(normalizePreferences({ ...valid, theme: 'NORD' }), { ...valid, theme: 'auto' });
-  assert.deepEqual(normalizePreferences({ ...valid, shape: 3 }), { ...valid, shape: 'pill' });
-  assert.deepEqual(normalizePreferences({ ...valid, animationStyle: 'elastico' }), { ...valid, animationStyle: 'default' });
+  const complete = { ...DEFAULT_PREFERENCES, ...valid };
+  assert.deepEqual(normalizePreferences({ ...valid, theme: 'NORD' }), { ...complete, theme: 'auto' });
+  assert.deepEqual(normalizePreferences({ ...valid, shape: 3 }), { ...complete, shape: 'pill' });
+  assert.deepEqual(normalizePreferences({ ...valid, animationStyle: 'elastico' }), { ...complete, animationStyle: 'default' });
   // 'toString' e 'constructor' existem no protótipo: a lista decide, não a busca por propriedade.
   assert.equal(normalizePreferences({ theme: 'constructor' }).theme, 'auto');
 });
@@ -271,10 +275,10 @@ test('normalizePreferences: velocidade só vale dentro da faixa e como número',
 });
 
 test('normalizePreferences: descarta chave desconhecida, não muta a entrada e devolve objeto novo', () => {
-  const input = { theme: 'slate', opacity: 0.5 };
+  const input = { theme: 'slate', cor: 'vermelho' };
   const snapshot = JSON.stringify(input);
   const result = normalizePreferences(input);
-  assert.deepEqual(Object.keys(result).sort(), ['animationSpeed', 'animationStyle', 'shape', 'theme']);
+  assert.deepEqual(Object.keys(result), Object.keys(DEFAULT_PREFERENCES));
   assert.equal(result.theme, 'slate');
   assert.equal(JSON.stringify(input), snapshot);
   assert.notEqual(normalizePreferences({}), DEFAULT_PREFERENCES);
@@ -287,7 +291,13 @@ test('DEFAULT_PREFERENCES está congelado e cada valor pertence à lista dele', 
   assert.ok(SHAPES.includes(DEFAULT_PREFERENCES.shape));
   assert.ok(ANIMATION_STYLES.includes(DEFAULT_PREFERENCES.animationStyle));
   assert.equal(DEFAULT_PREFERENCES.animationSpeed, 1);
-  for (const list of [THEMES, SHAPES, ANIMATION_STYLES]) assert.ok(Object.isFrozen(list));
+  for (const list of [THEMES, SHAPES, ANIMATION_STYLES, EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES]) {
+    assert.ok(Object.isFrozen(list));
+  }
+  assert.ok(EXPAND_ON.includes(DEFAULT_PREFERENCES.expandOn));
+  assert.ok(OPACITY_LEVELS.includes(DEFAULT_PREFERENCES.opacity));
+  assert.ok(ANCHORS.includes(DEFAULT_PREFERENCES.anchor));
+  assert.ok(ISLAND_MODES.includes(DEFAULT_PREFERENCES.islandMode));
 });
 
 test('THEMES tem 9 itens e começa por auto', () => {
@@ -349,5 +359,254 @@ test('só arquivo de sessão entra na leitura da pasta: o preferences.json nunca
   assert.equal(isSessionFile('preferences.json'), false);
   assert.equal(isSessionFile('.heartbeat'), false);
   assert.equal(isSessionFile('abc.json.tmp'), false);
+  assert.equal(isSessionFile('preferences.json.bad'), false);
+  assert.equal(isSessionFile('preferences.json.tmp'), false);
+  assert.equal(isSessionFile('preferences.json.1732200000000.bad'), false);
   assert.equal(isSessionFile(undefined), false);
+});
+
+// ---- Âncoras (D-13) ----
+
+// Segundo monitor a 125%, à esquerda do principal, medido na pesquisa da Fase 4.
+const SECONDARY_125_WORK_AREA = { x: -1536, y: 0, width: 1536, height: 824 };
+const BOTH_WORK_AREAS = [MONITOR_WORK_AREA, SECONDARY_125_WORK_AREA];
+
+test('anchorPosition: topo centro é a posição padrão nos dois monitores e âncora inválida vale topo centro', () => {
+  for (const workArea of BOTH_WORK_AREAS) {
+    const standard = defaultIslandPosition(workArea, WINDOW_SIZE);
+    assert.deepEqual(anchorPosition('top-center', workArea, WINDOW_SIZE), standard);
+    for (const anchor of ['meio', undefined, null, 'constructor', '__proto__', 7]) {
+      assert.deepEqual(anchorPosition(anchor, workArea, WINDOW_SIZE), standard, String(anchor));
+    }
+  }
+});
+
+test('anchorPosition: a pílula fica a 16 px da lateral e a 40 px da base, com a margem da sombra no palco', () => {
+  for (const workArea of BOTH_WORK_AREAS) {
+    for (const anchor of ANCHORS) {
+      const { x, y } = anchorPosition(anchor, workArea, WINDOW_SIZE);
+      if (anchor.endsWith('-left')) assert.equal(x + STAGE_SHADOW_PX, workArea.x + ANCHOR_SIDE_GAP_PX, anchor);
+      if (anchor.endsWith('-right')) {
+        assert.equal(x + WINDOW_SIZE.width - STAGE_SHADOW_PX, workArea.x + workArea.width - ANCHOR_SIDE_GAP_PX, anchor);
+      }
+      if (anchor.startsWith('top-')) assert.equal(y, workArea.y, anchor);
+      if (anchor.startsWith('bottom-')) {
+        assert.equal(y + WINDOW_SIZE.height - STAGE_SHADOW_PX, workArea.y + workArea.height - ANCHOR_BOTTOM_GAP_PX, anchor);
+      }
+    }
+  }
+});
+
+test('horizontalSlackFor: centro e inválida 60/60, esquerda 20/100, direita 100/20, e a soma com a expandida é o palco', () => {
+  for (const anchor of ['top-center', 'bottom-center', 'meio', undefined, null, 'constructor']) {
+    assert.deepEqual({ ...horizontalSlackFor(anchor) }, { left: 60, right: 60 }, String(anchor));
+  }
+  for (const anchor of ['top-left', 'bottom-left']) assert.deepEqual({ ...horizontalSlackFor(anchor) }, { left: 20, right: 100 });
+  for (const anchor of ['top-right', 'bottom-right']) assert.deepEqual({ ...horizontalSlackFor(anchor) }, { left: 100, right: 20 });
+  for (const anchor of ANCHORS) {
+    const { left, right } = horizontalSlackFor(anchor);
+    assert.equal(left + EXPANDED_PILL_WIDTH_PX + right, WINDOW_SIZE.width, anchor);
+  }
+  assert.notEqual(horizontalSlackFor('top-left'), horizontalSlackFor('top-left'), 'sempre um objeto novo');
+});
+
+test('a posição de cada âncora está dentro da área útil e o clamp a devolve intacta, nos dois monitores', () => {
+  for (const workArea of BOTH_WORK_AREAS) {
+    for (const anchor of ANCHORS) {
+      const position = anchorPosition(anchor, workArea, WINDOW_SIZE);
+      const slack = horizontalSlackFor(anchor);
+      assert.equal(isWithinWorkArea({ ...position, ...WINDOW_SIZE }, workArea, slack), true, anchor);
+      assert.deepEqual(clampIslandPosition(position, workArea, WINDOW_SIZE, slack), position, anchor);
+    }
+  }
+});
+
+test('a pílula de canto nunca sai da tela: o clamp a prende e o gate recusa a janela além da folga', () => {
+  const workArea = MONITOR_WORK_AREA;
+  const right = workArea.x + workArea.width;
+  const clampFor = (anchor, x) => clampIslandPosition({ x, y: 0 }, workArea, WINDOW_SIZE, horizontalSlackFor(anchor));
+  // A pílula expandida é a janela menos a margem da sombra do lado ancorado.
+  assert.equal(clampFor('top-left', -5000).x + STAGE_SHADOW_PX, workArea.x);
+  assert.equal(clampFor('top-left', 5000).x + STAGE_SHADOW_PX + EXPANDED_PILL_WIDTH_PX, right);
+  assert.equal(clampFor('top-right', -5000).x + WINDOW_SIZE.width - STAGE_SHADOW_PX - EXPANDED_PILL_WIDTH_PX, workArea.x);
+  assert.equal(clampFor('top-right', 5000).x + WINDOW_SIZE.width - STAGE_SHADOW_PX, right);
+
+  const left = horizontalSlackFor('top-left');
+  assert.equal(isWithinWorkArea({ x: workArea.x - left.left, y: 0, ...WINDOW_SIZE }, workArea, left), true);
+  assert.equal(isWithinWorkArea({ x: workArea.x - left.left - 3, y: 0, ...WINDOW_SIZE }, workArea, left), false);
+  const mirror = horizontalSlackFor('top-right');
+  const edgeX = right - WINDOW_SIZE.width + mirror.right;
+  assert.equal(isWithinWorkArea({ x: edgeX, y: 0, ...WINDOW_SIZE }, workArea, mirror), true);
+  assert.equal(isWithinWorkArea({ x: edgeX + 3, y: 0, ...WINDOW_SIZE }, workArea, mirror), false);
+});
+
+test('positionFromSavedOffset com âncora soma o deslocamento à posição dela; sem âncora segue o topo centro', () => {
+  const offset = { x: 30, y: 12 };
+  for (const anchor of ANCHORS) {
+    const base = anchorPosition(anchor, MONITOR_WORK_AREA, WINDOW_SIZE);
+    assert.deepEqual(positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset, anchor), { x: base.x + 30, y: base.y + 12 }, anchor);
+    assert.deepEqual(positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, undefined, anchor), base, `${anchor} sem deslocamento`);
+  }
+  assert.deepEqual(
+    positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset),
+    positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset, 'top-center'),
+  );
+});
+
+test('isWithinWorkArea com folga em objeto: lado ausente, NaN ou texto devolve false; número vale nos dois lados', () => {
+  const bounds = { ...anchorPosition('top-left', MONITOR_WORK_AREA, WINDOW_SIZE), ...WINDOW_SIZE };
+  assert.equal(isWithinWorkArea(bounds, MONITOR_WORK_AREA, { left: 20, right: 100 }), true);
+  for (const slack of [{ left: 20 }, { right: 100 }, { left: NaN, right: 100 }, { left: '20', right: 100 }, '20', null, {}]) {
+    assert.equal(isWithinWorkArea(bounds, MONITOR_WORK_AREA, slack), false, JSON.stringify(slack));
+  }
+  assert.equal(isWithinWorkArea({ ...bounds, x: -60 }, MONITOR_WORK_AREA, 60), true, 'número vale para os dois lados, como hoje');
+});
+
+// ---- Uma ilha só (D-15) ----
+
+test('islandDisplays: uma por monitor, modo desconhecido ou ausente e entrada inválida', () => {
+  const base = { displayIds: [3, 1, 2], primaryId: 1, cursorDisplayId: 2, currentIds: [], hasPermission: false };
+  for (const mode of ['perDisplay', 'per-display', 'x', undefined, null, 'constructor']) {
+    assert.deepEqual(islandDisplays({ ...base, mode }), [3, 1, 2], String(mode));
+  }
+  assert.deepEqual(islandDisplays({ ...base, mode: 'perDisplay', displayIds: [1, 'a', 2, NaN, null] }), [1, 2]);
+  for (const displayIds of [[], undefined, null, 'ab', 7, {}, ['a', 'b']]) {
+    for (const mode of ['perDisplay', 'primary', 'cursor']) assert.deepEqual(islandDisplays({ ...base, mode, displayIds }), [], `${mode} ${JSON.stringify(displayIds)}`);
+  }
+  assert.deepEqual(islandDisplays(null), []);
+  assert.deepEqual(islandDisplays(undefined), []);
+});
+
+test("islandDisplays: 'primary' é só o monitor principal, ou o primeiro se ele não está na lista", () => {
+  const base = { mode: 'primary', displayIds: [3, 1, 2], cursorDisplayId: 2, currentIds: [2], hasPermission: false };
+  assert.deepEqual(islandDisplays({ ...base, primaryId: 1 }), [1]);
+  assert.deepEqual(islandDisplays({ ...base, primaryId: 9 }), [3]);
+  assert.deepEqual(islandDisplays({ ...base, primaryId: undefined }), [3]);
+});
+
+test("islandDisplays: 'cursor' sem pedido na tela segue o cursor, e cursor fora da lista vale o principal", () => {
+  const base = { mode: 'cursor', displayIds: [1, 2], primaryId: 1, currentIds: [1], hasPermission: false };
+  assert.deepEqual(islandDisplays({ ...base, cursorDisplayId: 2 }), [2]);
+  assert.deepEqual(islandDisplays({ ...base, cursorDisplayId: 1 }), [1]);
+  assert.deepEqual(islandDisplays({ ...base, cursorDisplayId: 9 }), [1]);
+  assert.deepEqual(islandDisplays({ ...base, cursorDisplayId: undefined, primaryId: 2 }), [2]);
+});
+
+test("islandDisplays: 'cursor' com pedido na tela, ou sem saber, nunca troca de monitor (T-04-10)", () => {
+  const base = { mode: 'cursor', displayIds: [1, 2], primaryId: 1, cursorDisplayId: 1, currentIds: [2] };
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true }), [2], 'com pedido, fica onde está');
+  for (const hasPermission of [undefined, null, 'false', 0, 1, 'true']) {
+    assert.deepEqual(islandDisplays({ ...base, hasPermission }), [2], `fato desconhecido ${String(hasPermission)}`);
+  }
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: [1, 2], cursorDisplayId: 2 }), [2], 'vinda de uma por monitor, fica no do cursor');
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: [1, 2], cursorDisplayId: 9 }), [1], 'cursor fora da lista cai no principal');
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: [9] }), [1], 'o monitor dela saiu: segue o cursor');
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: [] }), [1], 'sem ilha ainda: segue o cursor');
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: undefined }), [1]);
+});
+
+test('islandDisplays não muta a entrada e devolve sempre um array novo', () => {
+  const input = Object.freeze({
+    mode: 'perDisplay', displayIds: Object.freeze([1, 2]), primaryId: 1, cursorDisplayId: 2, currentIds: Object.freeze([1, 2]), hasPermission: false,
+  });
+  const first = islandDisplays(input);
+  assert.notEqual(first, input.displayIds);
+  assert.notEqual(first, islandDisplays(input));
+  assert.deepEqual(input.displayIds, [1, 2]);
+  assert.notEqual(islandDisplays({ mode: 'cursor', displayIds: [1], currentIds: [1], hasPermission: true }), islandDisplays({ mode: 'cursor', displayIds: [1], currentIds: [1], hasPermission: true }));
+});
+
+// D-12/D-19: o atalho não vence a tela cheia; entrada inválida esconde (lado seguro).
+test('isIslandVisible só mostra com o usuário não escondendo e sem tela cheia', () => {
+  assert.equal(isIslandVisible({ userHidden: false, covered: false }), true);
+  assert.equal(isIslandVisible({ userHidden: true, covered: false }), false);
+  assert.equal(isIslandVisible({ userHidden: false, covered: true }), false);
+  assert.equal(isIslandVisible({ userHidden: true, covered: true }), false);
+  assert.equal(isIslandVisible({ userHidden: false }), false);
+  assert.equal(isIslandVisible({ covered: false }), false);
+  assert.equal(isIslandVisible({ userHidden: 'false', covered: 0 }), false);
+  assert.equal(isIslandVisible(null), false);
+  assert.equal(isIslandVisible(), false);
+});
+
+test('nextUserHidden inverte, exceto quando toda ilha está coberta por tela cheia', () => {
+  const next = (userHidden, displayIds, coveredDisplayIds) => nextUserHidden({ userHidden, displayIds, coveredDisplayIds });
+  assert.equal(next(false, [1, 2], []), true);
+  assert.equal(next(true, [1, 2], []), false);
+  // uma coberta e outra não: inverte normalmente (a coberta segue escondida pela tela cheia)
+  assert.equal(next(false, [1, 2], [1]), true);
+  assert.equal(next(true, [1, 2], [1]), false);
+  // todas cobertas: o atalho não faz nada
+  assert.equal(next(false, [1, 2], [1, 2]), false);
+  assert.equal(next(true, [1, 2], [2, 1]), true);
+  assert.equal(next(false, [1], [1]), false);
+  // entradas fora do contrato
+  assert.equal(next(false, [], []), false);
+  assert.equal(next(true, [], []), true);
+  assert.equal(next('true', [1], []), true);
+  assert.equal(next(false, [1], 'x'), true);
+  assert.equal(next(false, 'x', [1]), false);
+  assert.equal(nextUserHidden(null), false);
+  assert.equal(nextUserHidden(), false);
+  const ids = [1, 2];
+  const covered = [1];
+  next(false, ids, covered);
+  assert.deepEqual([ids, covered], [[1, 2], [1]]);
+});
+
+// D-18: a regra do primeiro plano em tela cheia, pura; o sensor que a alimentaria ainda não existe (D-20).
+test('nextFullscreen marca e solta o monitor coberto pelo primeiro plano', () => {
+  const A = { id: 1, rect: { left: 0, top: 0, right: 2560, bottom: 1080 } };
+  const B = { id: 2, rect: { left: -1920, top: 0, right: 0, bottom: 1080 } };
+  const displays = [A, B];
+  const base = {
+    hwnd: 100, className: 'Chrome_WidgetWin_1', pid: 4321, exStyle: 0,
+    visible: true, minimized: false, cloaked: false, clientRect: A.rect, monitorRect: A.rect,
+  };
+  const run = (foreground, previous = new Map(), gone = [], shown = displays) => (
+    [...nextFullscreen({ previous, probe: { foreground, gone }, ownPid: 999, displays: shown })]
+  );
+  const covered = new Map([[1, 100]]);
+  const inset = (px) => ({
+    left: px, top: px, right: A.rect.right - px, bottom: A.rect.bottom - px,
+  });
+
+  assert.deepEqual(run(base), [[1, 100]]);
+  assert.deepEqual(run({ ...base, clientRect: inset(1) }), [[1, 100]]);
+  assert.deepEqual(run({ ...base, clientRect: inset(2) }), []);
+  const maximized = { left: 18, top: 97, right: 2542, bottom: 1002 };
+  assert.deepEqual(run({ ...base, clientRect: maximized }), []);
+  assert.deepEqual(run({ ...base, clientRect: maximized }, covered), []);
+  // o próprio pid não marca nem solta
+  assert.deepEqual(run({ ...base, pid: 999 }), []);
+  assert.deepEqual(run({ ...base, pid: 999 }, covered), [[1, 100]]);
+  // área de trabalho e barras de tarefas cobrem o monitor sem ser app em tela cheia
+  for (const className of ['Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd']) {
+    assert.deepEqual(run({ ...base, className }), [], className);
+    assert.deepEqual(run({ ...base, className }, covered), [], className);
+  }
+  // janela que não conta como primeiro plano: o mapa não muda
+  for (const odd of [{ visible: false }, { minimized: true }, { cloaked: true }, { cloaked: null }, { exStyle: 0x20 }, { exStyle: 0x80020 }]) {
+    assert.deepEqual(run({ ...base, ...odd }, covered), [[1, 100]], JSON.stringify(odd));
+    assert.deepEqual(run({ ...base, ...odd }), [], JSON.stringify(odd));
+  }
+  // primeiro plano comum em outro monitor: A continua lembrado
+  const onB = { ...base, hwnd: 200, clientRect: maximized, monitorRect: B.rect };
+  assert.deepEqual(run(onB, covered), [[1, 100]]);
+  // tela cheia em B soma-se a A
+  assert.deepEqual(run({ ...base, hwnd: 200, clientRect: B.rect, monitorRect: B.rect }, covered), [[1, 100], [2, 200]]);
+  // o HWND sumiu
+  assert.deepEqual(run(null, covered, [100]), []);
+  assert.deepEqual(run(null, covered, [999]), [[1, 100]]);
+  // monitorRect que não bate com nenhum monitor; monitor que saiu
+  assert.deepEqual(run({ ...base, monitorRect: { left: 5, top: 0, right: 2565, bottom: 1080 } }, covered), [[1, 100]]);
+  assert.deepEqual(run(null, covered, [], [B]), []);
+  // entradas fora do contrato: nunca lança nem muta
+  assert.deepEqual([...nextFullscreen({ previous: covered, probe: null, ownPid: 999, displays })], [[1, 100]]);
+  assert.deepEqual([...nextFullscreen({ previous: 'x', probe: { foreground: base, gone: [] }, ownPid: 999, displays })], [[1, 100]]);
+  assert.deepEqual(run({ ...base, hwnd: '100' }, covered), [[1, 100]]);
+  assert.deepEqual([...nextFullscreen(null)], []);
+  assert.deepEqual([...nextFullscreen()], []);
+  assert.deepEqual([...covered], [[1, 100]]);
+  assert.notEqual(nextFullscreen({ previous: covered, probe: null, ownPid: 999, displays }), covered);
 });

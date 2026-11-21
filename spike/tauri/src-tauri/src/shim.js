@@ -8,10 +8,11 @@
     };
   };
   const noop = () => {};
-  // Os 7 métodos do preload.js; só onState é real, a casca de medição não interage.
+  // Os 9 métodos do preload.js; só onState é real, a casca de medição não interage.
   window.island = {
     // true: a casca paga o mesmo aviso sonoro do Electron (a primeira ilha toca)
     onState: (callback) => window.__TAURI__.event.listen('island:state', (event) => callback(toState(event.payload), true)),
-    setHover: noop, focusSession: noop, decide: noop, drag: noop, endDrag: noop, resetPosition: noop,
+    onCursor: noop, setCapture: noop, focusSession: noop, decide: noop, drag: noop, endDrag: noop, resetPosition: noop,
+    openMenu: noop,
   };
 })();

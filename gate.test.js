@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
   effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES, WINDOW_SIZE, HORIZONTAL_SLACK,
-  PERMISSION_TOOL_LIMIT,
+  PERMISSION_TOOL_LIMIT, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -234,10 +234,13 @@ test('nenhum canal escapa pela IPC por webContents', () => {
 });
 
 const RENDERER_CHANNELS = [
-  'island:state', 'island:hover', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end', 'island:reset-position',
+  'island:state', 'island:cursor', 'island:capture', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end',
+  'island:reset-position', 'island:menu',
 ];
+// Canais que o main envia e o renderer só escuta: o main não registra handler para eles.
+const MAIN_TO_RENDERER_CHANNELS = ['island:state', 'island:cursor'];
 
-test('o preload usa só send e on, nos sete canais conhecidos', () => {
+test('o preload usa só send e on, nos nove canais conhecidos', () => {
   const { methods, channels } = collectChannels(preloadSource, 'ipcRenderer');
   assert.deepEqual([...methods].sort(), ['on', 'send']);
   assert.deepEqual([...channels].sort(), [...RENDERER_CHANNELS].sort());
@@ -258,7 +261,7 @@ test('a janela da ilha não navega nem abre janela, e todo canal confere o remet
   assert.equal(mainSource.includes('loadFile('), false, 'a ilha carrega pela mesma URL que confere');
   assert.match(mainSource, /const islandOf = \(event\) => \{[^}]*isIslandSender\(/);
   const handlers = mainSource.split('ipcMain.on(').slice(1);
-  assert.equal(handlers.length, 6);
+  assert.equal(handlers.length, 7);
   for (const handler of handlers) {
     const body = handler.slice(0, handler.indexOf('\n  });'));
     assert.match(body, /islandOf\(event\)/, `canal sem conferir o remetente: ${body.split(',')[0]}`);
@@ -289,10 +292,107 @@ test('o armamento acompanha o retângulo dos próprios botões', () => {
   assert.ok(pointerdown.indexOf(moved) < pointerdown.indexOf('canPress('), 'a conferência vem antes de canPress');
 });
 
-test('o main escuta só com ipcMain.on, nos seis canais do renderer', () => {
+test('o main escuta só com ipcMain.on, nos sete canais do renderer', () => {
   const { methods, channels } = collectChannels(mainSource, 'ipcMain');
   assert.deepEqual([...methods], ['on']);
-  assert.deepEqual([...channels].sort(), RENDERER_CHANNELS.filter((channel) => channel !== 'island:state').sort());
+  assert.deepEqual(
+    [...channels].sort(),
+    RENDERER_CHANNELS.filter((channel) => !MAIN_TO_RENDERER_CHANNELS.includes(channel)).sort(),
+  );
+});
+
+// Trava de regressão (texto): a captura do mouse nunca usa a opção forward (para sob janela elevada,
+// UIPI) e só nasce de um booleano. Arraste e menu a seguram, e todo caminho que esconde ou ociosa a
+// ilha a solta, senão a janela transparente de 520 × 410 engole cliques de outras janelas (T-04-06, T-04-08).
+test('a captura vem só de um booleano, sem a opção forward, e o arraste e o menu a seguram', () => {
+  assert.ok(mainSource.includes("ipcMain.on('island:capture', (event, capture) => {"));
+  assert.ok(mainSource.includes("typeof capture !== 'boolean'"));
+  assert.ok(mainSource.includes("if (capture && lastPickedState.state === 'idle') return;"), 'captura pedida com a ilha ociosa');
+  assert.equal(/forward\s*:/.test(mainSource), false, 'main.js com a opção forward de setIgnoreMouseEvents');
+  const bodyOf = (opening, closing = '\n}') => {
+    assert.equal(mainSource.split(opening).length - 1, 1, `ausente ou repetido no main.js: ${opening}`);
+    const rest = mainSource.slice(mainSource.indexOf(opening));
+    return rest.slice(0, rest.indexOf(closing));
+  };
+  const apply = bodyOf('function applyCapture(');
+  for (const needle of [
+    'captureRequests.get(island) === true', 'dragStartPositions.has(island)', 'island === menuIsland',
+    'island.setIgnoreMouseEvents(!capture);',
+  ]) assert.ok(apply.includes(needle), `applyCapture sem: ${needle}`);
+  const dragEnd = bodyOf("ipcMain.on('island:drag-end'", '\n  });');
+  assert.ok(dragEnd.includes('applyCapture(island);'), 'o fim do arraste reaplica a captura');
+  assert.ok(bodyOf("menu.on('menu-will-close'", '\n  });').includes('applyCapture('), 'o fim do menu reaplica a captura');
+  assert.equal(mainSource.split('setInterval(cursorTick, CURSOR_TICK_MS)').length - 1, 1);
+  const update = bodyOf('function updateCursorTick(');
+  for (const needle of ["lastPickedState.state !== 'idle'", 'island.isVisible()', 'releaseCapture(']) {
+    assert.ok(update.includes(needle), `updateCursorTick sem: ${needle}`);
+  }
+  const release = bodyOf('function releaseCapture(');
+  assert.ok(release.includes('captureRequests.delete(island);') && release.includes('applyCapture(island);'));
+  const hide = bodyOf("island.on('hide', () => {", '\n  });');
+  assert.ok(hide.includes('releaseCapture(island);') && hide.includes('updateCursorTick();'), 'esconder solta a captura');
+  assert.ok(bodyOf('function refresh(reason)').includes('updateCursorTick();'), 'o refresh religa e desliga o timer');
+});
+
+// Trava de regressão (texto): a âncora escolhe a posição padrão, a folga lateral (a mesma no clamp, no
+// fitsWorkArea e no gate) e invalida os deslocamentos salvos, que eram relativos à âncora antiga (T-04-11, T-04-13).
+test('a âncora escolhe a posição, a folga e zera os deslocamentos', () => {
+  const bodyOf = (opening, closing = '\n}') => {
+    assert.equal(mainSource.split(opening).length - 1, 1, `ausente ou repetido no main.js: ${opening}`);
+    const rest = mainSource.slice(mainSource.indexOf(opening));
+    return rest.slice(0, rest.indexOf(closing));
+  };
+  const anchored = 'anchorPosition(preferences.anchor, display.workArea, WINDOW_SIZE)';
+  assert.ok(bodyOf("ipcMain.on('island:drag-end'", '\n  });').includes(`const standard = ${anchored};`), 'o arraste mede o deslocamento a partir da âncora');
+  assert.ok(bodyOf("ipcMain.on('island:reset-position'", '\n  });').includes(`moveIsland(island, ${anchored}, display.workArea);`), 'o duplo clique volta à âncora');
+  assert.ok(bodyOf('function moveIsland(').includes('horizontalSlackFor(preferences.anchor)'), 'o clamp usa a folga da âncora');
+  assert.ok(bodyOf('function savedPosition(').includes('positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id], preferences.anchor)'));
+  const apply = bodyOf('function applyPreference(');
+  assert.ok(apply.includes('next.anchor !== preferences.anchor'), 'só trocar a âncora zera');
+  assert.ok(apply.includes('savedOffsets = {};') && apply.includes('persistSavedOffsets();'), 'zera e grava os deslocamentos');
+  assert.ok(apply.indexOf('savedOffsets = {};') < apply.indexOf('preferences = next;'), 'zera antes de valer a âncora nova');
+  const sync = apply.indexOf('syncIslands();');
+  assert.ok(sync > apply.indexOf('writePreferences();') && sync < apply.indexOf("refresh('rearm');"), 'reposiciona antes de rearmar');
+});
+
+// Trava de regressão (texto): no modo de uma ilha só a troca de monitor nunca acontece com pedido na tela
+// (o botão pararia sob o cursor) e sempre rearma; a ilha sobrando é destruída com a limpeza completa e o
+// timer do cursor reavaliado (T-04-10).
+test('uma ilha só nunca troca de monitor com pedido na tela e rearma ao trocar', () => {
+  const bodyOf = (opening) => {
+    assert.equal(mainSource.split(opening).length - 1, 1, `ausente ou repetido no main.js: ${opening}`);
+    const rest = mainSource.slice(mainSource.indexOf(opening));
+    return rest.slice(0, rest.indexOf('\n}'));
+  };
+  const sync = bodyOf('function syncIslands(');
+  assert.ok(sync.includes('islandDisplays({'), 'syncIslands decide os monitores por islandDisplays');
+  assert.ok(sync.includes('hasPermission: Boolean(lastPickedState.permission)'), 'o pedido na tela vem do estado do main');
+  assert.ok(sync.includes('mode: preferences.islandMode'));
+  const destroyAt = sync.indexOf('.destroy()');
+  assert.ok(destroyAt >= 0, 'syncIslands destrói a ilha sobrando');
+  const leftovers = sync.slice(sync.lastIndexOf('for (', destroyAt), destroyAt);
+  for (const cleanup of ['dragStartPositions.delete(', 'captureRequests.delete(', 'nearIslands.delete(']) {
+    assert.ok(leftovers.includes(cleanup), `a ilha destruída fica sem a limpeza: ${cleanup}`);
+  }
+  assert.ok(sync.indexOf('updateCursorTick();') > destroyAt, 'o timer do cursor é reavaliado depois de destruir');
+  const tick = bodyOf('function cursorTick(');
+  for (const needle of ["preferences.islandMode === 'cursor'", '!lastPickedState.permission', 'dragStartPositions.size === 0', "refresh('rearm');"]) {
+    assert.ok(tick.includes(needle), `cursorTick sem: ${needle}`);
+  }
+});
+
+// Trava de nomes (execução do texto): a casca Tauri do spike não pode ficar com um nome velho quando o
+// preload muda. Roda os dois arquivos com um electron e um window de mentira e compara as chaves.
+test('o shim da casca Tauri expõe os mesmos nomes do preload', () => {
+  let exposed;
+  const fakeElectron = {
+    contextBridge: { exposeInMainWorld: (name, api) => { assert.equal(name, 'island'); exposed = api; } },
+    ipcRenderer: {},
+  };
+  vm.runInNewContext(preloadSource, { require: () => fakeElectron });
+  const shimWindow = {};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'spike/tauri/src-tauri/src/shim.js'), 'utf8'), { window: shimWindow });
+  assert.deepEqual(Object.keys(shimWindow.island).sort(), Object.keys(exposed).sort());
 });
 
 // Travas da cola (texto): as regras puras têm vetores, mas a ligação dos argumentos que as chama
@@ -319,8 +419,8 @@ test('island:decide: o eco vem do renderer, o alvo e o relógio do main, os fato
     ['now', 'performance.now()'],
     ['decidedId', 'decidedPermissionId'],
     ['windowVisible', 'island.isVisible() && !island.isMinimized()'],
-    ['coveredByFullscreen', 'false'],
-    ['withinVisibleArea', 'Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK)'],
+    ['coveredByFullscreen', 'display ? fullscreenByDisplay.has(display.id) : true'],
+    ['withinVisibleArea', 'Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor))'],
   ]);
   // O renderer manda o eco como o segundo argumento do preload; sem ele toda decisão seria recusada.
   assert.ok(preloadSource.includes("decide: (behavior, pressedId) => ipcRenderer.send('island:decide', behavior, pressedId),"));
@@ -341,8 +441,8 @@ test('refresh não engole o rearme e o estado enviado leva answeredId, armEpoch 
     "nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm')",
     'if (serialized === lastSent && nextShown.epoch === shown.epoch) return;',
     '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea }',
-    // a mesma conferência do gate (isWithinWorkArea com a folga), nunca uma mais frouxa
-    'const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK);',
+    // a mesma conferência do gate (isWithinWorkArea com a folga da âncora), nunca uma mais frouxa
+    'const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor));',
   ]) {
     assert.ok(mainSource.includes(glue), `main.js sem a cola: ${glue}`);
   }
@@ -414,13 +514,57 @@ test('com o palco fora da área útil o renderer desabilita os botões e manda r
 // Travas de regressão (texto) das preferências visuais: o main só lê o arquivo, uma vez, sem
 // vigiá-lo nem gravá-lo (a gravação, o menu e a migração são da Fase 4), e o renderer só aplica o
 // que veio no payload. Canal novo para o renderer escolher preferência quebraria RENDERER_CHANNELS.
-test('o main lê as preferências uma única vez e nunca as vigia nem as grava', () => {
-  assert.ok(mainSource.includes(
-    "preferences = normalizePreferences(JSON.parse(fs.readFileSync(PREFERENCES_FILE, 'utf8')));",
-  ), 'main.js sem a leitura normalizada do preferences.json');
+// A gravação passou a existir na Fase 4, só pelo menu nativo, e sempre por .tmp + rename.
+test('o main lê as preferências uma vez, não as vigia e só as grava pelo menu, por .tmp e rename', () => {
+  assert.ok(mainSource.includes('preferences = normalizePreferences(JSON.parse(text));'), 'main.js sem a leitura normalizada do preferences.json');
+  // Leitura tolerante (D-07): teto de tamanho e quarentena com carimbo de tempo, que nunca sobrescreve outra.
+  assert.ok(mainSource.includes('PREFERENCES_MAX_BYTES'), 'main.js sem o teto do arquivo de preferências');
+  assert.ok(mainSource.includes('quarantinePath(PREFERENCES_FILE, Date.now())'), 'main.js sem a quarentena com carimbo');
+  assert.equal(
+    mainSource.includes('writeFileAtomic(positionsFile(), JSON.stringify(savedOffsets))'), true,
+    'positions.json grava por .tmp + rename',
+  );
+  assert.equal(mainSource.includes('writeFileSync(positionsFile()'), false, 'main.js grava o positions.json direto');
   assert.equal(mainSource.split('loadPreferences()').length - 1, 2, 'loadPreferences: definição e uma só chamada');
   assert.equal(/\.watch(?:File)?\(/.test(mainSource), false, 'main.js vigia um arquivo');
-  assert.equal(/writeFileSync\(\s*PREFERENCES_FILE/.test(mainSource), false, 'main.js grava o preferences.json');
+  assert.equal(/writeFileSync\(\s*PREFERENCES_FILE/.test(mainSource), false, 'main.js grava o preferences.json direto');
+  assert.equal(mainSource.split('writeFileAtomic(PREFERENCES_FILE').length - 1, 1, 'uma só gravação das preferências');
+  assert.equal(mainSource.split('writePreferences()').length - 1, 2, 'writePreferences: definição e a chamada de applyPreference');
+  const atomic = mainSource.slice(mainSource.indexOf('function writeFileAtomic('));
+  const atomicBody = atomic.slice(0, atomic.indexOf('\n}'));
+  assert.ok(atomicBody.includes('fs.writeFileSync(temporaryFile, text);'), 'grava o temporário');
+  assert.ok(atomicBody.includes('fs.renameSync(temporaryFile, file);'), 'e renomeia para o arquivo final');
+});
+
+// Trava de regressão (texto): o menu abre sobre Permitir e Negar, e o clique que o fecha pode cair num
+// botão, então abrir e fechar rearmam. O renderer só pede "abrir", sem argumentos, e um menu por vez.
+test('o menu só abre por pedido sem argumentos, um por vez, e rearma ao abrir e ao fechar', () => {
+  assert.ok(preloadSource.includes("openMenu: () => ipcRenderer.send('island:menu'),"));
+  for (const glue of [
+    "ipcMain.on('island:menu', (event) => {",
+    'if (!island || menuIsland) return;',
+    "menu.on('menu-will-show', () => refresh('rearm'));",
+    'menu.popup({ window: island });',
+  ]) {
+    assert.ok(mainSource.includes(glue), `main.js sem a cola do menu: ${glue}`);
+  }
+  assert.equal(mainSource.split('Menu.buildFromTemplate(').length - 1, 1, 'um só menu montado');
+  const willClose = mainSource.slice(mainSource.indexOf("menu.on('menu-will-close'"));
+  const willCloseBody = willClose.slice(0, willClose.indexOf('\n  });'));
+  assert.ok(willCloseBody.includes('menuIsland = null;') && willCloseBody.includes("refresh('rearm');"));
+  const popupCall = 'menu.popup({ window: island });';
+  const popup = mainSource.slice(mainSource.indexOf(popupCall) + popupCall.length);
+  assert.match(mainSource.slice(0, mainSource.indexOf(popupCall)), /try \{[^}]*$/);
+  assert.match(popup, /^[^}]*\}\s*catch \(error\) \{[^}]*menuIsland = null;/);
+  assert.equal(rendererSource.split('window.island.openMenu()').length - 1, 1, 'o menu abre de um só lugar: o contextmenu');
+});
+
+// Trava de regressão (texto): preferência só muda pelo clique no menu nativo, nunca por mensagem.
+test('nenhum handler de IPC muda preferência', () => {
+  for (const handler of mainSource.split('ipcMain.on(').slice(1)) {
+    const body = handler.slice(0, handler.indexOf('\n  });'));
+    assert.equal(body.includes('applyPreference'), false, `canal que muda preferência: ${body.split(',')[0]}`);
+  }
 });
 
 test('o renderer aplica as preferências do payload e rearma se mudaram com pedido na tela', () => {
@@ -814,8 +958,12 @@ const TOOL_CHAR_WIDTH_EM = 0.6;
 // espaço, como mcp__servidor__ferramenta, passaria da caixa e seria cortado.
 function toolLabelLines() {
   assert.equal(cssDeclarations('#permission-tool')['overflow-wrap'], 'anywhere', 'o rótulo da ferramenta precisa quebrar em qualquer ponto');
-  const labelWidth = cssPixels(cssDeclarations('#pill.expanded').width, 'largura da expandida')
-    - horizontalPadding(cssDeclarations('#pill').padding, 'padding de #pill')
+  const expanded = cssDeclarations('#pill.expanded');
+  // A expandida pode ter respiro lateral próprio (padding-inline), maior que o da compacta.
+  const pillPadding = expanded['padding-inline']
+    ? 2 * cssPixels(expanded['padding-inline'], 'padding-inline da expandida')
+    : horizontalPadding(cssDeclarations('#pill').padding, 'padding de #pill');
+  const labelWidth = cssPixels(expanded.width, 'largura da expandida') - pillPadding
     - horizontalPadding(cssDeclarations('#permission').padding, 'padding de #permission');
   const fontSize = cssPixels(cssDeclarations('#permission-tool')['font-size'], 'font-size de #permission-tool');
   return Math.ceil((PERMISSION_TOOL_LIMIT * TOOL_CHAR_WIDTH_EM * fontSize) / labelWidth);
@@ -855,6 +1003,9 @@ const stageTop = Math.max(...[...styleRules.matchAll(/--stage-top:\s*(\d+(?:\.\d
 const PILL_MIN = { width: 120, height: 36 };
 // Sombra estática: espalhamento de 14 px mais deslocamento de 5 px, arredondado para cima.
 const SHADOW_MARGIN_PX = 20;
+// Alcance da sombra para cima: desfoque de 14 px menos o deslocamento de 5 px (D-21). Na âncora de baixo a
+// pílula encosta na base do palco e a sombra de cima é a que pode ser recortada.
+const SHADOW_TOP_REACH_PX = 9;
 
 // Maior posição que a mola de `from` a `to` alcança, em dois casos: (a) crescer de `from` até `to` e
 // (b) encolher de `to` até `from` com um alvo novo (`to`) em cada quadro de 16 ms do encolhimento,
@@ -886,22 +1037,197 @@ test('o palco cobre o pico das molas, com hover, nudge e sombra, em todo estilo 
   for (const style of ANIMATION_STYLES) {
     for (const speed of [0.5, 1, 2]) {
       const widthPeak = worstPeak(spring, PILL_MIN.width, expandedWidth, style, speed);
-      const heightPeak = Math.max(
-        worstPeak(spring, PILL_MIN.height, maxHeight, style, speed),
-        worstPeak(spring, PILL_MIN.height, windowHeight, style, speed),
-      );
+      const permissionPeak = worstPeak(spring, PILL_MIN.height, maxHeight, style, speed);
+      const windowPeak = worstPeak(spring, PILL_MIN.height, windowHeight, style, speed);
+      const heightPeak = Math.max(permissionPeak, windowPeak);
       // A escala amplia a partir do centro do topo: a largura cresce dos dois lados e a altura só para baixo.
       const neededWidth = widthPeak * hoverPeak + 2 * SHADOW_MARGIN_PX;
       const neededHeight = stageTop + heightPeak * hoverPeak + nudgeRebound + SHADOW_MARGIN_PX;
+      // Âncoras de baixo: a pílula cresce para cima a partir da base do palco, que guarda só a margem da
+      // sombra (STAGE_SHADOW_PX). O nudge sobe a pílula 6 px, sem o respiro do --stage-top para absorver, e em
+      // cima só cabe o alcance da sombra para cima. As âncoras de canto pedem a mesma largura do centro (a
+      // margem da sombra dos dois lados), já coberta pela conta de neededWidth.
+      // Hover e nudge só existem sem pedido na tela (shouldNudge e hoverScaleTarget), e o pedido é a pílula
+      // mais alta: a sombra inteira cabe no pedido sozinho e na pílula comum com hover e nudge. O produto do
+      // maior pico pelo hover e pelo nudge (pior caso combinado, que só se sobreporia na passagem do pedido
+      // chegando com o hover assentando) estoura em 6 px a sombra de cima do Elástico a 0,5×, e por isso o
+      // que se exige dele é só a pílula inteira dentro do palco.
+      const bottomAnchorShadow = {
+        permission: STAGE_SHADOW_PX + permissionPeak + SHADOW_TOP_REACH_PX,
+        hoverAndNudge: STAGE_SHADOW_PX + windowPeak * hoverPeak + Math.abs(spring.NUDGE_OFFSET_PX) + SHADOW_TOP_REACH_PX,
+      };
+      const bottomAnchorPill = STAGE_SHADOW_PX + heightPeak * hoverPeak + Math.abs(spring.NUDGE_OFFSET_PX);
       const where = `${style} a ${speed}×: pico ${widthPeak.toFixed(1)}×${heightPeak.toFixed(1)}, precisa de ${neededWidth.toFixed(1)}×${neededHeight.toFixed(1)}, palco ${WINDOW_SIZE.width}×${WINDOW_SIZE.height}`;
       assert.ok(WINDOW_SIZE.width >= neededWidth, `largura do palco curta: ${where}`);
       assert.ok(WINDOW_SIZE.height >= neededHeight, `altura do palco curta: ${where}`);
+      for (const [situation, needed] of Object.entries(bottomAnchorShadow)) {
+        assert.ok(WINDOW_SIZE.height >= needed, `altura do palco curta na âncora de baixo (${situation}, ${needed.toFixed(1)}): ${where}`);
+      }
+      assert.ok(WINDOW_SIZE.height >= bottomAnchorPill, `a pílula sairia do palco na âncora de baixo (${bottomAnchorPill.toFixed(1)}): ${where}`);
     }
   }
 });
 
 test('a folga horizontal é o que sobra de cada lado da pílula expandida e o palco é congelado', () => {
   assert.equal(HORIZONTAL_SLACK, (WINDOW_SIZE.width - expandedWidth) / 2);
+  assert.equal(EXPANDED_PILL_WIDTH_PX, expandedWidth, 'o state.js repete a largura de #pill.expanded');
   assert.ok(Object.isFrozen(WINDOW_SIZE));
   assert.ok(Number.isInteger(WINDOW_SIZE.width) && Number.isInteger(WINDOW_SIZE.height));
+});
+
+// Trava de regressão (texto): a 125% a janela nasce 6 DIP mais alta (520×416 medido) e só o setBounds com o
+// tamanho explícito a corrige; setPosition também muda o tamanho. Sem isto a borda de baixo recusa toda
+// decisão (T-04-12).
+test('a ilha é posicionada só por setBounds, inclusive logo depois de criada', () => {
+  const start = mainSource.indexOf('function createIsland(');
+  assert.ok(start >= 0);
+  const createBody = mainSource.slice(start, mainSource.indexOf('\nfunction ', start + 1));
+  const created = createBody.indexOf('new BrowserWindow(');
+  const placed = createBody.indexOf('moveIsland(island, savedPosition(display), display.workArea);');
+  assert.ok(created >= 0 && placed > created, 'createIsland não reposiciona por moveIsland depois de new BrowserWindow(');
+  const code = mainSource.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  assert.equal(/\.setPosition\(/.test(code), false, 'main.js posiciona por setPosition');
+});
+
+// Trava de regressão (texto): o atalho e o menu escondem e mostram a ilha, e nenhum dos dois decide nada.
+// O gate recusa com a janela escondida (windowVisible), então esconder só precisa nunca aprovar; reexibir
+// tem de passar pelo evento 'show', que rearma (T-04-14, T-04-15, TELA-02).
+test('esconder nunca decide, reexibir passa pelo rearme e o atalho é registrado uma vez', () => {
+  const bodyOf = (opening, closing = '\n}') => {
+    assert.equal(mainSource.split(opening).length - 1, 1, `ausente ou repetido no main.js: ${opening}`);
+    const rest = mainSource.slice(mainSource.indexOf(opening));
+    return rest.slice(0, rest.indexOf(closing));
+  };
+  const code = mainSource.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  const occurrences = (needle) => code.split(needle).length - 1;
+  assert.equal(occurrences('globalShortcut.register('), 1, 'o atalho é registrado uma vez');
+  assert.ok(
+    /registerShortcut\(\s*\(accelerator, onPress\) => globalShortcut\.register\(accelerator, onPress\)/.test(code),
+    'o registro passa por registerShortcut',
+  );
+  assert.ok(bodyOf("app.on('will-quit'", '\n  });').includes('globalShortcut.unregisterAll();'), 'o atalho é liberado em will-quit');
+  const hide = bodyOf('function setUserHidden(');
+  const visibility = bodyOf('function applyVisibility(');
+  assert.equal(occurrences('showInactive('), 1, 'showInactive só em applyVisibility');
+  assert.ok(visibility.includes('showInactive('));
+  assert.ok(hide.includes('applyVisibility();'), 'setUserHidden esconde e mostra por applyVisibility');
+  assert.equal(/\.show\(\)/.test(code), false, 'main.js mostra a ilha por show()');
+  for (const forbidden of ['writeDecision', 'acceptDecision', 'decidedPermissionId']) {
+    assert.equal(hide.includes(forbidden), false, `setUserHidden toca em ${forbidden}`);
+  }
+  assert.ok(
+    bodyOf('function createIsland(').includes('show: isIslandVisible({ userHidden, covered: fullscreenByDisplay.has(display.id) }),'),
+    'a ilha nova nasce escondida se o usuário a escondeu ou se o monitor está coberto',
+  );
+  const hideListener = bodyOf("island.on('hide', () => {", '\n  });');
+  assert.ok(hideListener.includes('releaseCapture(island);') && hideListener.includes('updateCursorTick();'), 'esconder solta a captura e reavalia o timer');
+  assert.ok(mainSource.includes("island.on('show', () => refresh('rearm'))"));
+  assert.ok(bodyOf('function openMenu(').includes('menuTemplate(preferences, shortcutStatus)'));
+  // toMenuItem agora vive no state.js e tem teste de comportamento em prefs.test.js; aqui só a ligação.
+  assert.equal(code.includes('function toMenuItem('), false, 'toMenuItem voltou para o main.js');
+  const openMenu = bodyOf('function openMenu(');
+  assert.ok(openMenu.includes('onHide: () => setUserHidden(true)') && openMenu.includes('toMenuItem(item, effects)'));
+});
+
+// Trava de regressão (texto): todo caminho que move a janela sem passar por 'show' rearma os botões,
+// porque o renderer não percebe o movimento (WR-01, SEG-02). Cobre os handlers de arraste e de duplo
+// clique e todo chamador de syncIslands que reposiciona fora do arranque.
+test('todo caminho que move a ilha termina em refresh rearm', () => {
+  const afterMove = (opening, mover) => {
+    const start = mainSource.indexOf(opening);
+    assert.ok(start >= 0, `ausente no main.js: ${opening}`);
+    const body = mainSource.slice(start, mainSource.indexOf('\n  });', start));
+    const moved = body.indexOf(mover);
+    assert.ok(moved >= 0, `${opening} não chama ${mover}`);
+    return body.slice(moved).includes("refresh('rearm');");
+  };
+  assert.ok(afterMove("ipcMain.on('island:reset-position'", 'moveIsland('), 'duplo clique move sem rearmar');
+  assert.ok(afterMove("ipcMain.on('island:drag-end'", 'persistSavedOffsets();'), 'soltar o arraste não rearma');
+  const sync = (opening) => {
+    const start = mainSource.indexOf(opening);
+    assert.ok(start >= 0, `ausente no main.js: ${opening}`);
+    const body = mainSource.slice(start, mainSource.indexOf('\n}', start));
+    return body.indexOf("refresh('rearm')") > body.indexOf('syncIslands()') && body.includes('syncIslands()');
+  };
+  assert.ok(sync('function applyPreference('), 'applyPreference reposiciona sem rearmar');
+  assert.ok(sync('function cursorTick('), 'a troca de monitor do cursor reposiciona sem rearmar');
+  assert.ok(
+    mainSource.includes("for (const eventName of ['display-added', 'display-removed', 'display-metrics-changed']) screen.on(eventName, () => refresh('rearm'));"),
+    'os eventos de monitor rearmam',
+  );
+});
+
+// Trava de regressão (texto): fechar o menu depois de syncIslands destruir a ilha dona não pode lançar nem
+// deixar menuIsland preso (WR-02).
+test('a ilha destruída com o menu aberto não quebra o fechamento do menu', () => {
+  const start = mainSource.indexOf('function applyCapture(');
+  assert.ok(start >= 0, 'applyCapture ausente no main.js');
+  const capture = mainSource.slice(start, mainSource.indexOf('\n}', start));
+  assert.ok(capture.indexOf('island.isDestroyed()') >= 0 && capture.indexOf('island.isDestroyed()') < capture.indexOf('setIgnoreMouseEvents('));
+  const sync = mainSource.slice(mainSource.indexOf('function syncIslands('), mainSource.indexOf('\nfunction registerIpcHandlers('));
+  const nulled = sync.indexOf('if (island === menuIsland) menuIsland = null;');
+  assert.ok(nulled >= 0 && nulled < sync.indexOf('island.destroy();'), 'syncIslands não solta menuIsland antes de destruir');
+});
+
+// Trava de regressão (texto): o main é dono do fato "há pedido", então a opacidade sai do mesmo passo do
+// refresh que decide o pedido exibido e chega antes do estado ao renderer; nenhum outro caminho mexe nela
+// (invariante I5, T-04-16).
+test('a transparência sai do mesmo passo do refresh e nunca vale com pedido na tela', () => {
+  const code = mainSource.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  const line = 'island.setOpacity(effectiveOpacity(preferences.opacity, Boolean(lastPickedState.permission)));';
+  assert.equal(code.split(line).length - 1, 1, 'a linha de applyOpacity aparece uma vez');
+  assert.equal(code.split('setOpacity(').length - 1, 1, 'nenhum outro caminho muda a opacidade');
+  const bodyOf = (opening) => {
+    const start = mainSource.indexOf(opening);
+    assert.ok(start >= 0, `ausente no main.js: ${opening}`);
+    return mainSource.slice(start, mainSource.indexOf('\nfunction ', start + 1));
+  };
+  assert.match(bodyOf('function applyOpacity('), /^function applyOpacity\(island\) \{\s*island\.setOpacity\(/);
+  assert.match(
+    bodyOf('function refresh('),
+    /for \(const island of islands\.values\(\)\) \{\s*applyOpacity\(island\);\s*sendState\(island\);\s*\}/,
+  );
+  assert.ok(bodyOf('function createIsland(').includes('applyOpacity(island);'), 'a ilha nova já nasce com a opacidade efetiva');
+});
+
+// Trava de regressão (texto): só o main esconde e mostra, combinando o usuário com a tela cheia por monitor,
+// e o atalho respeita a tela cheia (T-04-21, T-04-22, D-12, D-19).
+test('esconder combina o usuário e a tela cheia, só no main, e o atalho respeita a tela cheia', () => {
+  const start = mainSource.indexOf('function applyVisibility(');
+  assert.ok(start >= 0, 'applyVisibility ausente no main.js');
+  const visibility = mainSource.slice(start, mainSource.indexOf('\n}', start));
+  assert.ok(visibility.includes('isIslandVisible({ userHidden, covered: fullscreenByDisplay.has(displayId) })'));
+  assert.equal(visibility.includes('updateCursorTick'), false, 'applyVisibility deixa o timer para o evento hide/show');
+  assert.ok(mainSource.includes(
+    'nextUserHidden({ userHidden, displayIds: [...islands.keys()], coveredDisplayIds: [...fullscreenByDisplay.keys()] })',
+  ), 'o atalho passa por nextUserHidden');
+  assert.ok(mainSource.includes("island.on('hide', () => {"), 'o ouvinte de hide continua');
+});
+
+// Trava de regressão (texto): D-20, o autor não autorizou o pacote nativo. Sem sensor, a regra pura fica
+// pronta e o ponto de entrada marcado; os hooks, que rodam dentro da sessão do Claude Code, seguem leves
+// (T-04-19, T-04-20).
+test('sem sensor nem dependência nativa, e os hooks continuam leves', () => {
+  const native = 'koffi';
+  const read = (file) => fs.readFileSync(path.join(__dirname, file), 'utf8');
+  for (const file of ['hook.js', 'permission-hook.js', 'window.js', 'state.js', 'install.js']) {
+    assert.equal(read(file).includes(native), false, `${file} cita o pacote nativo`);
+  }
+  for (const file of ['hook.js', 'permission-hook.js', 'window.js', 'state.js', 'install.js', 'main.js', 'preload.js']) {
+    assert.equal(read(file).includes(`require('${native}`), false, `${file} carrega o pacote nativo`);
+  }
+  assert.equal(fs.existsSync(path.join(__dirname, 'fullscreen.js')), false, 'fullscreen.js não deve existir');
+  const manifest = JSON.parse(read('package.json'));
+  for (const group of ['dependencies', 'devDependencies']) {
+    assert.equal(native in (manifest[group] ?? {}), false, `package.json tem o pacote em ${group}`);
+  }
+  const lines = mainSource.split(/\r?\n/);
+  const declaration = lines.findIndex((line) => line.startsWith('const fullscreenByDisplay'));
+  assert.ok(declaration > 0, 'fullscreenByDisplay ausente no main.js');
+  let first = declaration;
+  while (first > 0 && lines[first - 1].startsWith('//')) first -= 1;
+  const comment = lines.slice(first, declaration).join(' ');
+  for (const needle of ['ponytail:', 'nextFullscreen', 'applyVisibility', 'PowerShell']) {
+    assert.ok(comment.includes(needle), `o comentário do ponto de entrada do sensor não cita ${needle}`);
+  }
 });

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { SHAPES, THEMES } = require('./state');
+const { SHAPES, THEMES, ANCHORS, STAGE_SHADOW_PX } = require('./state');
 
 // O arquivo no disco pode ser CRLF (core.autocrlf): as regexes abaixo assumem LF.
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8').replace(/\r\n/g, '\n');
@@ -78,8 +78,14 @@ test('o raio da pílula vem de --radius e nenhuma regra o fixa em 30 px', () => 
   assert.equal(rulesFor('#pill::before')[0]['border-radius'], 'inherit', 'o brilho segue o raio da pílula');
 });
 
-test('o script grava --radius com metade da altura-alvo limitada a 44 px', () => {
-  assert.match(script, /const PILL_MAX_RADIUS_PX = 44;/);
+// O teto é o raio do bloco de pedido mais o respiro lateral da expandida: cantos concêntricos, e a curva
+// não encosta no conteúdo da linha de cima. Mudar um dos dois pede rever o outro.
+test('o script grava --radius com metade da altura-alvo limitada ao raio concêntrico da expandida', () => {
+  const ceiling = Number(/const PILL_MAX_RADIUS_PX = (\d+);/.exec(script)?.[1]);
+  const permissionRadius = parseFloat(rulesFor('#permission')[0]['border-radius']);
+  const expandedPadding = parseFloat(rulesFor('#pill.expanded')[0]['padding-inline']);
+  assert.equal(ceiling, permissionRadius + expandedPadding);
+  assert.ok(expandedPadding >= 24, 'respiro lateral da expandida');
   assert.ok(script.includes("pill.style.setProperty('--radius', `${Math.min(target.height / 2, PILL_MAX_RADIUS_PX)}px`);"));
 });
 
@@ -398,4 +404,47 @@ test('o tema só vem do payload e o script grava data-theme com auto como padrã
   assert.ok(body.includes("const theme = preferences?.theme || 'auto';"));
   assert.ok(body.includes('root.dataset.theme = theme;'));
   assert.ok(body.includes('if (changed && current.permission) restartArming();'));
+});
+
+// ---- Âncoras (D-13) ----
+
+test('--stage-shadow do :root é a margem da sombra do state.js', () => {
+  assert.ok(rulesFor(':root').some((found) => found['--stage-shadow'] === `${STAGE_SHADOW_PX}px`));
+});
+
+test('as regras de âncora alinham a pílula pelo lado ancorado e deixam a margem da sombra', () => {
+  const only = (selector) => {
+    const found = rulesFor(selector);
+    assert.equal(found.length, 1, `regra de ${selector}`);
+    return found[0];
+  };
+  assert.deepEqual(only(':root[data-anchor] #pill'), { 'transform-origin': 'var(--origin-x, 50%) var(--origin-y, 0)' });
+  assert.deepEqual(only(':root[data-anchor$="-left"]'), { '--origin-x': '0%' });
+  assert.deepEqual(only(':root[data-anchor$="-right"]'), { '--origin-x': '100%' });
+  assert.deepEqual(only(':root[data-anchor^="bottom-"]'), { '--origin-y': '100%' });
+  assert.deepEqual(only(':root[data-anchor$="-left"] body'), { 'justify-content': 'flex-start', 'padding-left': 'var(--stage-shadow)' });
+  assert.deepEqual(only(':root[data-anchor$="-right"] body'), { 'justify-content': 'flex-end', 'padding-right': 'var(--stage-shadow)' });
+  assert.deepEqual(only(':root[data-anchor^="bottom-"] body'), {
+    'align-items': 'flex-end', 'padding-top': '0', 'padding-bottom': 'var(--stage-shadow)',
+  });
+  // As regras base do centro e do topo não mudam: sem âncora a pílula fica como na Fase 3.
+  assert.equal(rulesFor('body')[0]['padding-top'], 'var(--stage-top)');
+  assert.equal(rulesFor('#pill')[0]['transform-origin'], '50% 0');
+});
+
+test('nenhuma regra mira uma âncora que o main não aceita', () => {
+  const named = [...style.matchAll(/\[data-anchor([\^$]?)="([^"]*)"\]/g)].map((match) => ({ operator: match[1], value: match[2] }));
+  assert.ok(named.length >= 6);
+  for (const { operator, value } of named) {
+    const hit = ANCHORS.some((anchor) => (operator === '^' ? anchor.startsWith(value) : operator === '$' ? anchor.endsWith(value) : anchor === value));
+    assert.ok(hit, `âncora fora de ANCHORS: [data-anchor${operator}="${value}"]`);
+  }
+});
+
+test('o script grava data-anchor com topo centro como padrão e rearma se a âncora mudou', () => {
+  const apply = script.slice(script.indexOf('function applyPreferences('));
+  const body = apply.slice(0, apply.indexOf('\n  }\n'));
+  assert.ok(body.includes("const anchor = preferences?.anchor || 'top-center';"));
+  assert.ok(body.includes('root.dataset.anchor !== anchor'));
+  assert.ok(body.includes('root.dataset.anchor = anchor;'));
 });

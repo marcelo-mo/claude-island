@@ -1,22 +1,30 @@
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, screen, globalShortcut } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  pickState, acceptDecision, anchorPosition, horizontalSlackFor, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
-  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
+  WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
+  effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem,
 } = require('./state');
 const { focusWindow } = require('./window');
 
 const POLL_MS = 400;
+// ponytail: taxa fixa de cerca de 30 Hz; getCursorScreenPoint custa 0,69 µs por chamada (medido na
+// pesquisa da Fase 4). Adaptar a taxa só se o custo aparecer.
+const CURSOR_TICK_MS = 33;
+// O main só manda o ponto com o cursor a até esta distância da janela: mais longe, a histerese do
+// renderer não captura de qualquer jeito.
+const CURSOR_NEAR_PX = 24;
 // A ilha carrega por esta URL e só aceita mensagens da página que está nela (ver islandOf).
 const ISLAND_URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
 
-// Em Linux o "forward" de setIgnoreMouseEvents não existe, então não dá para
-// deixar o clique atravessar a área transparente e ainda detectar o hover.
+// No Linux (melhor esforço, não testado) a ilha mantém o comportamento de hoje, sem click-through: a
+// janela transparente captura o mouse inteira (D-03). O hover vem do cursor do main em todas as
+// plataformas; só a captura do mouse depende disto.
 const CAN_CLICK_THROUGH = process.platform !== 'linux';
 
 // Uma janela por monitor, indexada por display.id.
@@ -43,6 +51,30 @@ let decidedPermissionId = null;
 // Preferências visuais, lidas uma vez na subida. O renderer só recebe o valor pelo estado: nunca
 // escolhe nem envia preferência (SEG-08).
 let preferences = DEFAULT_PREFERENCES;
+// Ilha cujo menu de preferências está aberto. Um menu por vez: pedido de menu enquanto há um aberto
+// é descartado.
+let menuIsland = null;
+// Último pedido de captura do mouse de cada ilha. Quem decide é o renderer, pelo retângulo vivo da
+// pílula; o main só aplica (applyCapture).
+const captureRequests = new Map();
+// Ilhas que receberam o ponto do cursor no último tique, para mandar null uma vez só quando o cursor
+// se afasta.
+const nearIslands = new Set();
+let cursorTimer = null;
+// Escondida pelo usuário, pelo atalho ou pelo menu. Não é persistida: a ilha sempre sobe visível (D-12).
+let userHidden = false;
+// Monitor coberto por app em tela cheia -> HWND que o cobre. Só o main calcula, nunca o renderer (D-19).
+// Vazio enquanto não houver sensor: nenhum monitor conhecido conta como coberto.
+// ponytail: não há sensor de tela cheia porque o autor não autorizou o pacote nativo (D-20). Ele entraria
+// aqui: a 2 Hz, uma amostra do primeiro plano do Windows vai para nextFullscreen (state.js) com este mapa,
+// process.pid e os monitores em pixels físicos (screen.dipToScreenRect(null, display.bounds)); o mapa novo
+// troca este e, se mudou, chama applyVisibility(). Duas opções, medidas na pesquisa da Fase 4: (1)
+// koffi@3.3.8 com allowBuilds: { koffi: false } (+5,0 a 5,1 MB, 7,8 µs por sondagem); (2) sem dependência
+// nova, um processo PowerShell filho único e persistente com P/Invoke em user32, no padrão do window.js,
+// consultado por stdin (28,3 MB numa amostra; um spawn por sondagem custa cerca de 0,45 s e está descartado).
+const fullscreenByDisplay = new Map();
+// Resultado do registro do atalho em start ('ok', 'unavailable' ou 'invalid'); o menu o mostra.
+let shortcutStatus = 'unavailable';
 
 const positionsFile = () => path.join(app.getPath('userData'), 'positions.json');
 
@@ -55,17 +87,42 @@ function loadSavedOffsets() {
   }
 }
 
-function loadPreferences() {
+// O arquivo é editado à mão, e a próxima gravação do menu apagaria o que o usuário escreveu errado.
+// Guardado com carimbo de tempo, nenhuma cópia anterior se perde e dá para consertar.
+function quarantinePreferences() {
+  const quarantined = quarantinePath(PREFERENCES_FILE, Date.now());
   try {
-    preferences = normalizePreferences(JSON.parse(fs.readFileSync(PREFERENCES_FILE, 'utf8')));
+    fs.renameSync(PREFERENCES_FILE, quarantined);
+    console.error('Preferências da ilha inválidas; o arquivo foi guardado em', quarantined);
+  } catch (error) {
+    // nem renomear deu: valem só os padrões
+    console.error('Não foi possível guardar o arquivo de preferências inválido:', error.message);
+  }
+}
+
+// Nunca lança: arquivo ausente, corrompido, enorme ou ilegível não impede a ilha de subir.
+function loadPreferences() {
+  let text;
+  try {
+    if (fs.statSync(PREFERENCES_FILE).size > PREFERENCES_MAX_BYTES) {
+      quarantinePreferences();
+      return;
+    }
+    text = fs.readFileSync(PREFERENCES_FILE, 'utf8');
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.error('Não foi possível ler as preferências da ilha:', error.message);
+    return; // sem arquivo ou ilegível: valem os padrões
+  }
+  try {
+    preferences = normalizePreferences(JSON.parse(text));
   } catch {
-    // arquivo ausente ou corrompido: valem os padrões
+    quarantinePreferences();
   }
 }
 
 function persistSavedOffsets() {
   try {
-    fs.writeFileSync(positionsFile(), JSON.stringify(savedOffsets));
+    writeFileAtomic(positionsFile(), JSON.stringify(savedOffsets));
   } catch (error) {
     console.error('Não foi possível salvar a posição da ilha:', error.message);
   }
@@ -118,6 +175,146 @@ function writeDecision(permissionId, behavior) {
   fs.renameSync(temporaryFile, decisionFile);
 }
 
+/**
+ * Grava num temporário e renomeia: quem lê nunca vê o arquivo pela metade, e uma queda no meio da
+ * gravação não zera o conteúdo anterior.
+ */
+function writeFileAtomic(file, text) {
+  const temporaryFile = `${file}.tmp`;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(temporaryFile, text);
+  fs.renameSync(temporaryFile, file);
+}
+
+function writePreferences() {
+  try {
+    writeFileAtomic(PREFERENCES_FILE, JSON.stringify(preferences, null, 2));
+  } catch (error) {
+    console.error('Não foi possível salvar as preferências da ilha:', error.message);
+  }
+}
+
+// Só o menu nativo chama isto: o renderer nunca escolhe preferência (SEG-08). Toda mudança pode
+// mover botões sob o cursor, então termina em rearme (SEG-02, D-09).
+function applyPreference(key, value) {
+  const next = normalizePreferences({ ...preferences, [key]: value });
+  if (JSON.stringify(next) === JSON.stringify(preferences)) return;
+  if (next.anchor !== preferences.anchor) {
+    // Os deslocamentos salvos eram relativos à âncora antiga: aplicá-los à nova jogaria a ilha num lugar
+    // sem sentido.
+    savedOffsets = {};
+    persistSavedOffsets();
+  }
+  preferences = next;
+  writePreferences();
+  // Reposiciona toda ilha que não está sendo arrastada antes de rearmar: a âncora move os botões.
+  syncIslands();
+  refresh('rearm');
+}
+
+// Esconder nunca aprova: o gate recusa decisão com a janela escondida (windowVisible). Reexibir passa
+// pelo evento 'show', que chama refresh('rearm'); showInactive não rouba o foco do terminal. Nunca
+// destruir a ilha para esconder: o som do pedido e o rearme dependem da janela viva. O hide() emite
+// 'hide' (solta a captura e reavalia o timer do cursor) e o showInactive() emite 'show' (religa).
+function setUserHidden(hidden) {
+  userHidden = hidden;
+  applyVisibility();
+}
+
+// Único lugar que esconde e mostra a ilha: combina o usuário com a tela cheia do monitor dela. Nunca
+// destrói a janela (o som do pedido e o rearme dependem dela viva). Reexibir emite 'show', que rearma;
+// esconder emite 'hide', que solta a captura e, sem ilha visível, para o timer do cursor.
+function applyVisibility() {
+  for (const [displayId, island] of islands) {
+    const visible = isIslandVisible({ userHidden, covered: fullscreenByDisplay.has(displayId) });
+    if (visible && !island.isVisible()) island.showInactive();
+    else if (!visible && island.isVisible()) island.hide();
+  }
+}
+
+// O menu abre sobre a pílula e pode cobrir Permitir e Negar, e o clique que o fecha pode cair num
+// botão: abrir e fechar rearmam os botões (D-09).
+function openMenu(island) {
+  // toMenuItem vive no state.js (lógica pura, com teste de comportamento): o clique de cada item chama um
+  // destes dois efeitos, os únicos que o menu tem.
+  const effects = { onHide: () => setUserHidden(true), onPreference: applyPreference };
+  const menu = Menu.buildFromTemplate(menuTemplate(preferences, shortcutStatus).map((item) => toMenuItem(item, effects)));
+  menu.on('menu-will-show', () => refresh('rearm'));
+  menu.on('menu-will-close', () => {
+    menuIsland = null;
+    // Com o menu fechado vale de novo o último pedido do renderer.
+    applyCapture(island);
+    refresh('rearm');
+  });
+  menuIsland = island;
+  try {
+    // Sem x nem y: abre no cursor, que é onde o usuário clicou (a janela é focusable: false).
+    menu.popup({ window: island });
+  } catch (error) {
+    // Janela destruída no meio do pedido: sem isto menuIsland ficaria preso e todo pedido seguinte
+    // seria descartado.
+    menuIsland = null;
+    applyCapture(island);
+    console.error('Não foi possível abrir o menu da ilha:', error.message);
+  }
+}
+
+// Arraste e menu seguram a captura: soltá-la no meio devolveria o clique à janela de trás. Quando eles
+// terminam, vale o último pedido do renderer. Sem a opção forward de setIgnoreMouseEvents: ela para de
+// funcionar sob janela elevada (UIPI, doc do Electron), e o hover vem do cursor do main de qualquer jeito.
+function applyCapture(island) {
+  // O menu pode fechar depois de syncIslands ter destruído a ilha dona (escolher "Só no monitor principal"
+  // na ilha de um monitor secundário): setIgnoreMouseEvents numa janela destruída lança.
+  if (!CAN_CLICK_THROUGH || island.isDestroyed()) return;
+  const capture = captureRequests.get(island) === true || dragStartPositions.has(island) || island === menuIsland;
+  island.setIgnoreMouseEvents(!capture);
+}
+
+// Solta a captura e manda o renderer desligar o hover: a janela transparente nunca fica engolindo cliques.
+function releaseCapture(island) {
+  captureRequests.delete(island);
+  nearIslands.delete(island);
+  if (island.isDestroyed()) return;
+  island.webContents.send('island:cursor', null);
+  applyCapture(island);
+}
+
+function cursorTick() {
+  const point = screen.getCursorScreenPoint();
+  // No modo 'cursor' a ilha vai para o monitor do cursor, nunca com ilha sendo arrastada nem com pedido na
+  // tela (D-15). Trocar de monitor move os botões, então rearma depois de mover.
+  if (preferences.islandMode === 'cursor' && dragStartPositions.size === 0 && !lastPickedState.permission
+    && !islands.has(screen.getDisplayNearestPoint(point).id)) {
+    syncIslands();
+    refresh('rearm');
+  }
+  for (const island of islands.values()) {
+    if (!island.isVisible()) continue;
+    const bounds = island.getBounds();
+    const isNear = point.x >= bounds.x - CURSOR_NEAR_PX && point.x <= bounds.x + bounds.width + CURSOR_NEAR_PX
+      && point.y >= bounds.y - CURSOR_NEAR_PX && point.y <= bounds.y + bounds.height + CURSOR_NEAR_PX;
+    if (isNear) {
+      nearIslands.add(island);
+      island.webContents.send('island:cursor', { x: point.x - bounds.x, y: point.y - bounds.y });
+    } else if (nearIslands.delete(island)) {
+      island.webContents.send('island:cursor', null);
+    }
+  }
+}
+
+// Só roda com pelo menos uma ilha visível e fora de ociosa (D-02). Ociosa ou sem ilha visível, nenhum
+// timer roda e nenhuma janela transparente segue engolindo cliques.
+function updateCursorTick() {
+  const active = lastPickedState.state !== 'idle' && [...islands.values()].some((island) => island.isVisible());
+  if (active && !cursorTimer) {
+    cursorTimer = setInterval(cursorTick, CURSOR_TICK_MS);
+  } else if (!active && cursorTimer) {
+    clearInterval(cursorTimer);
+    cursorTimer = null;
+    for (const island of islands.values()) releaseCapture(island);
+  }
+}
+
 function readSessions() {
   let files;
   try {
@@ -149,11 +346,11 @@ function displayOf(island) {
 function moveIsland(island, position, workArea) {
   // setBounds com o tamanho explícito (e não setPosition): com escala de DPI fracionária a
   // janela transparente muda de tamanho a cada setPosition no Windows.
-  island.setBounds({ ...clampIslandPosition(position, workArea, WINDOW_SIZE, HORIZONTAL_SLACK), ...WINDOW_SIZE });
+  island.setBounds({ ...clampIslandPosition(position, workArea, WINDOW_SIZE, horizontalSlackFor(preferences.anchor)), ...WINDOW_SIZE });
 }
 
 function savedPosition(display) {
-  return positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id]);
+  return positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id], preferences.anchor);
 }
 
 // Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.
@@ -167,7 +364,7 @@ function sendState(island) {
   // (monitor baixo, DPI alto) toda decisão seria recusada, então o renderer nem oferece os botões.
   // Só pode desabilitar: o gate continua sendo quem decide.
   const display = displayOf(island);
-  const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK);
+  const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor));
   island.webContents.send(
     'island:state',
     { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea },
@@ -192,15 +389,27 @@ function refresh(reason) {
   lastPickedState = picked;
   shownWindowPid = picked.windowPid ?? null;
   shown = nextShown;
-  for (const island of islands.values()) sendState(island);
+  for (const island of islands.values()) {
+    applyOpacity(island);
+    sendState(island);
+  }
+  updateCursorTick();
+}
+
+// Transparência de 100/85/70/55%, só sem pedido na tela (invariante I5). O main é o dono do fato "há
+// pedido": a opacidade sai do mesmo passo do refresh que decide o pedido exibido e chega antes do estado
+// ao renderer. No Linux o setOpacity não tem efeito (aceito).
+function applyOpacity(island) {
+  island.setOpacity(effectiveOpacity(preferences.opacity, Boolean(lastPickedState.permission)));
 }
 
 function createIsland(display) {
   const island = new BrowserWindow({
     ...WINDOW_SIZE,
-    ...clampIslandPosition(savedPosition(display), display.workArea, WINDOW_SIZE, HORIZONTAL_SLACK),
+    ...clampIslandPosition(savedPosition(display), display.workArea, WINDOW_SIZE, horizontalSlackFor(preferences.anchor)),
     frame: false,
     transparent: true,
+    show: isIslandVisible({ userHidden, covered: fullscreenByDisplay.has(display.id) }), // monitor novo já nasce escondido se for o caso
     resizable: false,
     movable: false, // o arraste é manual (ver island:drag); o do sistema engoliria o hover
     skipTaskbar: true,
@@ -213,11 +422,22 @@ function createIsland(display) {
       ...SECURE_WEB_PREFERENCES,
     },
   });
+  // A 125% de escala a janela nasce 6 DIP mais alta (520×416 medido). O setBounds com o tamanho explícito a
+  // devolve a 520×412, e a deriva de +2 DIP que resta cabe na tolerância do gate. Nunca setPosition, que
+  // também muda o tamanho.
+  moveIsland(island, savedPosition(display), display.workArea);
+  applyOpacity(island);
   // Reexibir ou restaurar de minimizada põe os botões sob o cursor de novo, então o main reinicia
-  // os 0,8 s. Nada esconde nem minimiza a ilha de propósito antes da Fase 4: a prova ponta a ponta
-  // fica para lá (Assumption A9).
+  // os 0,8 s. O atalho e o menu escondem por hide() (setUserHidden) e reexibem por showInactive().
   island.on('show', () => refresh('rearm'));
   island.on('restore', () => refresh('rearm'));
+  // Todo caminho que esconde a ilha (atalho e menu na Fase 4, tela cheia quando houver sensor) passa
+  // por este evento: a ilha escondida solta a captura e, se era a última visível, o timer do cursor
+  // para. Reexibir emite 'show', que chama refresh('rearm'), e o refresh religa o timer.
+  island.on('hide', () => {
+    releaseCapture(island);
+    updateCursorTick();
+  });
   // Por padrão o Chromium navega a janela quando um link ou arquivo é solto nela, e a página nova
   // herdaria o preload (window.island). A ilha nunca sai do index.html nem abre outra janela.
   island.webContents.on('will-navigate', (event) => event.preventDefault());
@@ -225,7 +445,7 @@ function createIsland(display) {
   island.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   island.setAlwaysOnTop(true, 'screen-saver'); // acima de apps em tela cheia
   island.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  if (CAN_CLICK_THROUGH) island.setIgnoreMouseEvents(true, { forward: true });
+  if (CAN_CLICK_THROUGH) island.setIgnoreMouseEvents(true);
   islands.set(display.id, island);
   // Janela criada depois (monitor plugado) não pode esperar a próxima mudança de estado.
   island.webContents.on('did-finish-load', () => sendState(island));
@@ -240,17 +460,52 @@ function syncIslands() {
   // ali encerraria o app (window-all-closed).
   if (displays.length === 0) return;
 
-  for (const display of displays) {
+  const wanted = islandDisplays({
+    mode: preferences.islandMode,
+    displayIds: displays.map((display) => display.id),
+    primaryId: screen.getPrimaryDisplay().id,
+    cursorDisplayId: screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id,
+    currentIds: [...islands.keys()],
+    // Com pedido na tela a ilha não troca de monitor (D-15): o botão pararia sob o cursor.
+    hasPermission: Boolean(lastPickedState.permission),
+  });
+  // Ilhas de monitor que não deve mais ter ilha (outro modo, monitor removido): sobram para reaproveitar.
+  const leftovers = [...islands].filter(([displayId]) => !wanted.includes(displayId));
+  for (const display of displays.filter((candidate) => wanted.includes(candidate.id))) {
     const island = islands.get(display.id);
-    if (!island) createIsland(display);
-    else if (!dragStartPositions.has(island)) moveIsland(island, savedPosition(display), display.workArea);
+    if (island) {
+      if (!dragStartPositions.has(island)) moveIsland(island, savedPosition(display), display.workArea);
+      continue;
+    }
+    // ponytail: a janela sobrando é reaproveitada por setBounds, mesmo entre monitores de DPI diferente (na
+    // pesquisa da Fase 4 manteve o tamanho físico certo, uma tentativa por sentido). Se a janela crescer cerca
+    // de 25% ao trocar de escala, recriar em vez de mover.
+    const reusable = leftovers.findIndex(([, candidate]) => !dragStartPositions.has(candidate));
+    if (reusable < 0) {
+      createIsland(display);
+      continue;
+    }
+    const [[previousId, reused]] = leftovers.splice(reusable, 1);
+    islands.delete(previousId);
+    islands.set(display.id, reused);
+    // Num monitor novo o pedido de captura e o ponto do cursor antigos não valem mais.
+    releaseCapture(reused);
+    moveIsland(reused, savedPosition(display), display.workArea);
   }
-  for (const [displayId, island] of islands) {
-    if (displays.some((display) => display.id === displayId)) continue;
+  // Nunca destrói para esconder: só sobra de modo ou de monitor removido.
+  for (const [displayId, island] of leftovers) {
     islands.delete(displayId);
     dragStartPositions.delete(island);
+    captureRequests.delete(island);
+    nearIslands.delete(island);
+    // Sem isto o menuIsland preso numa janela destruída descartaria todo pedido de menu seguinte.
+    if (island === menuIsland) menuIsland = null;
     island.destroy();
   }
+  // Uma ilha reaproveitada pode ter ido para um monitor coberto por tela cheia.
+  applyVisibility();
+  // A ilha destruída pode ter sido a última visível, e destruir não emite o evento 'hide'.
+  updateCursorTick();
 }
 
 function registerIpcHandlers() {
@@ -264,12 +519,23 @@ function registerIpcHandlers() {
     return BrowserWindow.fromWebContents(event.sender);
   };
 
-  ipcMain.on('island:hover', (event, isOverPill) => {
+  // Só um booleano: o renderer pede captura e o main aplica (arraste e menu a seguram). Outro valor,
+  // identificador ou preferência é ignorado.
+  ipcMain.on('island:capture', (event, capture) => {
     const island = islandOf(event);
-    // Durante o arraste o ponteiro pode sair da pílula (a janela para na borda da tela);
-    // religar o click-through ali soltaria o arraste.
-    if (!island || dragStartPositions.has(island) || !CAN_CLICK_THROUGH) return;
-    island.setIgnoreMouseEvents(!isOverPill, { forward: true });
+    if (!island || typeof capture !== 'boolean') return;
+    // Ociosa, a pílula é invisível e o main já soltou a captura: um pedido de captura agora só pode vir
+    // de um renderer fora do contrato e engoliria cliques das janelas de baixo até a próxima sessão.
+    if (capture && lastPickedState.state === 'idle') return;
+    captureRequests.set(island, capture);
+    applyCapture(island);
+  });
+
+  // O renderer só pede "abrir"; itens, valores e gravação são do main (SEG-08).
+  ipcMain.on('island:menu', (event) => {
+    const island = islandOf(event);
+    if (!island || menuIsland) return;
+    openMenu(island);
   });
 
   // O renderer manda o deslocamento total desde o pointerdown, em coordenadas de tela;
@@ -287,10 +553,15 @@ function registerIpcHandlers() {
     const island = islandOf(event);
     const display = island && displayOf(island);
     if (!display || !dragStartPositions.delete(island)) return;
-    const standard = defaultIslandPosition(display.workArea, WINDOW_SIZE);
+    // O arraste segurava a captura; terminado, volta o último pedido do renderer.
+    applyCapture(island);
+    const standard = anchorPosition(preferences.anchor, display.workArea, WINDOW_SIZE);
     const bounds = island.getBounds();
     savedOffsets[display.id] = { x: bounds.x - standard.x, y: bounds.y - standard.y };
     persistSavedOffsets();
+    // Soltar a ilha pode deixar um botão sob o cursor parado, e o renderer não percebe o movimento da
+    // janela: sem rearmar, o armamento antigo valeria (SEG-02).
+    refresh('rearm');
   });
 
   ipcMain.on('island:reset-position', (event) => {
@@ -299,7 +570,9 @@ function registerIpcHandlers() {
     if (!display) return;
     delete savedOffsets[display.id];
     persistSavedOffsets();
-    moveIsland(island, defaultIslandPosition(display.workArea, WINDOW_SIZE), display.workArea);
+    moveIsland(island, anchorPosition(preferences.anchor, display.workArea, WINDOW_SIZE), display.workArea);
+    // O duplo clique leva a janela de uma vez ao lugar padrão, e um botão pode parar sob o cursor.
+    refresh('rearm');
   });
 
   // O renderer só diz "focar"; o PID é o da sessão em exibição, guardado aqui.
@@ -325,9 +598,9 @@ function registerIpcHandlers() {
       now: performance.now(),
       decidedId: decidedPermissionId,
       windowVisible: island.isVisible() && !island.isMinimized(),
-      // ponytail: sem sonda de tela cheia até a Fase 4 (TELA-01); a entrada já existe no contrato e nos vetores.
-      coveredByFullscreen: false,
-      withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK),
+      // Fail-safe (D-19): monitor desconhecido conta como coberto.
+      coveredByFullscreen: display ? fullscreenByDisplay.has(display.id) : true,
+      withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, horizontalSlackFor(preferences.anchor)),
     });
     // Recusa e falha de gravação reenviam o estado a quem clicou: o renderer trava os botões ao enviar
     // e só os solta quando o main responde. Ele nunca reenvia sozinho; o próximo clique é do usuário.
@@ -355,6 +628,13 @@ function start() {
   writeHeartbeat();
   setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);
   registerIpcHandlers();
+  // Uma vez só e sem nova tentativa: o atalho só muda no JSON (D-11). A ilha sobe com qualquer status.
+  shortcutStatus = registerShortcut(
+    (accelerator, onPress) => globalShortcut.register(accelerator, onPress),
+    preferences.shortcut,
+    () => setUserHidden(nextUserHidden({ userHidden, displayIds: [...islands.keys()], coveredDisplayIds: [...fullscreenByDisplay.keys()] })),
+  );
+  if (shortcutStatus !== 'ok') console.error(`Não foi possível registrar o atalho ${preferences.shortcut}: ${shortcutStatus}`);
   syncIslands();
   screen.on('display-added', syncIslands);
   screen.on('display-removed', syncIslands);
@@ -374,6 +654,9 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.whenReady().then(start);
   app.on('window-all-closed', () => app.quit());
-  // Sem isto um permission-hook em espera só perceberia a saída quando o batimento envelhecesse.
-  app.on('will-quit', () => fs.rmSync(HEARTBEAT_FILE, { force: true }));
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+    // Sem isto um permission-hook em espera só perceberia a saída quando o batimento envelhecesse.
+    fs.rmSync(HEARTBEAT_FILE, { force: true });
+  });
 }

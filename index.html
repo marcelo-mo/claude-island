@@ -41,6 +41,9 @@
     --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
     /* Respiro entre o topo do palco (a janela) e a pílula; o notch o zera e cola a pílula na borda. */
     --stage-top: 8px;
+    /* Margem do palco do lado ancorado para a sombra (igual a STAGE_SHADOW_PX do state.js): a sombra alcança
+       14 px para os lados e 19 px para baixo. */
+    --stage-shadow: 20px;
   }
   /* O Electron segue o tema do sistema em tempo real; a ilha acompanha sem reiniciar. Só o tema auto
      (ou sem atributo, antes do primeiro estado) segue o sistema: um tema escuro escolhido num sistema
@@ -127,7 +130,10 @@
   #pill[data-state="idle"] { opacity: 0; scale: .6; translate: 0 -12px; pointer-events: none; }
   #pill[data-state="waiting"] { --accent: var(--waiting); }
   #pill[data-state="done"] { --accent: var(--done); }
-  #pill.expanded { width: 400px; height: 104px; }
+  /* Expandida, a linha de cima encosta nos cantos curvos com o respiro da compacta (17 px): o ponto e o
+     percentual ficavam a poucos pixels da curva. 24 px dão a mesma folga visual dos dois lados; o raio
+     acompanha em PILL_MAX_RADIUS_PX. */
+  #pill.expanded { width: 400px; height: 104px; padding-inline: 24px; }
   #pill.expanded.has-window { height: 148px; }
   /* Com pedido de permissão a altura segue o texto do pedido (até o limite com rolagem). */
   #pill.expanded.has-permission { height: auto; padding-bottom: 16px; }
@@ -139,6 +145,16 @@
   /* Notch: topo reto colado na borda do palco (sem o respiro de 8 px) e só a base arredondada. */
   :root[data-shape="notch"] { --stage-top: 0px; }
   :root[data-shape="notch"] #pill { border-radius: 0 0 16px 16px; }
+  /* Âncoras: a pílula encosta no lado ancorado do palco, deixando a margem da sombra, e a ampliação do cursor
+     cresce a partir da borda ancorada. O centro e o topo seguem a regra base do body e do #pill. Embaixo o
+     respiro de cima não vale (padding-top: 0) e a margem da sombra passa para a base. */
+  :root[data-anchor] #pill { transform-origin: var(--origin-x, 50%) var(--origin-y, 0); }
+  :root[data-anchor$="-left"] { --origin-x: 0%; }
+  :root[data-anchor$="-right"] { --origin-x: 100%; }
+  :root[data-anchor^="bottom-"] { --origin-y: 100%; }
+  :root[data-anchor$="-left"] body { justify-content: flex-start; padding-left: var(--stage-shadow); }
+  :root[data-anchor$="-right"] body { justify-content: flex-end; padding-right: var(--stage-shadow); }
+  :root[data-anchor^="bottom-"] body { align-items: flex-end; padding-top: 0; padding-bottom: var(--stage-shadow); }
   /* O contorno pulsa na cor do estado: dá para ler a situação de relance, sem mirar no ponto.
      Quem pede ação pulsa mais rápido; executando é o mais calmo para não cansar.
      O brilho pulsa por opacidade numa camada própria (::before) e a ilha parada não anima nada. */
@@ -551,6 +567,49 @@
   }
   // mola:fim
 
+  // hover:inicio
+  // Regra pura do hover. Fica inline pelo mesmo motivo dos blocos acima: a CSP só aceita script inline
+  // e o renderer em sandbox não carrega o state.js; e só o renderer conhece o retângulo vivo da pílula,
+  // que muda a cada quadro da mola. hover.test.js executa exatamente este texto num contexto vazio:
+  // só constantes e funções que nunca lançam.
+  // 8 px cobre a deriva de +1 a +3 DIP do getBounds() a 125% e a ampliação de 2,5% do hover (medido
+  // na pesquisa da Fase 4); entrar só 2 px para dentro evita pegar o hover de raspão na borda. Escolha
+  // de projeto, fixada por vetor em hover.test.js.
+  const HOVER_ENTER_PX = 2;
+  const HOVER_LEAVE_PX = 8;
+
+  /**
+   * Se o cursor está sobre a pílula, com histerese: estando dentro (inside exatamente true), só sai
+   * quando o ponto passa HOVER_LEAVE_PX para fora do retângulo; estando fora, só entra quando o ponto
+   * fica HOVER_ENTER_PX para dentro. Ponto ou retângulo ausente ou não numérico, e entrada ausente,
+   * devolvem false, que é não capturar. Nunca lança.
+   */
+  function hoverStep(input) {
+    const { inside, point, rect } = input || {};
+    const values = [point?.x, point?.y, rect?.left, rect?.top, rect?.right, rect?.bottom];
+    if (!values.every((value) => Number.isFinite(value))) return false;
+    const margin = inside === true ? HOVER_LEAVE_PX : -HOVER_ENTER_PX;
+    return point.x >= rect.left - margin && point.x <= rect.right + margin
+      && point.y >= rect.top - margin && point.y <= rect.bottom + margin;
+  }
+
+  /**
+   * Se a pílula fica expandida. 'waiting' (Precisa de você) abre sozinha: é o único estado que exige
+   * ação. Fora de 'running' nunca expande: ociosa some, e Concluído fica compacto para o botão Abrir
+   * ficar parado sob o mouse, mesmo fixada. Em 'running': pinExpanded exatamente true mantém aberta;
+   * senão, expandOn 'click' expande só depois do clique (clickExpanded exatamente true) e qualquer outro
+   * valor segue a regra do hover (hovering exatamente true). Expandir nunca arma nem desarma o gate
+   * (D-04). Entrada ausente devolve false.
+   */
+  function shouldExpand(input) {
+    const { state, hovering, clickExpanded, expandOn, pinExpanded } = input || {};
+    if (state === 'waiting') return true;
+    if (state !== 'running') return false;
+    if (pinExpanded === true) return true;
+    return expandOn === 'click' ? clickExpanded === true : hovering === true;
+  }
+  // hover:fim
+
   // A CSS pausa as animações com a janela escondida; o Electron só reporta hidden com hide() ou minimizada.
   document.addEventListener('visibilitychange', () => { document.documentElement.dataset.hidden = document.hidden; });
   const pill = document.getElementById('pill');
@@ -572,6 +631,10 @@
   const TITLES = { running: 'Trabalhando', waiting: 'Precisa de você', done: 'Concluído' };
   let current = { state: 'idle' };
   let hovering = false;
+  // Último ponto do cursor vindo do main, em coordenadas da janela; null com o cursor longe.
+  let lastCursorPoint = null;
+  // No modo clique (expandOn 'click'), a pílula fica aberta depois do clique até o cursor sair.
+  let clickExpanded = false;
   let answeredPermissionId = null;
   let readPermissionId = null;
   // Armamento dos botões. armToken é a geração: toda volta ao desarmado a muda, o que invalida
@@ -589,9 +652,11 @@
   // Quando o pedido exibido mudou (id, armEpoch ou texto): abre a janela em que a roda é ignorada.
   let contentChangedAt = 0;
 
-  // Raio máximo da pílula, do mod (MIT, ver THIRD_PARTY_NOTICES.md): a metade da altura-alvo dá o
-  // arredondado total da compacta, e a expandida (mais alta) para em 44 px em vez de virar uma cápsula.
-  const PILL_MAX_RADIUS_PX = 44;
+  // Raio máximo da pílula: a metade da altura-alvo dá o arredondado total da compacta, e a expandida
+  // (mais alta) para neste teto em vez de virar uma cápsula. O mod (MIT, ver THIRD_PARTY_NOTICES.md)
+  // para em 44 px; aqui são 36 para a curva não encostar no ponto e no percentual da linha de cima:
+  // 36 = raio do bloco de pedido (12) + respiro lateral da expandida (24), cantos concêntricos.
+  const PILL_MAX_RADIUS_PX = 36;
 
   // Molas da pílula. nudge (salto do topo, em px) e scale (ampliação do hover) são neutras
   // e existem desde o início; width e height entram na primeira medição, e sem elas conta como em
@@ -713,10 +778,9 @@
 
   function renderContent() {
     pill.dataset.state = current.state;
-    // "Precisa de você" abre sozinho: é o único estado que exige ação.
-    // Em "concluído" a pílula não expande no hover: o botão "Abrir" tem de ficar parado sob o mouse.
-    const expandsOnHover = hovering && current.state !== 'done';
-    pill.classList.toggle('expanded', current.state !== 'idle' && (expandsOnHover || current.state === 'waiting'));
+    // "Precisa de você" abre sozinho; "Concluído" não expande (o botão "Abrir" tem de ficar parado sob o
+    // mouse); o resto segue a preferência (hover ou clique, e fixar aberta).
+    pill.classList.toggle('expanded', shouldExpand({ state: current.state, hovering, clickExpanded, expandOn: current.preferences?.expandOn, pinExpanded: current.preferences?.pinExpanded }));
     if (current.state === 'idle') return; // mantém o texto durante o fade de saída
     pill.classList.toggle('has-window', Boolean(current.windowPid));
     title.textContent = TITLES[current.state];
@@ -920,9 +984,12 @@
     const root = document.documentElement;
     const theme = preferences?.theme || 'auto';
     const shape = preferences?.shape || 'pill';
-    const changed = root.dataset.theme !== theme || root.dataset.shape !== shape;
+    const anchor = preferences?.anchor || 'top-center';
+    // Trocar a âncora move os botões no palco; rearmar é o lado seguro.
+    const changed = root.dataset.theme !== theme || root.dataset.shape !== shape || root.dataset.anchor !== anchor;
     root.dataset.theme = theme;
     root.dataset.shape = shape;
+    root.dataset.anchor = anchor;
     if (changed && current.permission) restartArming();
   }
 
@@ -972,17 +1039,25 @@
     document.getElementById(id).addEventListener('click', () => window.island.focusSession());
   }
 
-  // A janela deixa o clique atravessar; só a pílula (e o botão dentro dela) captura o mouse.
-  function setHovering(isOverPill) {
-    hovering = isOverPill;
-    window.island.setHover(isOverPill);
+  // A janela deixa o clique atravessar; só a pílula (e o botão dentro dela) captura o mouse. O hover vem
+  // só do cursor que o main entrega (único jeito que funciona sob janela elevada): decide-se contra o
+  // retângulo vivo da pílula, já escalado. Hover e captura nunca armam nem desarmam os botões (D-04).
+  function updateHover() {
+    // No meio de um arraste a pílula não pode encolher nem devolver o clique para a janela de trás;
+    // o fim do arraste reavalia.
+    if (drag) return;
+    // Ociosa, a pílula some e não segura o clique de ninguém.
+    const next = current.state !== 'idle' && hoverStep({
+      inside: hovering, point: lastCursorPoint, rect: pill.getBoundingClientRect(),
+    });
+    if (next === hovering) return;
+    hovering = next;
+    // Sair do hover recolhe a pílula aberta por clique.
+    if (!hovering) clickExpanded = false;
+    window.island.setCapture(hovering);
     render();
   }
-  pill.addEventListener('mouseenter', () => setHovering(true));
-  // Rede de segurança: se um mouseenter se perder, o primeiro movimento sobre a pílula corrige.
-  pill.addEventListener('mousemove', () => { if (!hovering) setHovering(true); });
-  // No meio de um arraste a pílula não pode encolher nem devolver o clique para a janela de trás.
-  pill.addEventListener('mouseleave', () => { if (!drag) setHovering(false); });
+  window.island.onCursor((point) => { lastCursorPoint = point; updateHover(); });
 
   // Arraste manual: -webkit-app-region: drag engoliria, no Windows, o hover e o clique no botão.
   // Abaixo deste limiar é clique (ou duplo clique), não arraste.
@@ -1017,19 +1092,27 @@
     drag = null;
     pill.classList.remove('dragging');
     if (moved) window.island.endDrag();
-    // O mouseleave foi ignorado durante o arraste: confere onde o ponteiro terminou.
-    const rect = pill.getBoundingClientRect();
-    const isOverPill = event.clientX >= rect.left && event.clientX <= rect.right
-      && event.clientY >= rect.top && event.clientY <= rect.bottom;
-    if (isOverPill !== hovering) setHovering(isOverPill);
+    // O hover ficou congelado durante o arraste: reavalia pelo último ponto do cursor.
+    updateHover();
+    // É um clique sem arraste: o pointerdown ignora botões e o bloco do pedido, então clicar em
+    // Permitir, Negar ou Abrir nunca passa por aqui.
+    if (!moved && hovering && current.preferences?.expandOn === 'click') {
+      clickExpanded = true;
+      render();
+    }
+  });
+
+  // O renderer só pede para abrir o menu: quem monta, marca e grava é o main (SEG-08).
+  pill.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    window.island.openMenu();
   });
 
   pill.addEventListener('dblclick', (event) => {
     if (event.target.closest('button, #permission')) return;
     window.island.resetPosition();
-    // A janela sai de baixo do ponteiro sem gerar mouseleave; sem isto a pílula ficaria
-    // expandida e a janela bloqueando cliques até o mouse passar por ela de novo.
-    setHovering(false);
+    // A janela sai de baixo do ponteiro: o próximo tique do cursor (até 33 ms) recolhe a pílula e solta
+    // a captura.
   });
 </script>
 </body>

@@ -1,18 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 3
-current_phase_name: Palco fixo, animação e visual
+current_phase: 4
+current_phase_name: Entrada, preferências e comportamento no sistema
+current_plan: 6
 status: human_needed
-stopped_at: Fase 3 executada, revisada e auditada; PR aberto sem merge
-last_updated: "2026-11-21T14:18:42.392Z"
+stopped_at: "Fase 4 executada, revisada e auditada; PR aberto sem merge"
+last_updated: "2026-11-21T17:20:01.260Z"
 last_activity: 2026-11-21
-last_activity_desc: "Fase 3 executada (3 planos), revisão com 3 correções, verificação human_needed, segurança 17/17; PR aberto"
-state_head: 34e2b970910b614af86e72d70b59b3d9d3af45df
+last_activity_desc: "Fase 4 executada (6 planos), revisão com 4 correções, verificação gaps_found só por D-20 (TELA-01 parcial), segurança 26/26; PR aberto"
+state_head: f3549f7d07ffe368b80756d0f6d3824d528f8585
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 17
+  completed_plans: 17
   percent: 33
 ---
 
@@ -23,13 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-21)
 
 **Core value:** Saber de relance o que cada sessão do Claude Code está fazendo e responder ao que ela pede sem trocar de janela, sem nunca aprovar algo que o usuário não viu.
-**Current focus:** Phase 3 — Palco fixo, animação e visual
+**Current focus:** Phase 4 — Entrada, preferências e comportamento no sistema
 
 ## Current Position
 
-Phase: 3 (Palco fixo, animação e visual) — AGUARDANDO REVISÃO DO PR
-Status: 3/3 planos executados; verificação human_needed (9 itens visuais em 03-UAT.md, 1 bloqueante: 125%/150%); segurança threats_open 0
-Last activity: 2026-11-21 — Fase 3 entregue em PR, sem merge
+Phase: 4 (Entrada, preferências e comportamento no sistema) — AGUARDANDO REVISÃO DO PR
+Current Plan: 6
+Total Plans in Phase: 6
+Status: 6/6 planos executados; verificação gaps_found só pelo TELA-01 parcial (D-20, koffi não autorizado; sensor pendente da escolha do autor) e 15 itens de tela em 04-UAT.md; segurança threats_open 0
+Last activity: 2026-11-21 — Fase 4 entregue em PR, sem merge
 
 Progress: [███░░░░░░░] 33%
 
@@ -63,6 +66,12 @@ Progress: [███░░░░░░░] 33%
 | Phase 02 P02 | 4min | 2 tasks | 4 files |
 | Phase 02 P03 | 14min | 2 tasks | 3 files |
 | Phase 02 P04 | 10min | 3 tasks | 5 files |
+| Phase 04 P01 | 25 min | 2 tasks | 7 files |
+| Phase 04 P02 | 30min | 2 tasks | 8 files |
+| Phase 04 P03 | 12min | 3 tasks | 8 files |
+| Phase 4 P04 | 4min | 2 tasks | 4 files |
+| Phase 04 P05 | 8min | 2 tasks | 4 files |
+| Phase 4 P06 | 4 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -88,6 +97,20 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Phase 1]: Etapa 1 reprovada: T0 de 117,6% a 136,7% do WS de E3 e CPU ociosa acima; base continua Electron, sem Etapa 2 nem fase 3.1 (só Windows)
 - [Phase 1]: E2 inelegível (capturas PrintWindow pretas com --in-process-gpu); E_ref = E3
 - [Phase 1]: Plano 01-04: Etapa 2 pulada (Etapa 1 reprovada, D-04/BASE-03); Task 3 pending-human, halo D-03 a conferir pelo autor no PR
+- [Phase 04]: Menu nativo no clique direito: applyPreference é o único caminho de mudança de preferência e termina em refresh('rearm'); menu-will-show e menu-will-close rearmam Permitir e Negar
+- [Phase 04]: Preferências inválidas ou acima de 64 KB vão para preferences.json.<carimbo>.bad em vez de serem sobrescritas pela próxima gravação; positions.json passou a ser gravado por .tmp + rename
+- [Phase 04]: hoverStep e shouldExpand ficam inline no index.html (CSP e preload em sandbox; precedentes regras-do-gate e mola), excecao a regra de logica pura em state.js
+- [Phase 04]: island:hover sai; island:cursor (main para renderer) e island:capture (renderer para main, so booleano) entram; captura sem a opcao forward, arraste e menu a seguram
+- [Phase 04]: o evento hide de createIsland solta a captura e liga/desliga o timer do cursor, entao atalho, menu e tela cheia nao chamam updateCursorTick
+- [Phase 04]: Folga lateral por âncora em { left, right } (20/100 nas de esquerda, 100/20 nas de direita, 60/60 no centro) no clamp, no fitsWorkArea e no gate: a pílula de canto nunca sai da tela
+- [Phase 04]: Tolerância do isWithinWorkArea segue em 2 px (D-14): +2 DIP a 125% aceito, +3 recusado; setBounds logo depois de criar a janela
+- [Phase 04]: Modo cursor só troca a ilha de monitor com hasPermission === false; a prova do palco da âncora de baixo exige a sombra inteira nos casos que coexistem e a pílula inteira no pior caso combinado
+- [Phase 4]: 04-04: atalho registrado uma vez em start e liberado em will-quit; sem atalho registrado, 'Esconder' fica desabilitado
+- [Phase 4]: 04-04: um único setOpacity no main, em applyOpacity, no laço do refresh antes de sendState; pedido na tela sempre a 100%
+- [Phase 04]: applyVisibility é o único lugar que esconde e mostra a ilha; coveredByFullscreen vem do main por monitor (desconhecido = coberto)
+- [Phase 04]: Atalho passa por nextUserHidden e não inverte com toda ilha coberta por tela cheia
+- [Phase 04]: Sem sensor de tela cheia por D-20 (autorização NÃO CONCEDIDA): regra pura nextFullscreen pronta; TELA-01 parcial
+- [Phase 4]: TELA-02 volta a parcial no REQUIREMENTS.md: o ramo em tela cheia espera o sensor do TELA-01 (D-20)
 
 ### Pending Todos
 
@@ -112,6 +135,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T07:17:02.265Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-11-21T17:20:00.921Z
+Stopped at: Completed 04-06-PLAN.md
 Resume file: None
