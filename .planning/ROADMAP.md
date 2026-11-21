@@ -149,7 +149,14 @@ Plans:
   3. Um pedido de permissão novo leva a ilha até a sessão uma vez por pedido, nunca no meio de um gesto de rolagem; se o usuário rolar para longe ela não puxa de novo e o ponto segue pulsando; "concluído" e "voltou a trabalhar" nunca trocam a sessão sozinhos
   4. Pedidos simultâneos entram numa fila na ordem de chegada ("1 de N"), um pedido novo não substitui o que está sendo lido e, ao responder, a ilha vai para o próximo pendente; toda troca (scroll, snap, fila) reinicia o armamento, e Permitir/Negar atinge só o pedido que está na tela
   5. Uma sessão morta (terminal fechado sem `SessionEnd`) sai da lista de pontos e seus arquivos antigos são removidos
-**Plans**: TBD
+**Plans**: 7 plans
+- [ ] 05-01-PLAN.md — merge da main com a Fase 6 e recusa do gate com a âncora ao lado abaixo de 1220 DIP (D-20)
+- [ ] 05-02-PLAN.md — um ponto por sessão, troca pelo clique no ponto e o projeto da sessão exibida sempre à vista
+- [ ] 05-03-PLAN.md — troca pela roda com as regras do mod; roda sobre o pedido só rola o texto; "Rolar janelas inativas"
+- [ ] 05-04-PLAN.md — snap uma vez por pedido, fila "1 de N" e avanço ao próximo pendente
+- [ ] 05-05-PLAN.md — sessão morta sai da lista e o arquivo é apagado
+- [ ] 05-06-PLAN.md — mola de troca de sessão do mod e transição do acento
+- [ ] 05-07-PLAN.md — vetores do gate para toda troca de sessão e checklist "Testar manualmente"
 **UI hint**: yes
 **Research flag**: não, mas exige um teste curto de que `wheel` chega à janela não focável ("Rolar janelas inativas") e um plano próprio de testes do gate. Conferir se o hook já grava `cwd`/nome do projeto: se não, é mudança de contrato no hook (única exceção prevista a "hooks inalterados").
 
