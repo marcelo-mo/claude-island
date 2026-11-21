@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Palco fixo, animação e visual
 status: human_needed
-stopped_at: Fase 3 executada, revisada e auditada; PR aberto sem merge
-last_updated: "2026-11-21T14:18:42.392Z"
+stopped_at: Phase 4 context gathered
+last_updated: "2026-11-21T15:22:45.943Z"
 last_activity: 2026-11-21
-last_activity_desc: "Fase 3 executada (3 planos), revisão com 3 correções, verificação human_needed, segurança 17/17; PR aberto"
-state_head: 34e2b970910b614af86e72d70b59b3d9d3af45df
+last_activity_desc: Fase 3 executada (3 planos), revisão com 3 correções, verificação human_needed, segurança 17/17; PR aberto
+state_head: 196326ef3a3f211ee2906b671eb63a6b1ef1607a
 progress:
   total_phases: 6
   completed_phases: 2
@@ -112,6 +112,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T07:17:02.265Z
-Stopped at: Completed 01-04-PLAN.md
-Resume file: None
+Last session: 2026-11-21T15:22:45.676Z
+Stopped at: Phase 4 context gathered
+Resume file: .planning/phases/04-entrada-prefer-ncias-e-comportamento-no-sistema/04-CONTEXT.md
