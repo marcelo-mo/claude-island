@@ -63,6 +63,8 @@
                 scale .25s ease, translate .25s ease;
     box-shadow: 0 0 0 1px var(--ring), var(--shadow);
     cursor: grab;
+    /* Amplia a partir do centro do topo: o topo não anda e a pílula não sobe no palco. */
+    transform-origin: 50% 0;
   }
   #pill.dragging { cursor: grabbing; }
   #pill[data-state="idle"] { opacity: 0; scale: .6; translate: 0 -12px; pointer-events: none; }
@@ -438,6 +440,48 @@
     }
     return { ...spring, position: nextPosition, velocity: nextVelocity };
   }
+
+  // Nudge e ampliação no hover: valores do mod Dynamic Island for Windows (MIT, Copyright (c) 2026
+  // devcode90; ver THIRD_PARTY_NOTICES.md). O salto chama o olho para a troca de estado; o intervalo
+  // mínimo evita tremedeira quando os estados chegam em rajada.
+  const NUDGE_OFFSET_PX = -6;
+  const NUDGE_MIN_INTERVAL_MS = 450;
+  const HOVER_SCALE = 1.025;
+  // Idle fica de fora do nudge: vindo dele é a primeira exibição, e indo para ele a pílula some.
+  const NUDGE_STATES = ['running', 'waiting', 'done'];
+  // Concluído fica de fora pelo mesmo motivo de não expandir no hover: o botão Abrir compacto tem de
+  // ficar parado sob o mouse.
+  const HOVER_SCALE_STATES = ['running', 'waiting'];
+  // Limiares de repouso da escala, que é adimensional (os de pixel não servem): 0,05% de tamanho e
+  // 0,05 de velocidade, abaixo do que se vê.
+  const SCALE_REST_DISTANCE = 0.0005;
+  const SCALE_REST_SPEED = 0.05;
+
+  /**
+   * Se a troca de estado dá o nudge: true só entre dois estados diferentes de NUDGE_STATES, sem pedido
+   * de permissão na tela (hasPermission exatamente false, D-09: nada se mexe sob o cursor que vai
+   * clicar em Permitir ou Negar), sem movimento reduzido e com pelo menos NUDGE_MIN_INTERVAL_MS desde
+   * o último (lastNudgeAt null é o primeiro). Relógio para trás, entrada inválida ou ausente: false.
+   */
+  function shouldNudge(input) {
+    const { previousState, nextState, hasPermission, reducedMotion, lastNudgeAt, now } = input || {};
+    return NUDGE_STATES.includes(previousState) && NUDGE_STATES.includes(nextState) && previousState !== nextState
+      && hasPermission === false && reducedMotion === false && Number.isFinite(now)
+      && (lastNudgeAt === null || (Number.isFinite(lastNudgeAt) && now - lastNudgeAt >= NUDGE_MIN_INTERVAL_MS));
+  }
+
+  /**
+   * Escala-alvo da pílula: HOVER_SCALE só com o cursor em cima (hovering exatamente true), sem pedido
+   * na tela, sem movimento reduzido e em estado de HOVER_SCALE_STATES; senão 1. Com pedido na tela a
+   * pílula inteira fica parada, que é o jeito mais simples de os botões nunca sofrerem escala (SEG-03).
+   * Estado desconhecido não amplia.
+   */
+  function hoverScaleTarget(input) {
+    const { hovering, hasPermission, reducedMotion, state } = input || {};
+    return hovering === true && hasPermission === false && reducedMotion === false && HOVER_SCALE_STATES.includes(state)
+      ? HOVER_SCALE
+      : 1;
+  }
   // mola:fim
 
   // A CSS pausa as animações com a janela escondida; o Electron só reporta hidden com hide() ou minimizada.
@@ -478,10 +522,22 @@
   // Quando o pedido exibido mudou (id, armEpoch ou texto): abre a janela em que a roda é ignorada.
   let contentChangedAt = 0;
 
-  // Molas de tamanho da pílula (D-04, D-05). `springs` ganha as chaves width e height na primeira
-  // medição; sem mola ainda conta como em repouso. O laço de quadros só existe enquanto alguma mola
-  // se move: parada, a ilha não agenda nenhum quadro.
-  const springs = {};
+  // Molas da pílula (D-04, D-05). nudge (salto do topo, em px) e scale (ampliação do hover) são neutras
+  // e existem desde o início; width e height entram na primeira medição, e sem elas conta como em
+  // repouso. O laço de quadros só existe enquanto alguma mola se move: parada, a ilha não agenda
+  // nenhum quadro.
+  const springs = {
+    nudge: {
+      position: 0, velocity: 0, target: 0, direction: 'neutral',
+      restDistance: REST_DISTANCE_PX, restSpeed: REST_SPEED_PX_S,
+    },
+    scale: {
+      position: 1, velocity: 0, target: 1, direction: 'neutral',
+      restDistance: SCALE_REST_DISTANCE, restSpeed: SCALE_REST_SPEED,
+    },
+  };
+  // Quando o último nudge começou (performance.now); null até o primeiro.
+  let lastNudgeAt = null;
   let springLoopRunning = false;
   let lastSpringFrameAt = 0;
   // Se a pílula já esteve na tela: a primeira exibição vai direto ao tamanho, sem animar de 0.
@@ -512,6 +568,9 @@
   function applySprings() {
     if (springs.width) pill.style.width = `${springs.width.position}px`;
     if (springs.height) pill.style.height = `${springs.height.position}px`;
+    // Nudge e escala moram num só transform da pílula inteira, escrito por JS: nenhuma regra de CSS
+    // de hover ou de botão escala ou desloca nada (SEG-03).
+    pill.style.transform = `translateY(${springs.nudge.position}px) scale(${springs.scale.position})`;
   }
 
   // O conteúdo fica na largura final (--content-width) e a pílula recorta com overflow hidden, então
@@ -629,6 +688,13 @@
 
   function render() {
     renderContent();
+    // D-08: o hover amplia a pílula inteira (nunca um botão) e só sem pedido na tela.
+    springs.scale = retargetSpring(springs.scale, hoverScaleTarget({
+      hovering,
+      hasPermission: Boolean(current.permission),
+      reducedMotion: reducedMotion.matches,
+      state: current.state,
+    }));
     if (current.state === 'idle') {
       // Ilha ociosa não anima: o alvo não muda, então não há salto no fade de saída.
       pillVisible = false;
@@ -784,6 +850,20 @@
     if (shouldChime && next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
     const previousPermissionId = current.permission ? current.permission.id : null;
     const previousText = current.permission ? current.permission.text : null;
+    // O nudge decide com o estado antigo e o novo, e nunca com pedido na tela (D-07, D-09). O render do
+    // fim desta função inicia o laço das molas.
+    const stateChangedAt = performance.now();
+    if (shouldNudge({
+      previousState: current.state,
+      nextState: next.state,
+      hasPermission: Boolean(next.permission),
+      reducedMotion: reducedMotion.matches,
+      lastNudgeAt,
+      now: stateChangedAt,
+    })) {
+      lastNudgeAt = stateChangedAt;
+      springs.nudge = { ...springs.nudge, position: NUDGE_OFFSET_PX, velocity: 0, target: 0 };
+    }
     current = next;
     // A trava local só cobre a ida e volta do IPC: daqui em diante quem trava é o answeredId do main.
     // Sem isto uma recusa do main (rearme no caminho, janela escondida) travaria o pedido para sempre.
