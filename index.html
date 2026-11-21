@@ -26,6 +26,8 @@
     --done-button: #248a3d;
     /* Curva com leve "overshoot", só do ponto de estado (#dot): o tamanho da pílula vem das molas em JS. */
     --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+    /* Respiro entre o topo do palco (a janela) e a pílula; o notch o zera e cola a pílula na borda. */
+    --stage-top: 8px;
   }
   /* O Electron segue o tema do sistema em tempo real; a ilha acompanha sem reiniciar. */
   @media (prefers-color-scheme: light) {
@@ -46,13 +48,13 @@
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; background: transparent; overflow: hidden; user-select: none; }
   body {
-    display: flex; justify-content: center; align-items: flex-start; padding-top: 8px;
+    display: flex; justify-content: center; align-items: flex-start; padding-top: var(--stage-top);
     font: 15px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text);
   }
 
   #pill {
     width: max-content; height: 46px; padding: 0 17px;
-    background: var(--surface); border-radius: 23px;
+    background: var(--surface); border-radius: var(--radius, 23px);
     /* Compacta, a pílula abraça o conteúdo: nada de um lado cheio e o outro vazio.
        Expandida, a barra espalha ícone, título e indicadores pela largura toda.
        Largura e altura vêm de molas em JS, que fixam --content-width: o conteúdo fica na largura final
@@ -70,10 +72,18 @@
   #pill[data-state="idle"] { opacity: 0; scale: .6; translate: 0 -12px; pointer-events: none; }
   #pill[data-state="waiting"] { --accent: var(--waiting); }
   #pill[data-state="done"] { --accent: var(--done); }
-  #pill.expanded { width: 400px; height: 104px; border-radius: 30px; }
+  #pill.expanded { width: 400px; height: 104px; }
   #pill.expanded.has-window { height: 148px; }
   /* Com pedido de permissão a altura segue o texto do pedido (até o limite com rolagem). */
   #pill.expanded.has-permission { height: auto; padding-bottom: 16px; }
+  /* Formas do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md).
+     A pílula, o padrão, não tem regra: o raio vem de --radius (metade da altura-alvo, no máximo 44 px).
+     O seletor com :root[data-shape] tem mais especificidade que #pill e #pill.expanded, e o brilho
+     (::before) segue o raio por herança. */
+  :root[data-shape="win11"] #pill { border-radius: 8px; }
+  /* Notch: topo reto colado na borda do palco (sem o respiro de 8 px) e só a base arredondada. */
+  :root[data-shape="notch"] { --stage-top: 0px; }
+  :root[data-shape="notch"] #pill { border-radius: 0 0 16px 16px; }
   /* O contorno pulsa na cor do estado: dá para ler a situação de relance, sem mirar no ponto.
      Quem pede ação pulsa mais rápido; executando é o mais calmo para não cansar.
      O brilho pulsa por opacidade numa camada própria (::before) e a ilha parada não anima nada. */
@@ -522,6 +532,10 @@
   // Quando o pedido exibido mudou (id, armEpoch ou texto): abre a janela em que a roda é ignorada.
   let contentChangedAt = 0;
 
+  // Raio máximo da pílula, do mod (MIT, ver THIRD_PARTY_NOTICES.md): a metade da altura-alvo dá o
+  // arredondado total da compacta, e a expandida (mais alta) para em 44 px em vez de virar uma cápsula.
+  const PILL_MAX_RADIUS_PX = 44;
+
   // Molas da pílula (D-04, D-05). nudge (salto do topo, em px) e scale (ampliação do hover) são neutras
   // e existem desde o início; width e height entram na primeira medição, e sem elas conta como em
   // repouso. O laço de quadros só existe enquanto alguma mola se move: parada, a ilha não agenda
@@ -578,6 +592,9 @@
   // alvo; senão cada eixo troca de alvo sem salto (D-02).
   function setSizeTarget(target, instant) {
     pill.style.setProperty('--content-width', `${target.contentWidth}px`);
+    // Metade da altura-alvo, não da animada: o raio não balança junto com a mola. Win11 e notch
+    // ignoram esta variável pela especificidade das regras de forma.
+    pill.style.setProperty('--radius', `${Math.min(target.height / 2, PILL_MAX_RADIUS_PX)}px`);
     if (!springs.width || instant) {
       for (const [axis, value] of [['width', target.width], ['height', target.height]]) {
         springs[axis] = {
