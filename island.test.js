@@ -298,7 +298,7 @@ test('THEMES tem 9 itens e começa por auto', () => {
 });
 
 // Palco da Fase 2, de onde se veio: o deslocamento salvo é relativo à posição padrão, então trocar o
-// palco não pode mover a pílula de quem já tem posição salva (D-14).
+// palco não pode mover a pílula de quem já tem posição salva.
 const OLD_WINDOW_SIZE = { width: 440, height: 324 };
 const MONITOR_WORK_AREA = { x: 0, y: 0, width: 1920, height: 1040 };
 
@@ -330,7 +330,7 @@ test('com o palco novo a pílula expandida ainda encosta nas duas bordas do moni
   assert.equal(clamp({ x: 5000, y: 0 }).x + HORIZONTAL_SLACK + 400, MONITOR_WORK_AREA.x + MONITOR_WORK_AREA.width);
 });
 
-test('ilha salva na borda de baixo sobe o necessário para a janela caber na área útil (exceção aceita ao D-14)', () => {
+test('ilha salva na borda de baixo sobe o necessário para a janela caber na área útil (exceção aceita)', () => {
   // 716 = 1040 − 324: o mais baixo que a pílula ia com o palco antigo.
   const saved = positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, { x: 0, y: 716 });
   const clamped = clampIslandPosition(saved, MONITOR_WORK_AREA, WINDOW_SIZE, HORIZONTAL_SLACK);

@@ -393,7 +393,7 @@ test('render trava pelo answeredId e só libera Permitir lido; id ou época nova
   assert.match(rendererSource, /if \(epochChanged \|\| \(permissionId && permissionId !== previousPermissionId\)\) \{\s*lastArmEpoch = next\.armEpoch;\s*restartArming\(\);/);
 });
 
-// Travas de regressão (texto) das preferências visuais (D-16): o main só lê o arquivo, uma vez, sem
+// Travas de regressão (texto) das preferências visuais: o main só lê o arquivo, uma vez, sem
 // vigiá-lo nem gravá-lo (a gravação, o menu e a migração são da Fase 4), e o renderer só aplica o
 // que veio no payload. Canal novo para o renderer escolher preferência quebraria RENDERER_CHANNELS.
 test('o main lê as preferências uma única vez e nunca as vigia nem as grava', () => {
@@ -416,7 +416,7 @@ test('o renderer aplica as preferências do payload e rearma se mudaram com pedi
   assert.ok(apply.slice(0, apply.indexOf('\n  }\n')).includes('if (changed && current.permission) restartArming();'));
 });
 
-// Bloco puro da mola (D-03): inline como o das regras do gate, extraído e executado num contexto
+// Bloco puro da mola: inline como o das regras do gate, extraído e executado num contexto
 // vazio. A prova de comportamento é a simulação da própria função que a ilha roda.
 const SPRING_START = '// mola:inicio';
 const SPRING_END = '// mola:fim';
@@ -624,15 +624,15 @@ test('render mede o alvo no DOM com o conteúdo final e liga as molas', () => {
   assert.match(rendererLf, /--content-width/);
 });
 
-test('os botões só armam com o retângulo assentado e todas as molas paradas (T-03-01)', () => {
+test('os botões só armam com o retângulo assentado e todas as molas paradas', () => {
   const wait = functionBody('waitUntilSettled');
   assert.ok(wait.includes('if (canArm({ settled: step.settled, springsAtRest: allSpringsAtRest() })) {'));
   assert.equal(wait.includes('if (step.settled) {'), false, 'armar só pelo retângulo deixa botão recortado armar');
   assert.match(wait, /armed = true;\s*armedAt = now;\s*armedRect = rect;\s*render\(\);\s*return;/);
 });
 
-// Nudge e ampliação no hover (D-07, D-08, D-09): as duas decisões são puras e a tabela de casos é a
-// prova de que nunca valem com pedido na tela (SEG-03) nem com movimento reduzido (D-25).
+// Nudge e ampliação no hover: as duas decisões são puras e a tabela de casos é a
+// prova de que nunca valem com pedido na tela (SEG-03) nem com movimento reduzido.
 test('nudge e hover: as constantes são as do mod', () => {
   assert.equal(spring.NUDGE_OFFSET_PX, -6);
   assert.equal(spring.NUDGE_MIN_INTERVAL_MS, 450);
@@ -744,7 +744,7 @@ test('a cola liga o nudge e o hover às molas neutras, nunca com pedido na tela'
   assert.match(rendererLf, /#pill \{[^}]*transform-origin: 50% 0;/);
 });
 
-// Palco fixo (D-13): a janela nunca muda de tamanho durante a animação, então ela tem de caber o pico
+// Palco fixo: a janela nunca muda de tamanho durante a animação, então ela tem de caber o pico
 // das molas no pior caso. As medidas da pílula saem do CSS do próprio index.html: um número estimado
 // à mão envelheceria calado quando uma regra mudasse.
 const styleRules = rendererLf.slice(rendererLf.indexOf('<style>'), rendererLf.indexOf('</style>')).replace(/\/\*[^]*?\*\//g, '');
@@ -818,7 +818,7 @@ const SHADOW_MARGIN_PX = 20;
 
 // Maior posição que a mola de `from` a `to` alcança, em dois casos: (a) crescer de `from` até `to` e
 // (b) encolher de `to` até `from` com um alvo novo (`to`) em cada quadro de 16 ms do encolhimento,
-// que é o pior caso de uma pílula interrompida (D-02).
+// que é o pior caso de uma pílula interrompida.
 function worstPeak(rules, from, to, style, speed, frameMs = 16) {
   const settle = (start) => {
     let current = start;

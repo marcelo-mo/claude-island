@@ -309,7 +309,7 @@
   // a CSP não aceita script externo; o gate.test.js lê o texto entre os marcadores e o executa num
   // contexto vazio, então o teste roda o mesmo código que a ilha roda, e um predicado que tocasse
   // DOM ou relógio global quebraria lá. Aqui só entram constantes e funções que nunca lançam.
-  // ponytail: regras puras inline, testadas por extração em node:vm. A Fase 3 manteve tudo inline (D-03); mover para um arquivo só quando houver reuso fora do renderer.
+  // ponytail: regras puras inline, testadas por extração em node:vm. A Fase 3 manteve tudo inline; mover para um arquivo só quando houver reuso fora do renderer.
 
   // A ilha abre sozinha quando chega um pedido; os botões só valem depois deste tempo na tela,
   // para um clique que já ia para outra janela não virar aprovação. O main.js aplica a mesma
@@ -403,7 +403,7 @@
 
   // mola:inicio
   // Física das molas de tamanho da pílula. Fica inline pelo mesmo motivo do bloco acima (a CSP não
-  // aceita script externo e o D-03 manteve a CSP); o gate.test.js executa o texto entre os marcadores
+  // aceita script externo e a CSP ficou igual); o gate.test.js executa o texto entre os marcadores
   // num contexto vazio. Pureza: só constantes e funções que nunca lançam, sem DOM nem relógio global.
   // ponytail: mola inline. Mover para um spring.js exige script-src 'self' na CSP e trocar a extração do teste; adiado até haver reuso fora do renderer.
 
@@ -449,7 +449,7 @@
   }
 
   /**
-   * Novo alvo sem salto (D-02): devolve uma cópia com a mesma posição e a mesma velocidade, e só a
+   * Novo alvo sem salto: devolve uma cópia com a mesma posição e a mesma velocidade, e só a
    * direção é recalculada comparando o alvo novo com a posição atual (igual mantém a anterior; a
    * neutra continua neutra). Alvo não finito ou igual ao atual devolve cópia sem mudança.
    */
@@ -481,7 +481,7 @@
 
   /**
    * Avança a mola um quadro: devolve uma cópia, nunca muta. Massa 1, Euler semi-implícito em passos
-   * fixos de SPRING_STEP_MS; a velocidade multiplica o tempo simulado (D-01), então 2× assenta em
+   * fixos de SPRING_STEP_MS; a velocidade multiplica o tempo simulado, então 2× assenta em
    * metade do tempo com o mesmo pico. frameMs é limitado a [0, SPRING_MAX_FRAME_MS] e speed inválida
    * vale 1. Ao ficar a menos de restDistance do alvo e abaixo de restSpeed, assenta: posição no
    * alvo e velocidade 0. Posição, velocidade ou alvo não finitos devolvem a mola parada (snapSpring).
@@ -526,7 +526,7 @@
 
   /**
    * Se a troca de estado dá o nudge: true só entre dois estados diferentes de NUDGE_STATES, sem pedido
-   * de permissão na tela (hasPermission exatamente false, D-09: nada se mexe sob o cursor que vai
+   * de permissão na tela (hasPermission exatamente false, nada se mexe sob o cursor que vai
    * clicar em Permitir ou Negar), sem movimento reduzido e com pelo menos NUDGE_MIN_INTERVAL_MS desde
    * o último (lastNudgeAt null é o primeiro). Relógio para trás, entrada inválida ou ausente: false.
    */
@@ -593,7 +593,7 @@
   // arredondado total da compacta, e a expandida (mais alta) para em 44 px em vez de virar uma cápsula.
   const PILL_MAX_RADIUS_PX = 44;
 
-  // Molas da pílula (D-04, D-05). nudge (salto do topo, em px) e scale (ampliação do hover) são neutras
+  // Molas da pílula. nudge (salto do topo, em px) e scale (ampliação do hover) são neutras
   // e existem desde o início; width e height entram na primeira medição, e sem elas conta como em
   // repouso. O laço de quadros só existe enquanto alguma mola se move: parada, a ilha não agenda
   // nenhum quadro.
@@ -615,7 +615,7 @@
   let pillVisible = false;
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
-  // Tamanho que a pílula teria agora, lido do layout com o conteúdo final (D-06): nada de largura
+  // Tamanho que a pílula teria agora, lido do layout com o conteúdo final: nada de largura
   // presa a uma fonte. Tira as três medidas inline, lê e devolve tudo no mesmo turno, sem pintura
   // intermediária. offsetWidth e offsetHeight ignoram scale e translate; contentWidth é a largura
   // que o conteúdo ocupa por dentro do padding.
@@ -645,8 +645,8 @@
   }
 
   // O conteúdo fica na largura final (--content-width) e a pílula recorta com overflow hidden, então
-  // a altura do texto não muda enquanto a largura anima (D-05). `instant` cria as molas já paradas no
-  // alvo; senão cada eixo troca de alvo sem salto (D-02).
+  // a altura do texto não muda enquanto a largura anima. `instant` cria as molas já paradas no
+  // alvo; senão cada eixo troca de alvo sem salto.
   function setSizeTarget(target, instant) {
     pill.style.setProperty('--content-width', `${target.contentWidth}px`);
     // Metade da altura-alvo, não da animada: o raio não balança junto com a mola. Win11 e notch
@@ -674,8 +674,8 @@
   }
 
   // Único caminho por onde toda animação começa, então nenhum alvo novo anima com movimento reduzido
-  // nem com a janela escondida (D-25): as molas vão direto ao alvo. Com tudo parado nenhum quadro
-  // roda (D-04).
+  // nem com a janela escondida: as molas vão direto ao alvo. Com tudo parado nenhum quadro
+  // roda.
   function startSpringLoop() {
     if (reducedMotion.matches || document.hidden) {
       snapAllSprings();
@@ -691,7 +691,7 @@
     const now = performance.now();
     const frameMs = now - lastSpringFrameAt;
     lastSpringFrameAt = now;
-    // Estilo e velocidade vêm do payload do main (D-17); sem eles springStep usa o Padrão a 1×.
+    // Estilo e velocidade vêm do payload do main; sem eles springStep usa o Padrão a 1×.
     const { animationStyle, animationSpeed } = current.preferences || {};
     for (const axis of Object.keys(springs)) {
       springs[axis] = springStep(springs[axis], frameMs, animationStyle, animationSpeed);
@@ -762,7 +762,7 @@
 
   function render() {
     renderContent();
-    // D-08: o hover amplia a pílula inteira (nunca um botão) e só sem pedido na tela.
+    // o hover amplia a pílula inteira (nunca um botão) e só sem pedido na tela.
     springs.scale = retargetSpring(springs.scale, hoverScaleTarget({
       hovering,
       hasPermission: Boolean(current.permission),
@@ -827,7 +827,7 @@
       previousRect = rect;
       stableSince = step.stableSince;
       // Retângulo parado não basta: com o conteúdo na largura final os botões podem estar parados e
-      // ainda recortados enquanto a altura cresce (D-10).
+      // ainda recortados enquanto a altura cresce.
       if (canArm({ settled: step.settled, springsAtRest: allSpringsAtRest() })) {
         armed = true;
         armedAt = now;
@@ -924,7 +924,7 @@
     if (shouldChime && next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
     const previousPermissionId = current.permission ? current.permission.id : null;
     const previousText = current.permission ? current.permission.text : null;
-    // O nudge decide com o estado antigo e o novo, e nunca com pedido na tela (D-07, D-09). O render do
+    // O nudge decide com o estado antigo e o novo, e nunca com pedido na tela. O render do
     // fim desta função inicia o laço das molas.
     const stateChangedAt = performance.now();
     if (shouldNudge({

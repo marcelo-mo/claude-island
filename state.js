@@ -237,7 +237,7 @@ function nextShownPermission(shown, permissionId, now, rearm) {
 
 // A janela é um palco fixo, maior que a pílula, e a sobra é transparente. O tamanho cobre o pico da mola do
 // estilo Elástico a 2× com a ampliação do hover, o nudge e a sombra (conferido por simulação em
-// gate.test.js) e nunca muda durante a animação, para a pílula nunca ser recortada (D-13).
+// gate.test.js) e nunca muda durante a animação, para a pílula nunca ser recortada.
 // ponytail: um palco só para todos os monitores e escalas de DPI (cada monitor tem o seu renderer e as
 // suas molas). Não validado em hardware com DPI misto; se recortar, dimensionar o palco por monitor.
 const WINDOW_SIZE = Object.freeze({ width: 520, height: 410 });
@@ -254,7 +254,7 @@ function defaultIslandPosition(workArea, windowSize) {
 /**
  * Posição da janela a partir do deslocamento salvo pelo usuário. O deslocamento é relativo à posição
  * padrão, que centra pela largura da janela, então trocar o tamanho do palco preserva o centro
- * horizontal e o topo da pílula sem converter nada (D-14). Devolve a posição padrão quando o
+ * horizontal e o topo da pílula sem converter nada. Devolve a posição padrão quando o
  * deslocamento não é um objeto com x e y numéricos: o arquivo é editável à mão, e dado em disco não é
  * confiável. Não muta nada. Quem prende a janela na área útil é clampIslandPosition, e por isso uma
  * ilha salva nos últimos ~86 px de baixo do monitor sobe até caber (exceção aceita: o gate exige a
