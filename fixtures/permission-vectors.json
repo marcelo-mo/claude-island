@@ -5,6 +5,10 @@
     "invalid-behavior",
     "nothing-shown",
     "echo-mismatch",
+    "already-decided",
+    "window-hidden",
+    "covered-by-fullscreen",
+    "outside-visible-area",
     "not-armed"
   ],
   "acceptDecision": [
@@ -474,6 +478,570 @@
         "accept": false,
         "reason": "echo-mismatch"
       }
+    },
+    {
+      "name": "recusa pedido já decidido (primeiro clique vence)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "already-decided"
+      }
+    },
+    {
+      "name": "aceita quando o pedido decidido é outro",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "allow"
+      }
+    },
+    {
+      "name": "recusa janela invisível",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": false,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "window-hidden"
+      }
+    },
+    {
+      "name": "recusa fato de visibilidade ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "window-hidden"
+      }
+    },
+    {
+      "name": "recusa visibilidade em texto \"true\"",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": "true",
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "window-hidden"
+      }
+    },
+    {
+      "name": "recusa janela marcada como coberta por tela cheia",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": true,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "covered-by-fullscreen"
+      }
+    },
+    {
+      "name": "recusa fato de tela cheia ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "covered-by-fullscreen"
+      }
+    },
+    {
+      "name": "recusa janela fora da área visível",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": false
+      },
+      "expect": {
+        "accept": false,
+        "reason": "outside-visible-area"
+      }
+    },
+    {
+      "name": "recusa fato de área visível ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false
+      },
+      "expect": {
+        "accept": false,
+        "reason": "outside-visible-area"
+      }
+    },
+    {
+      "name": "eco divergente vence pedido já decidido",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "pedido já decidido vence janela invisível",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "windowVisible": false,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "already-decided"
+      }
+    },
+    {
+      "name": "janela invisível vence o relógio (0 ms)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1000,
+        "decidedId": null,
+        "windowVisible": false,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "window-hidden"
+      }
+    },
+    {
+      "name": "fora da área visível vence o relógio (0 ms)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": false
+      },
+      "expect": {
+        "accept": false,
+        "reason": "outside-visible-area"
+      }
+    }
+  ],
+  "isWithinWorkArea": [
+    {
+      "name": "posição padrão no topo central",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "encostada na folga esquerda",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -20,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "2 px além da folga esquerda (tolerância de arredondamento)",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -22,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "3 px além da folga esquerda",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -23,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "encostada na folga direita",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 1500,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "2 px além da folga direita",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 1502,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "3 px além da folga direita",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 1503,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "2 px acima do topo",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": -2,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "3 px acima do topo",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": -3,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "2 px abaixo do fim",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": 718,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "3 px abaixo do fim",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": 719,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "monitor secundário à esquerda: posição padrão",
+      "input": {
+        "workArea": {
+          "x": -1920,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -1180,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "monitor secundário à esquerda: 2 px além da folga",
+      "input": {
+        "workArea": {
+          "x": -1920,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -1942,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": true
+    },
+    {
+      "name": "monitor secundário à esquerda: 3 px além da folga",
+      "input": {
+        "workArea": {
+          "x": -1920,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -1943,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "janela inteira em outro monitor",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": -1180,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "bounds ausente",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20
+      },
+      "expect": false
+    },
+    {
+      "name": "bounds com campo em texto",
+      "input": {
+        "workArea": {
+          "x": 0,
+          "y": 0,
+          "width": 1920,
+          "height": 1040
+        },
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": "10",
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
+    },
+    {
+      "name": "workArea ausente",
+      "input": {
+        "horizontalSlack": 20,
+        "bounds": {
+          "x": 740,
+          "y": 0,
+          "width": 440,
+          "height": 324
+        }
+      },
+      "expect": false
     }
   ]
 }

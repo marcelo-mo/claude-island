@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { acceptDecision, PERMISSION_ARM_MS } = require('./state');
+const { acceptDecision, isWithinWorkArea, PERMISSION_ARM_MS } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
 
@@ -17,5 +17,12 @@ test('o fixture não tem motivo digitado errado nem motivo sem cobertura', () =>
 for (const vector of vectors.acceptDecision) {
   test(`acceptDecision: ${vector.name}`, () => {
     assert.deepEqual(acceptDecision(vector.input), vector.expect);
+  });
+}
+
+for (const vector of vectors.isWithinWorkArea) {
+  test(`isWithinWorkArea: ${vector.name}`, () => {
+    const { bounds, workArea, horizontalSlack } = vector.input;
+    assert.equal(isWithinWorkArea(bounds, workArea, horizontalSlack), vector.expect);
   });
 }
