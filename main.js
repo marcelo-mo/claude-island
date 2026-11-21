@@ -6,16 +6,11 @@ const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
-  SECURE_WEB_PREFERENCES, isIslandSender,
+  SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
+  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
 } = require('./state');
 const { focusWindow } = require('./window');
 
-// A janela é maior que a pílula para caber a versão expandida; a sobra é transparente.
-// A altura é a da pílula com um pedido de permissão no tamanho máximo (texto com rolagem).
-const WINDOW_SIZE = { width: 440, height: 324 };
-// A pílula expandida (400px) fica centrada na janela (440px): sobram 20px transparentes de
-// cada lado, que podem sair da tela para a pílula encostar na borda do monitor.
-const HORIZONTAL_SLACK = 20;
 const POLL_MS = 400;
 // A ilha carrega por esta URL e só aceita mensagens da página que está nela (ver islandOf).
 const ISLAND_URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
@@ -45,6 +40,9 @@ let lastSent = JSON.stringify(lastPickedState);
 // Último pedido cuja decisão foi gravada. Primeiro clique vence: só o main enxerga as duas ilhas
 // (cada renderer só trava o próprio botão), então é ele que recusa a segunda decisão.
 let decidedPermissionId = null;
+// Preferências visuais, lidas uma vez na subida. O renderer só recebe o valor pelo estado: nunca
+// escolhe nem envia preferência (SEG-08).
+let preferences = DEFAULT_PREFERENCES;
 
 const positionsFile = () => path.join(app.getPath('userData'), 'positions.json');
 
@@ -54,6 +52,14 @@ function loadSavedOffsets() {
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) savedOffsets = parsed;
   } catch {
     // arquivo ausente ou corrompido: a ilha sobe na posição padrão
+  }
+}
+
+function loadPreferences() {
+  try {
+    preferences = normalizePreferences(JSON.parse(fs.readFileSync(PREFERENCES_FILE, 'utf8')));
+  } catch {
+    // arquivo ausente ou corrompido: valem os padrões
   }
 }
 
@@ -121,7 +127,7 @@ function readSessions() {
   }
   const sessions = [];
   for (const file of files) {
-    if (!file.endsWith('.json')) continue;
+    if (!isSessionFile(file)) continue;
     try {
       const session = JSON.parse(fs.readFileSync(path.join(STATE_DIR, file), 'utf8'));
       session.contextPercent = readContextPercent(path.basename(file, '.json'));
@@ -147,11 +153,7 @@ function moveIsland(island, position, workArea) {
 }
 
 function savedPosition(display) {
-  const standard = defaultIslandPosition(display.workArea, WINDOW_SIZE);
-  const offset = savedOffsets[display.id];
-  // O arquivo é editável à mão: só vale deslocamento numérico.
-  if (!offset || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return standard;
-  return { x: standard.x + offset.x, y: standard.y + offset.y };
+  return positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id]);
 }
 
 // Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.
@@ -161,9 +163,14 @@ function sendState(island) {
   const isFirstIsland = island === islands.values().next().value;
   // answeredId faz a outra ilha travar os botões do pedido que uma ilha já decidiu; armEpoch
   // sobe a cada troca, reexibição ou mudança de monitor, e o renderer rearma quando ele muda.
+  // fitsWorkArea é a mesma conferência que o gate faz no clique: com o palco maior que a área útil
+  // (monitor baixo, DPI alto) toda decisão seria recusada, então o renderer nem oferece os botões.
+  // Só pode desabilitar: o gate continua sendo quem decide.
+  const display = displayOf(island);
+  const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK);
   island.webContents.send(
     'island:state',
-    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch },
+    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea },
     isFirstIsland,
   );
 }
@@ -343,6 +350,7 @@ function registerIpcHandlers() {
 
 function start() {
   loadSavedOffsets();
+  loadPreferences();
   removeOrphanDecisions();
   writeHeartbeat();
   setInterval(writeHeartbeat, HEARTBEAT_INTERVAL_MS);

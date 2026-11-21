@@ -1829,5 +1829,15 @@
     { "name": "URL esperada vazia recusa", "input": { "isMainFrame": true, "url": "", "islandUrl": "" }, "expect": false },
     { "name": "codificação malformada recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/%E0%A4%A/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
     { "name": "entrada ausente recusa", "input": null, "expect": false }
+  ],
+  "canArm": [
+    { "name": "retângulo assentado e molas paradas arma", "input": { "settled": true, "springsAtRest": true }, "expect": true },
+    { "name": "retângulo assentado com mola em movimento não arma", "input": { "settled": true, "springsAtRest": false }, "expect": false },
+    { "name": "molas paradas com retângulo ainda andando não arma", "input": { "settled": false, "springsAtRest": true }, "expect": false },
+    { "name": "springsAtRest ausente não arma", "input": { "settled": true }, "expect": false },
+    { "name": "springsAtRest numérico (1) não arma", "input": { "settled": true, "springsAtRest": 1 }, "expect": false },
+    { "name": "springsAtRest em texto não arma", "input": { "settled": true, "springsAtRest": "true" }, "expect": false },
+    { "name": "settled em texto não arma", "input": { "settled": "true", "springsAtRest": true }, "expect": false },
+    { "name": "entrada ausente não arma", "input": null, "expect": false }
   ]
 }

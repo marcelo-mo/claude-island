@@ -6,6 +6,8 @@ const path = require('node:path');
 const {
   eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
   keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh, PERMISSION_TEXT_LIMIT,
+  normalizePreferences, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES, isSessionFile,
+  WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -238,4 +240,114 @@ test('settings.json que é link (dotfiles) continua link e o alvo recebe os hook
   assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
   assert.equal(JSON.parse(fs.readFileSync(target, 'utf8')).model, 'x');
   assert.ok(JSON.parse(fs.readFileSync(target, 'utf8')).hooks.Stop);
+});
+
+test('normalizePreferences: entrada que não é objeto devolve o padrão', () => {
+  for (const input of [undefined, null, [], 'nord', 7, true]) {
+    assert.deepEqual(normalizePreferences(input), DEFAULT_PREFERENCES);
+  }
+});
+
+test('normalizePreferences: objeto válido completo volta igual', () => {
+  const valid = { theme: 'nord', shape: 'notch', animationStyle: 'bouncy', animationSpeed: 2 };
+  assert.deepEqual(normalizePreferences(valid), valid);
+});
+
+test('normalizePreferences: cada chave inválida cai sozinha no padrão', () => {
+  const valid = { theme: 'nord', shape: 'notch', animationStyle: 'bouncy', animationSpeed: 2 };
+  assert.deepEqual(normalizePreferences({ ...valid, theme: 'NORD' }), { ...valid, theme: 'auto' });
+  assert.deepEqual(normalizePreferences({ ...valid, shape: 3 }), { ...valid, shape: 'pill' });
+  assert.deepEqual(normalizePreferences({ ...valid, animationStyle: 'elastico' }), { ...valid, animationStyle: 'default' });
+  // 'toString' e 'constructor' existem no protótipo: a lista decide, não a busca por propriedade.
+  assert.equal(normalizePreferences({ theme: 'constructor' }).theme, 'auto');
+});
+
+test('normalizePreferences: velocidade só vale dentro da faixa e como número', () => {
+  for (const speed of [0.5, 1, 1.5, 2]) assert.equal(normalizePreferences({ animationSpeed: speed }).animationSpeed, speed);
+  for (const speed of [0.49, 2.01, 0, -1, NaN, Infinity, '1', null, undefined]) {
+    assert.equal(normalizePreferences({ animationSpeed: speed }).animationSpeed, 1, `velocidade ${String(speed)}`);
+  }
+  assert.equal(normalizePreferences({}).animationSpeed, 1);
+});
+
+test('normalizePreferences: descarta chave desconhecida, não muta a entrada e devolve objeto novo', () => {
+  const input = { theme: 'slate', opacity: 0.5 };
+  const snapshot = JSON.stringify(input);
+  const result = normalizePreferences(input);
+  assert.deepEqual(Object.keys(result).sort(), ['animationSpeed', 'animationStyle', 'shape', 'theme']);
+  assert.equal(result.theme, 'slate');
+  assert.equal(JSON.stringify(input), snapshot);
+  assert.notEqual(normalizePreferences({}), DEFAULT_PREFERENCES);
+  assert.notEqual(normalizePreferences(undefined), DEFAULT_PREFERENCES);
+});
+
+test('DEFAULT_PREFERENCES está congelado e cada valor pertence à lista dele', () => {
+  assert.ok(Object.isFrozen(DEFAULT_PREFERENCES));
+  assert.ok(THEMES.includes(DEFAULT_PREFERENCES.theme));
+  assert.ok(SHAPES.includes(DEFAULT_PREFERENCES.shape));
+  assert.ok(ANIMATION_STYLES.includes(DEFAULT_PREFERENCES.animationStyle));
+  assert.equal(DEFAULT_PREFERENCES.animationSpeed, 1);
+  for (const list of [THEMES, SHAPES, ANIMATION_STYLES]) assert.ok(Object.isFrozen(list));
+});
+
+test('THEMES tem 9 itens e começa por auto', () => {
+  assert.equal(THEMES.length, 9);
+  assert.equal(THEMES[0], 'auto');
+  assert.deepEqual([...SHAPES], ['pill', 'notch', 'win11']);
+  assert.deepEqual([...ANIMATION_STYLES], ['smooth', 'default', 'bouncy', 'snappy']);
+});
+
+// Palco da Fase 2, de onde se veio: o deslocamento salvo é relativo à posição padrão, então trocar o
+// palco não pode mover a pílula de quem já tem posição salva.
+const OLD_WINDOW_SIZE = { width: 440, height: 324 };
+const MONITOR_WORK_AREA = { x: 0, y: 0, width: 1920, height: 1040 };
+
+test('positionFromSavedOffset: sem deslocamento válido vale a posição padrão, e nada é mutado', () => {
+  const standard = defaultIslandPosition(MONITOR_WORK_AREA, WINDOW_SIZE);
+  for (const offset of [undefined, null, { x: 'a', y: 0 }, { x: NaN, y: 0 }, { x: 0 }, { x: Infinity, y: 0 }, 'x', 5, []]) {
+    assert.deepEqual(positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset), standard, `deslocamento ${JSON.stringify(offset)}`);
+  }
+  const offset = Object.freeze({ x: 300, y: 120 });
+  assert.doesNotThrow(() => positionFromSavedOffset(Object.freeze({ ...MONITOR_WORK_AREA }), WINDOW_SIZE, offset));
+  assert.deepEqual({ ...offset }, { x: 300, y: 120 });
+});
+
+test('positionFromSavedOffset: trocar o palco preserva o centro horizontal e o topo da pílula', () => {
+  const offset = { x: 300, y: 120 };
+  const standard = defaultIslandPosition(MONITOR_WORK_AREA, WINDOW_SIZE);
+  const position = positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset);
+  assert.deepEqual(position, { x: standard.x + 300, y: 120 });
+  const before = positionFromSavedOffset(MONITOR_WORK_AREA, OLD_WINDOW_SIZE, offset);
+  assert.equal(position.x + WINDOW_SIZE.width / 2, before.x + OLD_WINDOW_SIZE.width / 2, 'o centro horizontal andou');
+  assert.equal(position.y, before.y, 'o topo andou');
+});
+
+test('com o palco novo a pílula expandida ainda encosta nas duas bordas do monitor', () => {
+  const clamp = (offset) => clampIslandPosition(
+    positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset), MONITOR_WORK_AREA, WINDOW_SIZE, HORIZONTAL_SLACK,
+  );
+  assert.equal(clamp({ x: -5000, y: 0 }).x + HORIZONTAL_SLACK, MONITOR_WORK_AREA.x);
+  assert.equal(clamp({ x: 5000, y: 0 }).x + HORIZONTAL_SLACK + 400, MONITOR_WORK_AREA.x + MONITOR_WORK_AREA.width);
+});
+
+test('ilha salva na borda de baixo sobe o necessário para a janela caber na área útil (exceção aceita)', () => {
+  // 716 = 1040 − 324: o mais baixo que a pílula ia com o palco antigo.
+  const saved = positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, { x: 0, y: 716 });
+  const clamped = clampIslandPosition(saved, MONITOR_WORK_AREA, WINDOW_SIZE, HORIZONTAL_SLACK);
+  assert.equal(clamped.y, MONITOR_WORK_AREA.height - WINDOW_SIZE.height);
+  assert.equal(saved.y - clamped.y, WINDOW_SIZE.height - OLD_WINDOW_SIZE.height, 'subiu mais ou menos que o palco cresceu');
+  assert.equal(isWithinWorkArea({ ...clamped, ...WINDOW_SIZE }, MONITOR_WORK_AREA, HORIZONTAL_SLACK), true);
+});
+
+test('na posição padrão a janela do palco novo está dentro da área útil e a decisão segue aceita', () => {
+  const standard = defaultIslandPosition(MONITOR_WORK_AREA, WINDOW_SIZE);
+  assert.equal(isWithinWorkArea({ ...standard, ...WINDOW_SIZE }, MONITOR_WORK_AREA, HORIZONTAL_SLACK), true);
+});
+
+test('só arquivo de sessão entra na leitura da pasta: o preferences.json nunca vira sessão fantasma', () => {
+  assert.equal(isSessionFile('abc-123.json'), true);
+  assert.equal(isSessionFile('preferences.json'), false);
+  assert.equal(isSessionFile('.heartbeat'), false);
+  assert.equal(isSessionFile('abc.json.tmp'), false);
+  assert.equal(isSessionFile(undefined), false);
 });

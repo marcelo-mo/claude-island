@@ -17,19 +17,36 @@
     --icon-ink: #000; /* traço do check e da exclamação sobre o selo colorido */
     --text: #fff;
     --muted: #a1a1a6;
-    --shadow: 0 4px 14px rgba(0, 0, 0, .35);
+    --border: rgb(255 255 255 / .12);
+    /* Material da pílula (camadas e números do mod Dynamic Island for Windows, MIT, Copyright (c) 2026
+       devcode90; ver THIRD_PARTY_NOTICES.md). --depth escurece o rodapé da pílula e --shadow é estática. */
+    --depth: .06;
+    --shadow: 0 5px 14px rgb(0 0 0 / .30), 0 1px 3px rgb(0 0 0 / .20);
+    /* Bloco de permissão: tokens próprios e opacos, para o que o usuário lê antes de aprovar não depender
+       do tema (o visual.test.js mede o contraste deles nos 10 casos). Cava o bloco nos temas escuros. */
+    --perm-bg: color-mix(in srgb, #000 55%, var(--surface));
+    --perm-text: var(--text);
+    /* O bloco só existe em "precisa de você" (pickState), então o acento ali é sempre o âmbar; e um token
+       declarado no :root é resolvido no :root, onde o acento seria sempre o laranja de "trabalhando". */
+    --perm-label: var(--waiting);
+    --perm-hint: var(--muted);
+    --perm-deny-border: color-mix(in srgb, var(--text) 60%, var(--surface));
     /* Botão no padrão do quaint-money: --primary mais escuro com --primary-foreground,
        fixo em todos os estados para o rótulo claro não cair sobre âmbar ou verde. */
     --button: oklch(0.646 0.222 41.116);
     --button-text: oklch(0.98 0.016 73.684);
     /* Verde mais escuro que o do ponto: o rótulo branco precisa de contraste nos dois temas. */
     --done-button: #248a3d;
-    /* Curva com leve "overshoot": é o que dá a sensação elástica da ilha. */
+    /* Curva com leve "overshoot", só do ponto de estado (#dot): o tamanho da pílula vem das molas em JS. */
     --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+    /* Respiro entre o topo do palco (a janela) e a pílula; o notch o zera e cola a pílula na borda. */
+    --stage-top: 8px;
   }
-  /* O Electron segue o tema do sistema em tempo real; a ilha acompanha sem reiniciar. */
+  /* O Electron segue o tema do sistema em tempo real; a ilha acompanha sem reiniciar. Só o tema auto
+     (ou sem atributo, antes do primeiro estado) segue o sistema: um tema escuro escolhido num sistema
+     claro não herda as cores de estado claras. */
   @media (prefers-color-scheme: light) {
-    :root {
+    :root:not([data-theme]), :root[data-theme="auto"] {
       --running: oklch(0.646 0.222 41.116); /* --primary do tema claro do quaint-money */
       --waiting: #f08c00;
       --done: #248a3d;
@@ -39,43 +56,95 @@
       --icon-ink: #fff;
       --text: #1d1d1f;
       --muted: #6e6e73;
-      /* Sobre janelas claras a pílula branca some sem um contorno. */
-      --shadow: 0 0 0 1px rgba(0, 0, 0, .1), 0 4px 14px rgba(0, 0, 0, .18);
+      --border: rgb(0 0 0 / .10);
+      /* Profundidade do mod x0,55 nos temas claros; o contorno de 1 px (--contour) é o que destaca a pílula clara. */
+      --depth: .033;
+      --shadow: 0 5px 14px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .12);
+      --perm-bg: color-mix(in srgb, var(--text) 4%, var(--surface));
+      /* Nos claros a cor de estado não chega a 4,5:1 como texto; o rótulo usa o texto (a cor de estado não muda). */
+      --perm-label: var(--text);
     }
   }
-  /* Permite animar a largura entre "abraçar o conteúdo" e o tamanho expandido. */
-  :root { interpolate-size: allow-keywords; }
+  /* Temas escuros: só fundo, superfície, texto, secundário e borda mudam (as cores de estado são fixas).
+     Valores do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md);
+     o Nord usa também a paleta Nord (MIT, Copyright (c) 2016-present Sven Greb), creditada no mesmo arquivo. */
+  :root[data-theme="obsidian"] { --surface: #08080A; --text: #FFFFFF; --muted: #9B9BA5; --border: #1E1E22; }
+  :root[data-theme="graphite"] { --surface: #1C1C1E; --text: #FFFFFF; --muted: #A8A8AE; --border: #323236; }
+  :root[data-theme="slate"] { --surface: #111721; --text: #E9EEF6; --muted: #92A2B8; --border: #232C3A; }
+  :root[data-theme="nord"] { --surface: #2E3440; --text: #ECEFF4; --muted: #A7B0C0; --border: #3B4252; }
+  :root[data-theme="evergreen"] { --surface: #0C1512; --text: #E4F1EA; --muted: #8CAE9D; --border: #1A2A23; }
+  :root[data-theme="espresso"] { --surface: #1A1512; --text: #F6EEE7; --muted: #B7A395; --border: #2E2420; }
+  :root[data-theme="plum"] { --surface: #16111C; --text: #F1EAF6; --muted: #AC9BB9; --border: #281F33; }
+  /* Porcelain, o tema claro do mod (MIT; ver THIRD_PARTY_NOTICES.md): usa o membro claro de cada par de
+     estado. O bloco repete o do @media claro porque o CSS não junta os dois seletores; o teste trava que
+     os dois casos claros têm as mesmas cores de estado. */
+  :root[data-theme="porcelain"] {
+    --running: oklch(0.646 0.222 41.116);
+    --waiting: #f08c00;
+    --done: #248a3d;
+    --context-warn: #c79200;
+    --context-critical: #d70015;
+    --icon-ink: #fff;
+    --surface: #F5F6F8; --text: #14161A; --muted: #5B6270; --border: #D8DBE1;
+    --depth: .033;
+    --shadow: 0 5px 14px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .12);
+    --perm-bg: color-mix(in srgb, var(--text) 4%, var(--surface));
+    --perm-label: var(--text);
+  }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; background: transparent; overflow: hidden; user-select: none; }
   body {
-    display: flex; justify-content: center; align-items: flex-start; padding-top: 8px;
+    display: flex; justify-content: center; align-items: flex-start; padding-top: var(--stage-top);
     font: 15px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text);
   }
 
   #pill {
     width: max-content; height: 46px; padding: 0 17px;
-    background: var(--surface); border-radius: 23px;
+    /* Três camadas estáticas, de cima para baixo: lavagem do acento do estado no topo (reflexo), profundidade
+       e o preenchimento do tema. O raio vertical da lavagem é 56 px fixos, nunca proporcional à altura: ela
+       termina antes do detalhe e do bloco de permissão, que além disso tem fundo opaco (VIS-04). Gradiente não
+       interpola, então a troca do reflexo é instantânea; brilho e ponto continuam suaves. Não há variante
+       ociosa: a pílula ociosa tem opacidade 0, então um segundo valor não teria efeito visível. */
+    background:
+      radial-gradient(ellipse 75% 56px at 50% 0, color-mix(in srgb, var(--accent) 7.5%, transparent), transparent),
+      linear-gradient(to bottom, rgb(0 0 0 / 0), rgb(0 0 0 / calc(.25 * var(--depth))) 45%, rgb(0 0 0 / var(--depth))),
+      var(--surface);
+    border-radius: var(--radius, 23px);
     /* Compacta, a pílula abraça o conteúdo: nada de um lado cheio e o outro vazio.
-       Expandida, a barra espalha ícone, título e indicadores pela largura toda. */
-    display: grid; grid-template-columns: 1fr; grid-template-rows: 46px auto auto;
+       Expandida, a barra espalha ícone, título e indicadores pela largura toda.
+       Largura e altura vêm de molas em JS, que fixam --content-width: o conteúdo fica na largura final
+       e a pílula, mais estreita durante a animação, recorta o excesso (igual dos dois lados). */
+    display: grid; grid-template-columns: var(--content-width, 1fr); justify-content: center; grid-template-rows: 46px auto auto;
     align-items: center; overflow: hidden; text-align: center;
-    transition: width .45s var(--spring), height .45s var(--spring), border-radius .45s var(--spring),
-                opacity .25s, transform .45s var(--spring), box-shadow .3s, background .3s;
-    box-shadow: 0 0 0 1px var(--ring), var(--shadow);
+    transition: opacity .25s, box-shadow .3s, border-radius .3s ease,
+                scale .25s ease, translate .25s ease;
+    box-shadow: 0 0 0 1px var(--contour), var(--shadow);
     cursor: grab;
+    /* Amplia a partir do centro do topo: o topo não anda e a pílula não sobe no palco. */
+    transform-origin: 50% 0;
   }
   #pill.dragging { cursor: grabbing; }
-  #pill[data-state="idle"] { opacity: 0; transform: scale(.6) translateY(-12px); pointer-events: none; }
+  #pill[data-state="idle"] { opacity: 0; scale: .6; translate: 0 -12px; pointer-events: none; }
   #pill[data-state="waiting"] { --accent: var(--waiting); }
   #pill[data-state="done"] { --accent: var(--done); }
-  #pill.expanded { width: 400px; height: 104px; border-radius: 30px; }
+  #pill.expanded { width: 400px; height: 104px; }
   #pill.expanded.has-window { height: 148px; }
   /* Com pedido de permissão a altura segue o texto do pedido (até o limite com rolagem). */
   #pill.expanded.has-permission { height: auto; padding-bottom: 16px; }
+  /* Formas do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md).
+     A pílula, o padrão, não tem regra: o raio vem de --radius (metade da altura-alvo, no máximo 44 px).
+     O seletor com :root[data-shape] tem mais especificidade que #pill e #pill.expanded, e o brilho
+     (::before) segue o raio por herança. */
+  :root[data-shape="win11"] #pill { border-radius: 8px; }
+  /* Notch: topo reto colado na borda do palco (sem o respiro de 8 px) e só a base arredondada. */
+  :root[data-shape="notch"] { --stage-top: 0px; }
+  :root[data-shape="notch"] #pill { border-radius: 0 0 16px 16px; }
   /* O contorno pulsa na cor do estado: dá para ler a situação de relance, sem mirar no ponto.
      Quem pede ação pulsa mais rápido; executando é o mais calmo para não cansar.
      O brilho pulsa por opacidade numa camada própria (::before) e a ilha parada não anima nada. */
-  #pill { --ring: color-mix(in srgb, var(--accent) 40%, transparent); --pulse: 2.4s; position: relative; isolation: isolate; }
+  /* --contour (1 px) mistura 35% do acento com a borda do tema; depende do acento do estado, por isso é
+     declarado aqui e não no :root. */
+  #pill { --contour: color-mix(in srgb, var(--accent) 35%, var(--border)); --pulse: 2.4s; position: relative; isolation: isolate; }
   #pill[data-state="waiting"] { --pulse: 1.4s; }
   #pill[data-state="done"] { --pulse: 1.8s; }
   /* A sombra é desenhada uma vez, atrás do conteúdo, e só a opacidade pulsa: o compositor anima sem
@@ -120,10 +189,10 @@
   #context circle { fill: none; stroke-width: 5.5; }
   #context .track { stroke: color-mix(in srgb, var(--text) 18%, transparent); }
   #context .value { stroke: var(--level); stroke-linecap: round; transition: stroke-dasharray .4s, stroke .3s; }
-  #context-number { font-weight: 500; font-variant-numeric: tabular-nums; opacity: .8; }
+  #context-number { font-weight: 400; font-variant-numeric: tabular-nums; opacity: .8; }
   #count {
-    font-size: 12.5px; color: var(--button-text); background: var(--button);
-    border-radius: 11px; padding: 2px 9px; font-weight: 700;
+    font-size: 12px; color: var(--button-text); background: var(--button);
+    border-radius: 11px; padding: 2px 9px; font-weight: 600;
   }
   #count:empty { display: none; }
   /* Ao concluir, a sessão costuma pedir uma olhada: o atalho fica à mão sem precisar do hover.
@@ -150,19 +219,19 @@
      Nada de reticências: não se aprova um comando cortado. */
   #permission {
     width: 0; min-width: 100%; grid-column: 1 / -1; margin-top: 8px; text-align: left;
-    background: color-mix(in srgb, var(--text) 9%, transparent); border-radius: 12px; padding: 8px 6px 8px 12px;
+    background: var(--perm-bg); border-radius: 12px; padding: 8px 6px 8px 12px;
   }
   #permission[hidden] { display: none; }
-  #permission-tool { display: block; font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 3px; }
+  #permission-tool { display: block; font-size: 11px; font-weight: 600; color: var(--perm-label); margin-bottom: 3px; overflow-wrap: anywhere; }
   #permission-text {
-    font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--text);
+    font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--perm-text);
     white-space: pre-wrap; overflow-wrap: anywhere; max-height: 105px; overflow-y: auto; padding-right: 6px;
     cursor: default; scrollbar-width: thin; scrollbar-color: var(--muted) transparent;
     /* A rolagem do texto não vaza para fora dele ao chegar no fim. */
     overscroll-behavior: contain;
   }
   #permission-text:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-  #permission-hint { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
+  #permission-hint { display: block; margin-top: 5px; font-size: 11px; color: var(--perm-hint); }
   #permission-hint[hidden] { display: none; }
   #actions {
     width: 0; min-width: 100%; grid-column: 1 / -1; margin-top: 8px;
@@ -180,7 +249,7 @@
   /* "Negar" e, havendo pedido, "Abrir sessão" são secundários: só "Permitir" fica preenchido. */
   #actions #deny, #pill.has-permission #open {
     color: var(--text); background: transparent;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 35%, transparent);
+    box-shadow: inset 0 0 0 1px var(--perm-deny-border);
   }
   #pill.has-permission #open { margin-right: auto; box-shadow: none; color: var(--muted); padding-inline: 4px; }
   /* Fora do estado expandido o botão não existe para o mouse nem para leitor de tela. */
@@ -240,7 +309,7 @@
   // a CSP não aceita script externo; o gate.test.js lê o texto entre os marcadores e o executa num
   // contexto vazio, então o teste roda o mesmo código que a ilha roda, e um predicado que tocasse
   // DOM ou relógio global quebraria lá. Aqui só entram constantes e funções que nunca lançam.
-  // ponytail: regras puras inline, testadas por extração em node:vm. Quando a Fase 3 validar script-src 'self' via file:// (spring.js), mover para um arquivo carregado por <script src> e por require.
+  // ponytail: regras puras inline, testadas por extração em node:vm. A Fase 3 manteve tudo inline; mover para um arquivo só quando houver reuso fora do renderer.
 
   // A ilha abre sozinha quando chega um pedido; os botões só valem depois deste tempo na tela,
   // para um clique que já ia para outra janela não virar aprovação. O main.js aplica a mesma
@@ -319,7 +388,168 @@
     return isWheelSettled(contentChangedAt, now)
       && clientHeight > 0 && Number.isFinite(hiddenBelow) && hiddenBelow <= READ_TOLERANCE_PX;
   }
+
+  /**
+   * Se os botões podem armar: o retângulo assentou (settled, de settleStep) E todas as molas de
+   * tamanho pararam. Só settled não basta: com o conteúdo na largura final, os botões podem estar
+   * parados e ainda recortados enquanto a altura cresce, e o que se vê tem de ser o que se clica.
+   * Comparação estrita: qualquer valor que não seja exatamente true não arma.
+   */
+  function canArm(input) {
+    const { settled, springsAtRest } = input || {};
+    return settled === true && springsAtRest === true;
+  }
   // regras-do-gate:fim
+
+  // mola:inicio
+  // Física das molas de tamanho da pílula. Fica inline pelo mesmo motivo do bloco acima (a CSP não
+  // aceita script externo e a CSP ficou igual); o gate.test.js executa o texto entre os marcadores
+  // num contexto vazio. Pureza: só constantes e funções que nunca lançam, sem DOM nem relógio global.
+  // ponytail: mola inline. Mover para um spring.js exige script-src 'self' na CSP e trocar a extração do teste; adiado até haver reuso fora do renderer.
+
+  // Passo fixo da integração e teto de um quadro: um quadro atrasado (volta de suspensão, janela
+  // escondida) não vira um salto, e o teto de passos impede um laço longo com velocidade fora da faixa.
+  const SPRING_STEP_MS = 0.5;
+  const SPRING_MAX_FRAME_MS = 50;
+  const SPRING_MAX_STEPS = 2_000;
+
+  // Constantes de mola portadas do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90;
+  // ver THIRD_PARTY_NOTICES.md). Crescer: k alto e amortecimento folgado dão ~6% de passagem do alvo.
+  // Encolher: mais mole e mais amortecida. Neutra: nudge e hover, que não crescem nem encolhem.
+  // Os fatores dos estilos também são do mod.
+  // Desvio deliberado do mod: ao encolher o amortecimento sobe até o crítico (c >= 2·√k) em todo
+  // estilo, porque o ANIM-01 manda encolher sem balanço sem exceção; com os fatores do mod o
+  // Elástico balançaria ~6% ao encolher.
+  const SPRING_GROW = { stiffness: 380, damping: 26 };
+  const SPRING_SHRINK = { stiffness: 200, damping: 28 };
+  const SPRING_NEUTRAL = { stiffness: 280, damping: 24 };
+  const SPRING_STYLE_FACTORS = {
+    smooth: { stiffness: 1, damping: 1.35 },
+    default: { stiffness: 1, damping: 1 },
+    bouncy: { stiffness: 1.1, damping: 0.7 },
+    snappy: { stiffness: 1.5, damping: 1.25 },
+  };
+
+  // Limiares de repouso em pixels: abaixo deles ninguém vê movimento, e a mola vai exatamente ao alvo.
+  const REST_DISTANCE_PX = 0.05;
+  const REST_SPEED_PX_S = 0.5;
+
+  /**
+   * Rigidez e amortecimento da mola para a direção e o estilo: objeto novo { stiffness, damping }.
+   * Estilo desconhecido vale o Padrão; direção que não seja 'grow' nem 'shrink' devolve a neutra,
+   * sem fator de estilo. Ao encolher o amortecimento nunca fica abaixo do crítico.
+   */
+  function springParams(direction, style) {
+    if (direction !== 'grow' && direction !== 'shrink') return { ...SPRING_NEUTRAL };
+    const base = direction === 'grow' ? SPRING_GROW : SPRING_SHRINK;
+    const factors = Object.hasOwn(SPRING_STYLE_FACTORS, style) ? SPRING_STYLE_FACTORS[style] : SPRING_STYLE_FACTORS.default;
+    const stiffness = base.stiffness * factors.stiffness;
+    const damping = base.damping * factors.damping;
+    return { stiffness, damping: direction === 'shrink' ? Math.max(damping, 2 * Math.sqrt(stiffness)) : damping };
+  }
+
+  /**
+   * Novo alvo sem salto: devolve uma cópia com a mesma posição e a mesma velocidade, e só a
+   * direção é recalculada comparando o alvo novo com a posição atual (igual mantém a anterior; a
+   * neutra continua neutra). Alvo não finito ou igual ao atual devolve cópia sem mudança.
+   */
+  function retargetSpring(spring, target) {
+    if (!Number.isFinite(target) || target === spring?.target) return { ...spring };
+    let direction = spring?.direction;
+    if (direction !== 'neutral') {
+      if (target > spring?.position) direction = 'grow';
+      else if (target < spring?.position) direction = 'shrink';
+    }
+    return { ...spring, target, direction };
+  }
+
+  /**
+   * Mola parada no alvo, com velocidade 0 (cópia). Alvo não finito cai na posição; posição não
+   * finita também, em 0: nunca devolve NaN.
+   */
+  function snapSpring(spring) {
+    const { position, target } = spring || {};
+    const rest = Number.isFinite(target) ? target : (Number.isFinite(position) ? position : 0);
+    return { ...spring, position: rest, velocity: 0, target: rest };
+  }
+
+  /** Se a mola está exatamente no alvo e sem velocidade (o que springStep e snapSpring produzem). */
+  function isSpringAtRest(spring) {
+    const { position, velocity, target } = spring || {};
+    return position === target && velocity === 0;
+  }
+
+  /**
+   * Avança a mola um quadro: devolve uma cópia, nunca muta. Massa 1, Euler semi-implícito em passos
+   * fixos de SPRING_STEP_MS; a velocidade multiplica o tempo simulado, então 2× assenta em
+   * metade do tempo com o mesmo pico. frameMs é limitado a [0, SPRING_MAX_FRAME_MS] e speed inválida
+   * vale 1. Ao ficar a menos de restDistance do alvo e abaixo de restSpeed, assenta: posição no
+   * alvo e velocidade 0. Posição, velocidade ou alvo não finitos devolvem a mola parada (snapSpring).
+   */
+  function springStep(spring, frameMs, style, speed) {
+    const { position, velocity, target, restDistance, restSpeed } = spring || {};
+    if (!Number.isFinite(position) || !Number.isFinite(velocity) || !Number.isFinite(target)) return snapSpring(spring);
+    const frame = Number.isFinite(frameMs) ? Math.min(Math.max(frameMs, 0), SPRING_MAX_FRAME_MS) : 0;
+    const rate = Number.isFinite(speed) && speed > 0 ? speed : 1;
+    const steps = Math.min(Math.round((frame * rate) / SPRING_STEP_MS), SPRING_MAX_STEPS);
+    const { stiffness, damping } = springParams(spring.direction, style);
+    const seconds = SPRING_STEP_MS / 1000;
+    let nextPosition = position;
+    let nextVelocity = velocity;
+    for (let step = 0; step < steps; step += 1) {
+      nextVelocity += (-stiffness * (nextPosition - target) - damping * nextVelocity) * seconds;
+      nextPosition += nextVelocity * seconds;
+    }
+    const distanceLimit = Number.isFinite(restDistance) && restDistance > 0 ? restDistance : REST_DISTANCE_PX;
+    const speedLimit = Number.isFinite(restSpeed) && restSpeed > 0 ? restSpeed : REST_SPEED_PX_S;
+    if (Math.abs(nextPosition - target) < distanceLimit && Math.abs(nextVelocity) < speedLimit) {
+      return { ...spring, position: target, velocity: 0 };
+    }
+    return { ...spring, position: nextPosition, velocity: nextVelocity };
+  }
+
+  // Nudge e ampliação no hover: valores do mod Dynamic Island for Windows (MIT, Copyright (c) 2026
+  // devcode90; ver THIRD_PARTY_NOTICES.md). O salto chama o olho para a troca de estado; o intervalo
+  // mínimo evita tremedeira quando os estados chegam em rajada.
+  const NUDGE_OFFSET_PX = -6;
+  const NUDGE_MIN_INTERVAL_MS = 450;
+  const HOVER_SCALE = 1.025;
+  // Idle fica de fora do nudge: vindo dele é a primeira exibição, e indo para ele a pílula some.
+  const NUDGE_STATES = ['running', 'waiting', 'done'];
+  // Concluído fica de fora pelo mesmo motivo de não expandir no hover: o botão Abrir compacto tem de
+  // ficar parado sob o mouse.
+  const HOVER_SCALE_STATES = ['running', 'waiting'];
+  // Limiares de repouso da escala, que é adimensional (os de pixel não servem): 0,05% de tamanho e
+  // 0,05 de velocidade, abaixo do que se vê.
+  const SCALE_REST_DISTANCE = 0.0005;
+  const SCALE_REST_SPEED = 0.05;
+
+  /**
+   * Se a troca de estado dá o nudge: true só entre dois estados diferentes de NUDGE_STATES, sem pedido
+   * de permissão na tela (hasPermission exatamente false, nada se mexe sob o cursor que vai
+   * clicar em Permitir ou Negar), sem movimento reduzido e com pelo menos NUDGE_MIN_INTERVAL_MS desde
+   * o último (lastNudgeAt null é o primeiro). Relógio para trás, entrada inválida ou ausente: false.
+   */
+  function shouldNudge(input) {
+    const { previousState, nextState, hasPermission, reducedMotion, lastNudgeAt, now } = input || {};
+    return NUDGE_STATES.includes(previousState) && NUDGE_STATES.includes(nextState) && previousState !== nextState
+      && hasPermission === false && reducedMotion === false && Number.isFinite(now)
+      && (lastNudgeAt === null || (Number.isFinite(lastNudgeAt) && now - lastNudgeAt >= NUDGE_MIN_INTERVAL_MS));
+  }
+
+  /**
+   * Escala-alvo da pílula: HOVER_SCALE só com o cursor em cima (hovering exatamente true), sem pedido
+   * na tela, sem movimento reduzido e em estado de HOVER_SCALE_STATES; senão 1. Com pedido na tela a
+   * pílula inteira fica parada, que é o jeito mais simples de os botões nunca sofrerem escala (SEG-03).
+   * Estado desconhecido não amplia.
+   */
+  function hoverScaleTarget(input) {
+    const { hovering, hasPermission, reducedMotion, state } = input || {};
+    return hovering === true && hasPermission === false && reducedMotion === false && HOVER_SCALE_STATES.includes(state)
+      ? HOVER_SCALE
+      : 1;
+  }
+  // mola:fim
 
   // A CSS pausa as animações com a janela escondida; o Electron só reporta hidden com hide() ou minimizada.
   document.addEventListener('visibilitychange', () => { document.documentElement.dataset.hidden = document.hidden; });
@@ -359,7 +589,129 @@
   // Quando o pedido exibido mudou (id, armEpoch ou texto): abre a janela em que a roda é ignorada.
   let contentChangedAt = 0;
 
-  function render() {
+  // Raio máximo da pílula, do mod (MIT, ver THIRD_PARTY_NOTICES.md): a metade da altura-alvo dá o
+  // arredondado total da compacta, e a expandida (mais alta) para em 44 px em vez de virar uma cápsula.
+  const PILL_MAX_RADIUS_PX = 44;
+
+  // Molas da pílula. nudge (salto do topo, em px) e scale (ampliação do hover) são neutras
+  // e existem desde o início; width e height entram na primeira medição, e sem elas conta como em
+  // repouso. O laço de quadros só existe enquanto alguma mola se move: parada, a ilha não agenda
+  // nenhum quadro.
+  const springs = {
+    nudge: {
+      position: 0, velocity: 0, target: 0, direction: 'neutral',
+      restDistance: REST_DISTANCE_PX, restSpeed: REST_SPEED_PX_S,
+    },
+    scale: {
+      position: 1, velocity: 0, target: 1, direction: 'neutral',
+      restDistance: SCALE_REST_DISTANCE, restSpeed: SCALE_REST_SPEED,
+    },
+  };
+  // Quando o último nudge começou (performance.now); null até o primeiro.
+  let lastNudgeAt = null;
+  let springLoopRunning = false;
+  let lastSpringFrameAt = 0;
+  // Se a pílula já esteve na tela: a primeira exibição vai direto ao tamanho, sem animar de 0.
+  let pillVisible = false;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+  // Tamanho que a pílula teria agora, lido do layout com o conteúdo final: nada de largura
+  // presa a uma fonte. Tira as três medidas inline, lê e devolve tudo no mesmo turno, sem pintura
+  // intermediária. offsetWidth e offsetHeight ignoram scale e translate; contentWidth é a largura
+  // que o conteúdo ocupa por dentro do padding.
+  function measurePillTarget() {
+    const savedWidth = pill.style.width;
+    const savedHeight = pill.style.height;
+    const savedContentWidth = pill.style.getPropertyValue('--content-width');
+    pill.style.width = '';
+    pill.style.height = '';
+    pill.style.removeProperty('--content-width');
+    const width = pill.offsetWidth;
+    const height = pill.offsetHeight;
+    const style = getComputedStyle(pill);
+    const contentWidth = width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    pill.style.width = savedWidth;
+    pill.style.height = savedHeight;
+    if (savedContentWidth) pill.style.setProperty('--content-width', savedContentWidth);
+    return { width, height, contentWidth };
+  }
+
+  function applySprings() {
+    if (springs.width) pill.style.width = `${springs.width.position}px`;
+    if (springs.height) pill.style.height = `${springs.height.position}px`;
+    // Nudge e escala moram num só transform da pílula inteira, escrito por JS: nenhuma regra de CSS
+    // de hover ou de botão escala ou desloca nada (SEG-03).
+    pill.style.transform = `translateY(${springs.nudge.position}px) scale(${springs.scale.position})`;
+  }
+
+  // O conteúdo fica na largura final (--content-width) e a pílula recorta com overflow hidden, então
+  // a altura do texto não muda enquanto a largura anima. `instant` cria as molas já paradas no
+  // alvo; senão cada eixo troca de alvo sem salto.
+  function setSizeTarget(target, instant) {
+    pill.style.setProperty('--content-width', `${target.contentWidth}px`);
+    // Metade da altura-alvo, não da animada: o raio não balança junto com a mola. Win11 e notch
+    // ignoram esta variável pela especificidade das regras de forma.
+    pill.style.setProperty('--radius', `${Math.min(target.height / 2, PILL_MAX_RADIUS_PX)}px`);
+    if (!springs.width || instant) {
+      for (const [axis, value] of [['width', target.width], ['height', target.height]]) {
+        springs[axis] = {
+          position: value, velocity: 0, target: value, direction: 'grow',
+          restDistance: REST_DISTANCE_PX, restSpeed: REST_SPEED_PX_S,
+        };
+      }
+    } else {
+      springs.width = retargetSpring(springs.width, target.width);
+      springs.height = retargetSpring(springs.height, target.height);
+    }
+    applySprings();
+  }
+
+  const allSpringsAtRest = () => Object.values(springs).every(isSpringAtRest);
+
+  function snapAllSprings() {
+    for (const axis of Object.keys(springs)) springs[axis] = snapSpring(springs[axis]);
+    applySprings();
+  }
+
+  // Único caminho por onde toda animação começa, então nenhum alvo novo anima com movimento reduzido
+  // nem com a janela escondida: as molas vão direto ao alvo. Com tudo parado nenhum quadro
+  // roda.
+  function startSpringLoop() {
+    if (reducedMotion.matches || document.hidden) {
+      snapAllSprings();
+      return;
+    }
+    if (springLoopRunning || allSpringsAtRest()) return;
+    springLoopRunning = true;
+    lastSpringFrameAt = performance.now();
+    requestAnimationFrame(springFrame);
+  }
+
+  function springFrame() {
+    const now = performance.now();
+    const frameMs = now - lastSpringFrameAt;
+    lastSpringFrameAt = now;
+    // Estilo e velocidade vêm do payload do main; sem eles springStep usa o Padrão a 1×.
+    const { animationStyle, animationSpeed } = current.preferences || {};
+    for (const axis of Object.keys(springs)) {
+      springs[axis] = springStep(springs[axis], frameMs, animationStyle, animationSpeed);
+    }
+    applySprings();
+    if (allSpringsAtRest()) {
+      springLoopRunning = false;
+      return;
+    }
+    requestAnimationFrame(springFrame);
+  }
+
+  reducedMotion.addEventListener('change', () => {
+    if (reducedMotion.matches) snapAllSprings();
+  });
+  // O requestAnimationFrame congela com a janela escondida: uma mola parada no meio travaria o
+  // armamento dos botões até a janela voltar.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) snapAllSprings(); });
+
+  function renderContent() {
     pill.dataset.state = current.state;
     // "Precisa de você" abre sozinho: é o único estado que exige ação.
     // Em "concluído" a pílula não expande no hover: o botão "Abrir" tem de ficar parado sob o mouse.
@@ -398,7 +750,13 @@
       contentChangedAt, now: performance.now(), clientHeight: permissionText.clientHeight, hiddenBelow,
     })) readPermissionId = permission.id;
     const wasRead = readPermissionId === permission.id;
-    permissionHint.hidden = wasRead;
+    // O main avisa quando a janela não cabe na área útil (monitor baixo, DPI alto): o gate recusaria
+    // toda decisão, então os botões ficam desabilitados e a dica manda responder no terminal.
+    // Isto só desabilita; quem libera um botão continua sendo o resto desta função e o main.
+    const cannotDecideHere = current.fitsWorkArea === false;
+    const hintText = cannotDecideHere ? 'Responda no terminal' : 'Role até o fim para poder permitir';
+    if (permissionHint.textContent !== hintText) permissionHint.textContent = hintText;
+    permissionHint.hidden = wasRead && !cannotDecideHere;
     // Depois do clique os botões travam até o main responder; se ele aceitou, answeredId mantém a
     // trava até o pedido sair do estado, também na ilha que não recebeu o clique (outro monitor).
     // A troca de has-window, logo acima, move os botões sem mudar o tamanho de #actions nem de #pill.
@@ -406,6 +764,27 @@
     const locked = !armed || permission.id === answeredPermissionId || permission.id === current.answeredId;
     denyButton.disabled = locked;
     allowButton.disabled = locked || !wasRead;
+    if (cannotDecideHere) denyButton.disabled = allowButton.disabled = true;
+  }
+
+  function render() {
+    renderContent();
+    // o hover amplia a pílula inteira (nunca um botão) e só sem pedido na tela.
+    springs.scale = retargetSpring(springs.scale, hoverScaleTarget({
+      hovering,
+      hasPermission: Boolean(current.permission),
+      reducedMotion: reducedMotion.matches,
+      state: current.state,
+    }));
+    if (current.state === 'idle') {
+      // Ilha ociosa não anima: o alvo não muda, então não há salto no fade de saída.
+      pillVisible = false;
+      snapAllSprings();
+    } else {
+      setSizeTarget(measurePillTarget(), !pillVisible);
+      pillVisible = true;
+    }
+    startSpringLoop();
   }
   permissionText.addEventListener('scroll', render);
   // passive: false é obrigatório para o preventDefault valer. A roda sobre o texto nunca sai dele
@@ -454,7 +833,9 @@
       });
       previousRect = rect;
       stableSince = step.stableSince;
-      if (step.settled) {
+      // Retângulo parado não basta: com o conteúdo na largura final os botões podem estar parados e
+      // ainda recortados enquanto a altura cresce.
+      if (canArm({ settled: step.settled, springsAtRest: allSpringsAtRest() })) {
         armed = true;
         armedAt = now;
         armedRect = rect;
@@ -530,11 +911,40 @@
     setTimeout(() => audio.close(), 1000);
   }
 
+  // O renderer só aplica o que o main mandou e nunca escolhe nem envia preferência (SEG-08). Valor
+  // desconhecido não casa com seletor nenhum, e os seletores que leem estes atributos são das formas
+  // e dos temas. Estilo e velocidade das molas não passam por aqui: springFrame os lê de
+  // current.preferences. Trocar tema ou forma pode mover os botões, e o ResizeObserver não vê mudança
+  // só de posição; rearmar é o lado seguro.
+  function applyPreferences(preferences) {
+    const root = document.documentElement;
+    const theme = preferences?.theme || 'auto';
+    const shape = preferences?.shape || 'pill';
+    const changed = root.dataset.theme !== theme || root.dataset.shape !== shape;
+    root.dataset.theme = theme;
+    root.dataset.shape = shape;
+    if (changed && current.permission) restartArming();
+  }
+
   // Com uma ilha por monitor, só a que o main indicar toca o aviso.
   window.island.onState((next, shouldChime) => {
     if (shouldChime && next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
     const previousPermissionId = current.permission ? current.permission.id : null;
     const previousText = current.permission ? current.permission.text : null;
+    // O nudge decide com o estado antigo e o novo, e nunca com pedido na tela. O render do
+    // fim desta função inicia o laço das molas.
+    const stateChangedAt = performance.now();
+    if (shouldNudge({
+      previousState: current.state,
+      nextState: next.state,
+      hasPermission: Boolean(next.permission),
+      reducedMotion: reducedMotion.matches,
+      lastNudgeAt,
+      now: stateChangedAt,
+    })) {
+      lastNudgeAt = stateChangedAt;
+      springs.nudge = { ...springs.nudge, position: NUDGE_OFFSET_PX, velocity: 0, target: 0 };
+    }
     current = next;
     // A trava local só cobre a ida e volta do IPC: daqui em diante quem trava é o answeredId do main.
     // Sem isto uma recusa do main (rearme no caminho, janela escondida) travaria o pedido para sempre.
@@ -554,6 +964,7 @@
       lastArmEpoch = next.armEpoch;
       restartArming();
     }
+    applyPreferences(next.preferences);
     render();
   });
 

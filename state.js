@@ -7,6 +7,9 @@ const STATE_DIR = path.join(os.homedir(), '.claude', 'island');
 const DECISIONS_DIR = path.join(STATE_DIR, 'decisions');
 // Batimento da ilha: sem ele o permission-hook não espera por botões que ninguém vai ver.
 const HEARTBEAT_FILE = path.join(STATE_DIR, '.heartbeat');
+// Preferências visuais (tema, forma, estilo e velocidade da animação). Nesta fase só o main lê o
+// arquivo; quem grava é o menu da Fase 4.
+const PREFERENCES_FILE = path.join(STATE_DIR, 'preferences.json');
 const HEARTBEAT_INTERVAL_MS = 2_000;
 const HEARTBEAT_STALE_MS = 6_000;
 // Quanto o permission-hook espera pela resposta na ilha antes de deixar só o terminal decidir.
@@ -232,9 +235,37 @@ function nextShownPermission(shown, permissionId, now, rearm) {
   return { id: permissionId, since: now, epoch: shown.epoch + 1 };
 }
 
+// A janela é um palco fixo, maior que a pílula, e a sobra é transparente. O tamanho cobre o pico da mola do
+// estilo Elástico a 2× com a ampliação do hover, o nudge e a sombra (conferido por simulação em
+// gate.test.js) e nunca muda durante a animação, para a pílula nunca ser recortada.
+// ponytail: um palco só para todos os monitores e escalas de DPI (cada monitor tem o seu renderer e as
+// suas molas). Não validado em hardware com DPI misto; se recortar, dimensionar o palco por monitor.
+// Limite conhecido: com a área útil menor que o palco (altura abaixo de 410 DIP, ex. 1366×768 a 200%) a janela
+// passa da borda, o gate recusa toda decisão e a ilha mostra os botões desabilitados ("Responda no terminal").
+const WINDOW_SIZE = Object.freeze({ width: 520, height: 410 });
+// A pílula expandida (400 px) fica centrada no palco e sobram 60 px transparentes de cada lado, que podem
+// sair da tela para a pílula encostar na borda do monitor. O valor subiu de 20 para 60 junto com a largura
+// do palco (440 → 520) e mantém (largura − 400) / 2: a borda da pílula no mesmo lugar de antes.
+const HORIZONTAL_SLACK = 60;
+
 /** Posição padrão da janela da ilha: topo central da área útil do monitor. */
 function defaultIslandPosition(workArea, windowSize) {
   return { x: Math.round(workArea.x + (workArea.width - windowSize.width) / 2), y: workArea.y };
+}
+
+/**
+ * Posição da janela a partir do deslocamento salvo pelo usuário. O deslocamento é relativo à posição
+ * padrão, que centra pela largura da janela, então trocar o tamanho do palco preserva o centro
+ * horizontal e o topo da pílula sem converter nada. Devolve a posição padrão quando o
+ * deslocamento não é um objeto com x e y numéricos: o arquivo é editável à mão, e dado em disco não é
+ * confiável. Não muta nada. Quem prende a janela na área útil é clampIslandPosition, e por isso uma
+ * ilha salva nos últimos ~86 px de baixo do monitor sobe até caber (exceção aceita: o gate exige a
+ * janela inteira na área útil, ver isWithinWorkArea).
+ */
+function positionFromSavedOffset(workArea, windowSize, offset) {
+  const standard = defaultIslandPosition(workArea, windowSize);
+  if (!offset || typeof offset !== 'object' || !Number.isFinite(offset.x) || !Number.isFinite(offset.y)) return standard;
+  return { x: standard.x + offset.x, y: standard.y + offset.y };
 }
 
 /**
@@ -283,6 +314,45 @@ function isIslandSender(input) {
   }
 }
 
+// Valores de preferência em inglês (o arquivo é editável à mão); os rótulos em pt-BR chegam com o
+// menu da Fase 4. A lista decide o que vale: `includes` não tropeça em chaves do protótipo.
+const THEMES = Object.freeze(['auto', 'obsidian', 'graphite', 'slate', 'nord', 'evergreen', 'espresso', 'plum', 'porcelain']);
+const SHAPES = Object.freeze(['pill', 'notch', 'win11']);
+const ANIMATION_STYLES = Object.freeze(['smooth', 'default', 'bouncy', 'snappy']);
+const ANIMATION_SPEED_MIN = 0.5;
+const ANIMATION_SPEED_MAX = 2;
+const DEFAULT_PREFERENCES = Object.freeze({ theme: 'auto', shape: 'pill', animationStyle: 'default', animationSpeed: 1 });
+
+/**
+ * Diz se um nome de arquivo da pasta da ilha é o estado de uma sessão. O preferences.json mora na
+ * mesma pasta e é editável à mão: sem esta exclusão explícita, uma chave `state` ou `permission`
+ * nele viraria uma sessão fantasma (e alimentaria o gate). Nunca lança.
+ */
+function isSessionFile(fileName) {
+  return typeof fileName === 'string' && fileName.endsWith('.json') && fileName !== path.basename(PREFERENCES_FILE);
+}
+
+/**
+ * Preferências visuais válidas a partir do que veio do arquivo, que pode estar ausente, corrompido
+ * ou ter sido editado à mão. Devolve sempre um objeto novo com só as quatro chaves
+ * { theme, shape, animationStyle, animationSpeed }; cada chave inválida ou ausente cai sozinha no
+ * valor de DEFAULT_PREFERENCES. A velocidade só vale como número entre ANIMATION_SPEED_MIN e
+ * ANIMATION_SPEED_MAX. Nunca lança e nunca muta a entrada.
+ */
+function normalizePreferences(input) {
+  const { theme, shape, animationStyle, animationSpeed } = input || {};
+  const pick = (value, list, fallback) => (typeof value === 'string' && list.includes(value) ? value : fallback);
+  return {
+    theme: pick(theme, THEMES, DEFAULT_PREFERENCES.theme),
+    shape: pick(shape, SHAPES, DEFAULT_PREFERENCES.shape),
+    animationStyle: pick(animationStyle, ANIMATION_STYLES, DEFAULT_PREFERENCES.animationStyle),
+    // NaN e Infinity falham na comparação.
+    animationSpeed: typeof animationSpeed === 'number' && animationSpeed >= ANIMATION_SPEED_MIN && animationSpeed <= ANIMATION_SPEED_MAX
+      ? animationSpeed
+      : DEFAULT_PREFERENCES.animationSpeed,
+  };
+}
+
 // Explícito protege de regressão: ligar nodeIntegration desligaria o sandbox em silêncio. O renderer
 // só carrega o index.html local, com CSP default-src 'none'.
 const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: true, nodeIntegration: false });
@@ -290,7 +360,11 @@ const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: 
 module.exports = {
   SECURE_WEB_PREFERENCES, effectiveOpacity, isIslandSender,
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
+  PERMISSION_TOOL_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
+  WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   nextShownPermission,
+  PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
+  normalizePreferences, isSessionFile,
 };
