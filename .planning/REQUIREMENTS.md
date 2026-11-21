@@ -44,14 +44,14 @@ Escopo deste milestone: reformular a ilha com o comportamento e o visual do mod 
 
 ### Hover e entrada (HOV)
 
-- [ ] **HOV-01**: A ilha detecta o cursor pela posição de tela (polling no processo principal só enquanto a pílula está visível) e decide pelo retângulo real da pílula se captura o mouse, com histerese para não piscar na borda
-- [ ] **HOV-02**: Fora da pílula, cliques e rolagem atravessam para as janelas de baixo; dentro dela, a ilha recebe clique e roda do mouse — inclusive com um terminal elevado em foco e no monitor a 125%
-- [ ] **HOV-03**: O usuário escolhe se a ilha expande ao passar o mouse (padrão) ou ao clicar
-- [ ] **HOV-04**: Arrastar, duplo clique para recentralizar e os botões continuam funcionando com o novo hover
+- [x] **HOV-01**: A ilha detecta o cursor pela posição de tela (polling no processo principal só enquanto a pílula está visível) e decide pelo retângulo real da pílula se captura o mouse, com histerese para não piscar na borda
+- [x] **HOV-02**: Fora da pílula, cliques e rolagem atravessam para as janelas de baixo; dentro dela, a ilha recebe clique e roda do mouse — inclusive com um terminal elevado em foco e no monitor a 125%
+- [x] **HOV-03**: O usuário escolhe se a ilha expande ao passar o mouse (padrão) ou ao clicar
+- [x] **HOV-04**: Arrastar, duplo clique para recentralizar e os botões continuam funcionando com o novo hover
 
 ### Preferências e controles (PREF)
 
-- [ ] **PREF-01**: Clique direito na ilha abre um menu com tema, forma, estilo e velocidade da animação, expandir no hover/clique, fixar aberta, transparência, âncora e esconder
+- [x] **PREF-01**: Clique direito na ilha abre um menu com tema, forma, estilo e velocidade da animação, expandir no hover/clique, fixar aberta, transparência, âncora e esconder
 - [x] **PREF-02**: As escolhas ficam salvas e voltam iguais após reiniciar; um arquivo de preferências corrompido ou antigo não impede a ilha de subir (cada valor inválido volta ao padrão)
 - [ ] **PREF-03**: Um atalho global esconde e mostra a ilha; o padrão é Ctrl+Alt+C se não conflitar com AltGr+C no teclado ABNT2, senão outro padrão sem conflito; se o atalho não puder ser registrado, o menu avisa
 - [ ] **PREF-04**: O usuário escolhe a âncora da ilha (topo central, cantos e base) e o arraste ajusta o deslocamento a partir dela, preso ao monitor da própria ilha
@@ -138,11 +138,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIS-03 | Phase 3 | Pending |
 | VIS-04 | Phase 3 | Pending |
 | VIS-05 | Phase 3 | Pending |
-| HOV-01 | Phase 4 | Pending |
-| HOV-02 | Phase 4 | Pending |
-| HOV-03 | Phase 4 | Pending |
-| HOV-04 | Phase 4 | Pending |
-| PREF-01 | Phase 4 | Pending |
+| HOV-01 | Phase 4 | Complete |
+| HOV-02 | Phase 4 | Complete |
+| HOV-03 | Phase 4 | Complete |
+| HOV-04 | Phase 4 | Complete |
+| PREF-01 | Phase 4 | Complete |
 | PREF-02 | Phase 4 | Complete |
 | PREF-03 | Phase 4 | Pending |
 | PREF-04 | Phase 4 | Pending |

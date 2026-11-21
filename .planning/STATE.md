@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Entrada, preferências e comportamento no sistema
-current_plan: 2
+current_plan: 3
 status: executing
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-11-21T16:47:51.441Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-11-21T16:54:12.431Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 4 execution started
-state_head: 36efbe29ecf7a24defa4c80bcae5c8bdfb0fe049
+state_head: 7bdaa9d60c44dcb4432dd01c5dec7fcc1d50ba84
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 17
-  completed_plans: 12
+  completed_plans: 13
   percent: 33
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 4 (Entrada, preferências e comportamento no sistema) — EXECUTING
-Current Plan: 2
+Current Plan: 3
 Total Plans in Phase: 6
 Status: Ready to execute
 Last activity: 2026-11-21 — Phase 4 execution started
@@ -67,6 +67,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02 P03 | 14min | 2 tasks | 3 files |
 | Phase 02 P04 | 10min | 3 tasks | 5 files |
 | Phase 04 P01 | 25 min | 2 tasks | 7 files |
+| Phase 04 P02 | 30min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Phase 1]: Plano 01-04: Etapa 2 pulada (Etapa 1 reprovada, D-04/BASE-03); Task 3 pending-human, halo D-03 a conferir pelo autor no PR
 - [Phase 04]: Menu nativo no clique direito: applyPreference é o único caminho de mudança de preferência e termina em refresh('rearm'); menu-will-show e menu-will-close rearmam Permitir e Negar
 - [Phase 04]: Preferências inválidas ou acima de 64 KB vão para preferences.json.<carimbo>.bad em vez de serem sobrescritas pela próxima gravação; positions.json passou a ser gravado por .tmp + rename
+- [Phase 04]: hoverStep e shouldExpand ficam inline no index.html (CSP e preload em sandbox; precedentes regras-do-gate e mola), excecao a regra de logica pura em state.js
+- [Phase 04]: island:hover sai; island:cursor (main para renderer) e island:capture (renderer para main, so booleano) entram; captura sem a opcao forward, arraste e menu a seguram
+- [Phase 04]: o evento hide de createIsland solta a captura e liga/desliga o timer do cursor, entao atalho, menu e tela cheia nao chamam updateCursorTick
 
 ### Pending Todos
 
@@ -118,6 +122,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T16:47:51.037Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-11-21T16:54:12.052Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
