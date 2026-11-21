@@ -462,8 +462,8 @@ test('botões e hover sem transform, scale, translate, rotate ou zoom', () => {
   }
 });
 
-test('a roda sobre o texto não vaza e não rola na janela depois da troca', () => {
-  assert.match(rendererSource, /permissionText\.addEventListener\('wheel', \(event\) => \{\s*event\.stopPropagation\(\);\s*if \(!isWheelSettled\(contentChangedAt, performance\.now\(\)\)\) event\.preventDefault\(\);\s*\}, \{ passive: false \}\);/);
+test('a roda sobre o bloco do pedido não vaza e não rola na janela depois da troca', () => {
+  assert.match(rendererSource, /permissionBox\.addEventListener\('wheel', \(event\) => \{\s*event\.stopPropagation\(\);\s*if \(!isWheelSettled\(contentChangedAt, performance\.now\(\)\)\) event\.preventDefault\(\);\s*\}, \{ passive: false \}\);/);
 });
 
 test('o clique só decide com o press validado e ecoa o id capturado no pointerdown', () => {
@@ -1534,4 +1534,19 @@ test('o canal island:wheel só leva um número finito e limitado, acumula no mai
   for (const piece of ["closest('#permission')", 'wheelDeltaY', 'WHEEL_PIXELS_TO_DELTA']) assert.ok(body.includes(piece), `ouvinte sem: ${piece}`);
   assert.ok(listener.slice(0, listener.indexOf('\n\n')).includes('{ passive: true }'));
   assert.equal(body.includes('preventDefault'), false, 'a pílula nunca segura a rolagem');
+});
+
+test('só o bloco do pedido e a pílula ouvem a roda, e o comentário da pílula diz de que a roda depende', () => {
+  const listeners = [...rendererLf.matchAll(/(\w+)\.addEventListener\('wheel'/g)].map((match) => match[1]);
+  assert.deepEqual(listeners.sort(), ['permissionBox', 'pill']);
+  assert.equal(rendererLf.includes('permissionText.addEventListener(\'wheel\''), false, 'o texto não tem ouvinte próprio de roda');
+  const above = rendererLf.slice(0, rendererLf.indexOf("pill.addEventListener('wheel'"));
+  const comment = above.slice(above.lastIndexOf('\n\n'));
+  assert.ok(comment.includes('Rolar janelas inativas'), 'o comentário da pílula cita a configuração do Windows');
+  assert.ok(comment.includes('captura'), 'o comentário da pílula cita a captura ligada pelo hover');
+});
+
+test('o README explica que a roda chega pela rolagem de janelas inativas do Windows', () => {
+  const readme = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf8');
+  assert.ok(readme.includes('Rolar janelas inativas ao passar o mouse sobre elas'));
 });
