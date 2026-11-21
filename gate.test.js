@@ -8,6 +8,7 @@ const {
   effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES, WINDOW_SIZE, HORIZONTAL_SLACK,
   PERMISSION_TOOL_LIMIT, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, besideFits, anchorPosition, clampIslandPosition,
   horizontalSlackFor, BESIDE_GAP_PX, BESIDE_MIN_WORK_AREA_WIDTH_PX,
+  nextSelection, wheelStep, WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -1432,4 +1433,105 @@ test('o ponto de quem pede permissão pulsa por opacidade e para com movimento r
   // o anel parado vive dentro do @media de movimento reduzido, que é o último bloco do CSS
   const media = rendererLf.slice(rendererLf.indexOf('@media (prefers-reduced-motion: reduce) {'), rendererLf.indexOf('</style>'));
   assert.ok(media.includes('#sessions [data-pending="true"] i { box-shadow: 0 0 0 2px '));
+});
+
+// --- Fase 5: roda do mouse (acumulador do mod, passo na lista e canal island:wheel) ---
+
+const WHEEL_START = Object.freeze({ accumulated: 0, lastEventAt: null, lastStepAt: null });
+
+test('wheelStep: um entalhe anda uma sessão, para cima a anterior e para baixo a seguinte', () => {
+  assert.deepEqual(wheelStep(WHEEL_START, 120, 1000), { gesture: { accumulated: 0, lastEventAt: 1000, lastStepAt: 1000 }, step: -1 });
+  assert.deepEqual(wheelStep(WHEEL_START, -120, 1000), { gesture: { accumulated: 0, lastEventAt: 1000, lastStepAt: 1000 }, step: 1 });
+  assert.equal(wheelStep(WHEEL_START, 119, 1000).step, 0);
+});
+
+test('wheelStep: o touchpad soma deltas menores que um entalhe e anda quando o gesto chega a 120', () => {
+  const first = wheelStep(WHEEL_START, 40, 1000);
+  const second = wheelStep(first.gesture, 40, 1016);
+  const third = wheelStep(second.gesture, 40, 1032);
+  assert.deepEqual([first.step, second.step, third.step], [0, 0, -1]);
+  assert.equal(second.gesture.accumulated, 80);
+  assert.equal(third.gesture.accumulated, 0);
+});
+
+test('wheelStep: mais de 220 ms de pausa ou a inversão de direção recomeçam o gesto', () => {
+  const pause = wheelStep(wheelStep(WHEEL_START, 60, 1000).gesture, 60, 1300);
+  assert.deepEqual(pause, { gesture: { accumulated: 60, lastEventAt: 1300, lastStepAt: null }, step: 0 });
+  const stillSame = wheelStep(wheelStep(WHEEL_START, 60, 1000).gesture, 60, 1220);
+  assert.equal(stillSame.gesture.accumulated, 120, '220 ms exatos ainda é o mesmo gesto');
+  const reverse = wheelStep(wheelStep(WHEEL_START, 60, 1000).gesture, -60, 1010);
+  assert.deepEqual(reverse, { gesture: { accumulated: -60, lastEventAt: 1010, lastStepAt: null }, step: 0 });
+});
+
+test('wheelStep: o intervalo entre passos é 85 ms com roda e 200 ms com touchpad, e só um entalhe fica pendente', () => {
+  const stepped = wheelStep(WHEEL_START, 120, 1000).gesture;
+  const held = wheelStep(stepped, 120, 1050);
+  assert.deepEqual([held.step, held.gesture.accumulated], [0, 120]);
+  assert.equal(wheelStep(held.gesture, 120, 1090).step, -1);
+  const burst = wheelStep(stepped, 360, 1050);
+  assert.deepEqual([burst.step, burst.gesture.accumulated], [0, 120]);
+  const burstDown = wheelStep(stepped, -360, 1050);
+  assert.deepEqual([burstDown.step, burstDown.gesture.accumulated], [0, -120]);
+  assert.equal(wheelStep(stepped, 120, 1085).step, -1, 'com roda, 85 ms já bastam');
+  // touchpad: o delta menor que um entalhe que fecha os 120 espera 200 ms do passo anterior
+  const slow = wheelStep(stepped, 60, 1100);
+  const slowSecond = wheelStep(slow.gesture, 60, 1150);
+  assert.deepEqual([slowSecond.step, slowSecond.gesture.accumulated], [0, 120], 'a 150 ms do passo, dentro dos 200 ms');
+  assert.equal(wheelStep(slowSecond.gesture, 60, 1210).step, -1, 'a 210 ms do passo anda');
+});
+
+test('wheelStep nunca lança nem muta, ignora entrada inválida e as constantes são as do mod', () => {
+  const gesture = Object.freeze({ accumulated: 40, lastEventAt: 500, lastStepAt: 100 });
+  for (const delta of [0, NaN, Infinity, -Infinity, '120', null, undefined, {}]) {
+    const result = wheelStep(gesture, delta, 600);
+    assert.deepEqual(result, { gesture, step: 0 });
+    assert.notEqual(result.gesture, gesture, 'devolve cópia');
+  }
+  for (const now of [NaN, Infinity, '600', null, undefined]) assert.deepEqual(wheelStep(gesture, 120, now), { gesture, step: 0 });
+  for (const bad of [null, undefined, 'x', 3, {}, { accumulated: 'a', lastEventAt: null, lastStepAt: null },
+    { accumulated: 0, lastEventAt: 'x', lastStepAt: null }, { accumulated: 0, lastEventAt: null }]) {
+    assert.deepEqual(wheelStep(bad, 120, 1000), wheelStep(WHEEL_START, 120, 1000));
+  }
+  assert.deepEqual(WHEEL_START, { accumulated: 0, lastEventAt: null, lastStepAt: null });
+  assert.deepEqual(
+    [WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX],
+    [120, 220, 85, 200, 1200],
+  );
+});
+
+test('nextSelection scroll anda um vizinho na lista, sem dar a volta', () => {
+  const list = [{ key: 'a' }, { key: 'b' }, { key: 'c' }];
+  const at = (key) => ({ key, requests: [] });
+  assert.equal(nextSelection(at('b'), list, { type: 'scroll', step: 1 }).key, 'c');
+  assert.equal(nextSelection(at('b'), list, { type: 'scroll', step: -1 }).key, 'a');
+  assert.equal(nextSelection(at('c'), list, { type: 'scroll', step: 1 }).key, 'c', 'sem volta no fim');
+  assert.equal(nextSelection(at('a'), list, { type: 'scroll', step: -1 }).key, 'a', 'sem volta no começo');
+  for (const step of [2, 0, '1', -2, NaN, undefined, null]) assert.equal(nextSelection(at('b'), list, { type: 'scroll', step }).key, 'b');
+  assert.equal(nextSelection(at('z'), list, { type: 'scroll', step: 1 }).key, 'z', 'chave fora da lista mantém');
+  assert.equal(nextSelection(at('b'), list, { type: 'scroll', step: 1 }).snapped, false);
+});
+
+test('o canal island:wheel só leva um número finito e limitado, acumula no main e passa por refresh', () => {
+  const start = mainLf.indexOf("ipcMain.on('island:wheel', (event, delta) => {");
+  assert.ok(start >= 0, 'handler de island:wheel ausente');
+  const handler = mainLf.slice(start, mainLf.indexOf('\n  });', start));
+  for (const piece of [
+    'islandOf(event)',
+    'Number.isFinite(delta)',
+    'Math.abs(delta) > WHEEL_DELTA_MAX',
+    "lastPickedState.state === 'idle'",
+    'const now = performance.now();',
+    'wheelStep(wheelGesture, delta, now)',
+    "{ type: 'scroll', step }",
+    "refresh('wheel')",
+  ]) {
+    assert.ok(handler.includes(piece), `handler sem: ${piece}`);
+  }
+  assert.ok(preloadLf.includes("wheel: (delta) => ipcRenderer.send('island:wheel', delta),"));
+  assert.equal(rendererLf.split('window.island.wheel(').length - 1, 1, 'a roda sai de um só lugar');
+  const listener = rendererLf.slice(rendererLf.indexOf("pill.addEventListener('wheel'"));
+  const body = listener.slice(0, listener.indexOf('\n  }, '));
+  for (const piece of ["closest('#permission')", 'wheelDeltaY', 'WHEEL_PIXELS_TO_DELTA']) assert.ok(body.includes(piece), `ouvinte sem: ${piece}`);
+  assert.ok(listener.slice(0, listener.indexOf('\n\n')).includes('{ passive: true }'));
+  assert.equal(body.includes('preventDefault'), false, 'a pílula nunca segura a rolagem');
 });
