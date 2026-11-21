@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Entrada, preferências e comportamento no sistema
-current_plan: 3
+current_plan: 4
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-11-21T16:54:12.431Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-11-21T17:05:03.646Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 4 execution started
-state_head: 7bdaa9d60c44dcb4432dd01c5dec7fcc1d50ba84
+state_head: b9b40bc3db7fb37dd0c62f50917d005b63c351cb
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 14
   percent: 33
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 4 (Entrada, preferências e comportamento no sistema) — EXECUTING
-Current Plan: 3
+Current Plan: 4
 Total Plans in Phase: 6
 Status: Ready to execute
 Last activity: 2026-11-21 — Phase 4 execution started
@@ -68,6 +68,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02 P04 | 10min | 3 tasks | 5 files |
 | Phase 04 P01 | 25 min | 2 tasks | 7 files |
 | Phase 04 P02 | 30min | 2 tasks | 8 files |
+| Phase 04 P03 | 12min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Phase 04]: hoverStep e shouldExpand ficam inline no index.html (CSP e preload em sandbox; precedentes regras-do-gate e mola), excecao a regra de logica pura em state.js
 - [Phase 04]: island:hover sai; island:cursor (main para renderer) e island:capture (renderer para main, so booleano) entram; captura sem a opcao forward, arraste e menu a seguram
 - [Phase 04]: o evento hide de createIsland solta a captura e liga/desliga o timer do cursor, entao atalho, menu e tela cheia nao chamam updateCursorTick
+- [Phase 04]: Folga lateral por âncora em { left, right } (20/100 nas de esquerda, 100/20 nas de direita, 60/60 no centro) no clamp, no fitsWorkArea e no gate: a pílula de canto nunca sai da tela
+- [Phase 04]: Tolerância do isWithinWorkArea segue em 2 px (D-14): +2 DIP a 125% aceito, +3 recusado; setBounds logo depois de criar a janela
+- [Phase 04]: Modo cursor só troca a ilha de monitor com hasPermission === false; a prova do palco da âncora de baixo exige a sombra inteira nos casos que coexistem e a pílula inteira no pior caso combinado
 
 ### Pending Todos
 
@@ -122,6 +126,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T16:54:12.052Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-11-21T17:05:03.268Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None
