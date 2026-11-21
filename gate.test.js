@@ -340,7 +340,9 @@ test('refresh não engole o rearme e o estado enviado leva answeredId, armEpoch 
   for (const glue of [
     "nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm')",
     'if (serialized === lastSent && nextShown.epoch === shown.epoch) return;',
-    '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences }',
+    '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea }',
+    // a mesma conferência do gate (isWithinWorkArea com a folga), nunca uma mais frouxa
+    'const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK);',
   ]) {
     assert.ok(mainSource.includes(glue), `main.js sem a cola: ${glue}`);
   }
@@ -392,6 +394,21 @@ test('render trava pelo answeredId e só libera Permitir lido; id ou época nova
     assert.ok(rendererSource.includes(glue), `index.html sem a cola: ${glue}`);
   }
   assert.match(rendererSource, /if \(epochChanged \|\| \(permissionId && permissionId !== previousPermissionId\)\) \{\s*lastArmEpoch = next\.armEpoch;\s*restartArming\(\);/);
+});
+
+// Palco maior que a área útil: o gate recusa toda decisão (isWithinWorkArea não muda), e o renderer
+// só deixa de oferecer os botões. A trava só desabilita: nenhuma linha dela atribui disabled = false.
+test('com o palco fora da área útil o renderer desabilita os botões e manda responder no terminal', () => {
+  for (const glue of [
+    'const cannotDecideHere = current.fitsWorkArea === false;',
+    "const hintText = cannotDecideHere ? 'Responda no terminal' : 'Role até o fim para poder permitir';",
+    'permissionHint.hidden = wasRead && !cannotDecideHere;',
+    'if (cannotDecideHere) denyButton.disabled = allowButton.disabled = true;',
+  ]) {
+    assert.ok(rendererSource.includes(glue), `index.html sem a cola: ${glue}`);
+  }
+  const render = rendererSource.slice(rendererSource.indexOf('const cannotDecideHere'), rendererSource.indexOf('function render()'));
+  assert.equal(/disabled\s*=\s*false/.test(render), false, 'a trava do palco não pode liberar botão');
 });
 
 // Travas de regressão (texto) das preferências visuais: o main só lê o arquivo, uma vez, sem

@@ -163,9 +163,14 @@ function sendState(island) {
   const isFirstIsland = island === islands.values().next().value;
   // answeredId faz a outra ilha travar os botões do pedido que uma ilha já decidiu; armEpoch
   // sobe a cada troca, reexibição ou mudança de monitor, e o renderer rearma quando ele muda.
+  // fitsWorkArea é a mesma conferência que o gate faz no clique: com o palco maior que a área útil
+  // (monitor baixo, DPI alto) toda decisão seria recusada, então o renderer nem oferece os botões.
+  // Só pode desabilitar: o gate continua sendo quem decide.
+  const display = displayOf(island);
+  const fitsWorkArea = Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK);
   island.webContents.send(
     'island:state',
-    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences },
+    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea },
     isFirstIsland,
   );
 }

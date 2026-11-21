@@ -240,6 +240,8 @@ function nextShownPermission(shown, permissionId, now, rearm) {
 // gate.test.js) e nunca muda durante a animação, para a pílula nunca ser recortada.
 // ponytail: um palco só para todos os monitores e escalas de DPI (cada monitor tem o seu renderer e as
 // suas molas). Não validado em hardware com DPI misto; se recortar, dimensionar o palco por monitor.
+// Limite conhecido: com a área útil menor que o palco (altura abaixo de 410 DIP, ex. 1366×768 a 200%) a janela
+// passa da borda, o gate recusa toda decisão e a ilha mostra os botões desabilitados ("Responda no terminal").
 const WINDOW_SIZE = Object.freeze({ width: 520, height: 410 });
 // A pílula expandida (400 px) fica centrada no palco e sobram 60 px transparentes de cada lado, que podem
 // sair da tela para a pílula encostar na borda do monitor. O valor subiu de 20 para 60 junto com a largura

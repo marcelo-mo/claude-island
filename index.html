@@ -750,7 +750,13 @@
       contentChangedAt, now: performance.now(), clientHeight: permissionText.clientHeight, hiddenBelow,
     })) readPermissionId = permission.id;
     const wasRead = readPermissionId === permission.id;
-    permissionHint.hidden = wasRead;
+    // O main avisa quando a janela não cabe na área útil (monitor baixo, DPI alto): o gate recusaria
+    // toda decisão, então os botões ficam desabilitados e a dica manda responder no terminal.
+    // Isto só desabilita; quem libera um botão continua sendo o resto desta função e o main.
+    const cannotDecideHere = current.fitsWorkArea === false;
+    const hintText = cannotDecideHere ? 'Responda no terminal' : 'Role até o fim para poder permitir';
+    if (permissionHint.textContent !== hintText) permissionHint.textContent = hintText;
+    permissionHint.hidden = wasRead && !cannotDecideHere;
     // Depois do clique os botões travam até o main responder; se ele aceitou, answeredId mantém a
     // trava até o pedido sair do estado, também na ilha que não recebeu o clique (outro monitor).
     // A troca de has-window, logo acima, move os botões sem mudar o tamanho de #actions nem de #pill.
@@ -758,6 +764,7 @@
     const locked = !armed || permission.id === answeredPermissionId || permission.id === current.answeredId;
     denyButton.disabled = locked;
     allowButton.disabled = locked || !wasRead;
+    if (cannotDecideHere) denyButton.disabled = allowButton.disabled = true;
   }
 
   function render() {
