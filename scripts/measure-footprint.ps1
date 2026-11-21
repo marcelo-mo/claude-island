@@ -64,7 +64,9 @@ if ($writesToRepoResults) {
 $safeRoots = @($env:LOCALAPPDATA, $env:TEMP) | Where-Object { $_ } |
   ForEach-Object { (Get-FullPath $_).TrimEnd('\') + '\' }
 $CleanDirs = @($CleanDirs | ForEach-Object {
-  $full = Get-FullPath $_
+  # Sem a barra final, "%LOCALAPPDATA%\" não vira a própria raiz segura; o StartsWith com a raiz terminada em '\'
+  # só aceita subpastas estritas.
+  $full = (Get-FullPath $_).TrimEnd('\')
   $allowed = $false
   foreach ($root in $safeRoots) { if ($full.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { $allowed = $true } }
   if (-not $allowed) { throw "-CleanDirs só aceita caminhos sob %LOCALAPPDATA% ou %TEMP%: $full" }

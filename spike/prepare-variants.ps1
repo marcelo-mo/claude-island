@@ -25,7 +25,8 @@ $e1Sha = Invoke-Git rev-parse "$OptimizedCommit^{commit}"
 # So apaga pasta sob %LOCALAPPDATA%: um parametro errado nao pode levar uma pasta de verdade.
 $OutRoot = [IO.Path]::GetFullPath($OutRoot).TrimEnd('\')
 $safeRoot = [IO.Path]::GetFullPath($env:LOCALAPPDATA).TrimEnd('\') + '\'
-if (-not ($OutRoot + '\').StartsWith($safeRoot, [StringComparison]::OrdinalIgnoreCase)) {
+# OutRoot sem a barra final: a própria %LOCALAPPDATA% não pode passar, só uma subpasta estrita dela.
+if (-not $OutRoot.StartsWith($safeRoot, [StringComparison]::OrdinalIgnoreCase)) {
   throw "-OutRoot so aceita caminhos sob %LOCALAPPDATA%: $OutRoot"
 }
 
