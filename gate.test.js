@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { acceptDecision, isWithinWorkArea, PERMISSION_ARM_MS } = require('./state');
+const fs = require('node:fs');
+const path = require('node:path');
+const { acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
 
@@ -26,3 +28,20 @@ for (const vector of vectors.isWithinWorkArea) {
     assert.equal(isWithinWorkArea(bounds, workArea, horizontalSlack), vector.expect);
   });
 }
+
+for (const vector of vectors.nextShownPermission) {
+  test(`nextShownPermission: ${vector.name}`, () => {
+    const { shown, permissionId, now, rearm } = vector.input;
+    assert.deepEqual(nextShownPermission(shown, permissionId, now, rearm), vector.expect);
+  });
+}
+
+// Os testes de fonte abaixo são travas de regressão baratas e assumidamente frágeis (leem texto):
+// não provam comportamento. Se um comentário em main.js quebrar a contagem, ajuste o comentário.
+const mainSource = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
+
+test('o pedido exibido só é atribuído na declaração e dentro de refresh (invariante I2)', () => {
+  const assignments = mainSource.match(/(?<![\w.])shown\s*=(?!=)/g) || [];
+  assert.equal(assignments.length, 2);
+  assert.ok(mainSource.includes('function refresh(reason)'));
+});

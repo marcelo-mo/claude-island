@@ -1043,5 +1043,168 @@
       },
       "expect": false
     }
+  ],
+  "nextShownPermission": [
+    {
+      "name": "pedido novo A a partir do vazio reinicia o instante e sobe a época",
+      "input": {
+        "shown": {
+          "id": null,
+          "since": 0,
+          "epoch": 0
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 1000,
+        "rearm": false
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 1000,
+        "epoch": 1
+      }
+    },
+    {
+      "name": "mesmo id com rearm false não muda nada",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 5000,
+        "rearm": false
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 1000,
+        "epoch": 1
+      }
+    },
+    {
+      "name": "mesmo id com rearm ausente não muda nada",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 5000
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 1000,
+        "epoch": 1
+      }
+    },
+    {
+      "name": "mesmo id com rearm true reinicia o instante e sobe a época",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 5000,
+        "rearm": true
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 5000,
+        "epoch": 2
+      }
+    },
+    {
+      "name": "troca de A para B reinicia o instante e sobe a época",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "now": 3000,
+        "rearm": false
+      },
+      "expect": {
+        "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "since": 3000,
+        "epoch": 2
+      }
+    },
+    {
+      "name": "A some (id nulo) reinicia o instante e sobe a época",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": null,
+        "now": 4000,
+        "rearm": false
+      },
+      "expect": {
+        "id": null,
+        "since": 4000,
+        "epoch": 2
+      }
+    },
+    {
+      "name": "nulo para nulo sem rearm não muda nada",
+      "input": {
+        "shown": {
+          "id": null,
+          "since": 4000,
+          "epoch": 2
+        },
+        "permissionId": null,
+        "now": 6000,
+        "rearm": false
+      },
+      "expect": {
+        "id": null,
+        "since": 4000,
+        "epoch": 2
+      }
+    },
+    {
+      "name": "nulo para nulo com rearm true sobe a época",
+      "input": {
+        "shown": {
+          "id": null,
+          "since": 4000,
+          "epoch": 2
+        },
+        "permissionId": null,
+        "now": 6000,
+        "rearm": true
+      },
+      "expect": {
+        "id": null,
+        "since": 6000,
+        "epoch": 3
+      }
+    },
+    {
+      "name": "rearm com a string \"true\" é tratado como sem rearm",
+      "input": {
+        "shown": {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "since": 1000,
+          "epoch": 1
+        },
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 5000,
+        "rearm": "true"
+      },
+      "expect": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "since": 1000,
+        "epoch": 1
+      }
+    }
   ]
 }
