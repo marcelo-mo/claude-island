@@ -9,7 +9,7 @@ O Claude Island é software livre sob a licença MIT (ver `LICENSE`). Este arqui
 - Autor: Himanshu (github.com/devcode90). As contribuições de terceiros estão creditadas no repositório do mod.
 - Licença: MIT
 
-O que o Claude Island toma do mod: valores e comportamento (constantes de mola, temas, tamanhos), reescritos em JavaScript. Nenhum trecho do código C++ é copiado ou traduzido.
+O que o Claude Island toma do mod: valores e comportamento (constantes de mola e estilos de animação, nudge e ampliação no hover, temas, formas, camadas do material e tamanhos), reescritos em JavaScript e CSS. Nenhum trecho do código C++ é copiado ou traduzido.
 
 Texto da licença do mod:
 

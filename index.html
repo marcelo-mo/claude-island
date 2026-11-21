@@ -18,7 +18,10 @@
     --text: #fff;
     --muted: #a1a1a6;
     --border: rgb(255 255 255 / .12);
-    --shadow: 0 4px 14px rgba(0, 0, 0, .35);
+    /* Material da pílula (camadas e números do mod Dynamic Island for Windows, MIT, Copyright (c) 2026
+       devcode90; ver THIRD_PARTY_NOTICES.md). --depth escurece o rodapé da pílula e --shadow é estática. */
+    --depth: .06;
+    --shadow: 0 5px 14px rgb(0 0 0 / .30), 0 1px 3px rgb(0 0 0 / .20);
     /* Bloco de permissão: tokens próprios e opacos, para o que o usuário lê antes de aprovar não depender
        do tema (o visual.test.js mede o contraste deles nos 10 casos). Cava o bloco nos temas escuros. */
     --perm-bg: color-mix(in srgb, #000 55%, var(--surface));
@@ -54,8 +57,9 @@
       --text: #1d1d1f;
       --muted: #6e6e73;
       --border: rgb(0 0 0 / .10);
-      /* Sobre janelas claras a pílula branca some sem um contorno. */
-      --shadow: 0 0 0 1px rgba(0, 0, 0, .1), 0 4px 14px rgba(0, 0, 0, .18);
+      /* Profundidade do mod x0,55 nos temas claros; o contorno de 1 px (--contour) é o que destaca a pílula clara. */
+      --depth: .033;
+      --shadow: 0 5px 14px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .12);
       --perm-bg: color-mix(in srgb, var(--text) 4%, var(--surface));
       /* Nos claros a cor de estado não chega a 4,5:1 como texto; o rótulo usa o texto (a cor de estado não muda). */
       --perm-label: var(--text);
@@ -82,7 +86,8 @@
     --context-critical: #d70015;
     --icon-ink: #fff;
     --surface: #F5F6F8; --text: #14161A; --muted: #5B6270; --border: #D8DBE1;
-    --shadow: 0 0 0 1px rgba(0, 0, 0, .1), 0 4px 14px rgba(0, 0, 0, .18);
+    --depth: .033;
+    --shadow: 0 5px 14px rgb(0 0 0 / .16), 0 1px 3px rgb(0 0 0 / .12);
     --perm-bg: color-mix(in srgb, var(--text) 4%, var(--surface));
     --perm-label: var(--text);
   }
@@ -95,16 +100,25 @@
 
   #pill {
     width: max-content; height: 46px; padding: 0 17px;
-    background: var(--surface); border-radius: var(--radius, 23px);
+    /* Três camadas estáticas, de cima para baixo: lavagem do acento do estado no topo (reflexo), profundidade
+       e o preenchimento do tema. O raio vertical da lavagem é 56 px fixos, nunca proporcional à altura: ela
+       termina antes do detalhe e do bloco de permissão, que além disso tem fundo opaco (VIS-04). Gradiente não
+       interpola, então a troca do reflexo é instantânea; brilho e ponto continuam suaves. Não há variante
+       ociosa: a pílula ociosa tem opacidade 0, então um segundo valor não teria efeito visível. */
+    background:
+      radial-gradient(ellipse 75% 56px at 50% 0, color-mix(in srgb, var(--accent) 7.5%, transparent), transparent),
+      linear-gradient(to bottom, rgb(0 0 0 / 0), rgb(0 0 0 / calc(.25 * var(--depth))) 45%, rgb(0 0 0 / var(--depth))),
+      var(--surface);
+    border-radius: var(--radius, 23px);
     /* Compacta, a pílula abraça o conteúdo: nada de um lado cheio e o outro vazio.
        Expandida, a barra espalha ícone, título e indicadores pela largura toda.
        Largura e altura vêm de molas em JS, que fixam --content-width: o conteúdo fica na largura final
        e a pílula, mais estreita durante a animação, recorta o excesso (igual dos dois lados). */
     display: grid; grid-template-columns: var(--content-width, 1fr); justify-content: center; grid-template-rows: 46px auto auto;
     align-items: center; overflow: hidden; text-align: center;
-    transition: opacity .25s, box-shadow .3s, background .3s, border-radius .3s ease,
+    transition: opacity .25s, box-shadow .3s, border-radius .3s ease,
                 scale .25s ease, translate .25s ease;
-    box-shadow: 0 0 0 1px var(--ring), var(--shadow);
+    box-shadow: 0 0 0 1px var(--contour), var(--shadow);
     cursor: grab;
     /* Amplia a partir do centro do topo: o topo não anda e a pílula não sobe no palco. */
     transform-origin: 50% 0;
@@ -128,7 +142,9 @@
   /* O contorno pulsa na cor do estado: dá para ler a situação de relance, sem mirar no ponto.
      Quem pede ação pulsa mais rápido; executando é o mais calmo para não cansar.
      O brilho pulsa por opacidade numa camada própria (::before) e a ilha parada não anima nada. */
-  #pill { --ring: color-mix(in srgb, var(--accent) 40%, transparent); --pulse: 2.4s; position: relative; isolation: isolate; }
+  /* --contour (1 px) mistura 35% do acento com a borda do tema; depende do acento do estado, por isso é
+     declarado aqui e não no :root. */
+  #pill { --contour: color-mix(in srgb, var(--accent) 35%, var(--border)); --pulse: 2.4s; position: relative; isolation: isolate; }
   #pill[data-state="waiting"] { --pulse: 1.4s; }
   #pill[data-state="done"] { --pulse: 1.8s; }
   /* A sombra é desenhada uma vez, atrás do conteúdo, e só a opacidade pulsa: o compositor anima sem
@@ -173,10 +189,10 @@
   #context circle { fill: none; stroke-width: 5.5; }
   #context .track { stroke: color-mix(in srgb, var(--text) 18%, transparent); }
   #context .value { stroke: var(--level); stroke-linecap: round; transition: stroke-dasharray .4s, stroke .3s; }
-  #context-number { font-weight: 500; font-variant-numeric: tabular-nums; opacity: .8; }
+  #context-number { font-weight: 400; font-variant-numeric: tabular-nums; opacity: .8; }
   #count {
-    font-size: 12.5px; color: var(--button-text); background: var(--button);
-    border-radius: 11px; padding: 2px 9px; font-weight: 700;
+    font-size: 12px; color: var(--button-text); background: var(--button);
+    border-radius: 11px; padding: 2px 9px; font-weight: 600;
   }
   #count:empty { display: none; }
   /* Ao concluir, a sessão costuma pedir uma olhada: o atalho fica à mão sem precisar do hover.
@@ -206,7 +222,7 @@
     background: var(--perm-bg); border-radius: 12px; padding: 8px 6px 8px 12px;
   }
   #permission[hidden] { display: none; }
-  #permission-tool { display: block; font-size: 11px; font-weight: 700; color: var(--perm-label); margin-bottom: 3px; }
+  #permission-tool { display: block; font-size: 11px; font-weight: 600; color: var(--perm-label); margin-bottom: 3px; }
   #permission-text {
     font: 12px/1.45 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--perm-text);
     white-space: pre-wrap; overflow-wrap: anywhere; max-height: 105px; overflow-y: auto; padding-right: 6px;
