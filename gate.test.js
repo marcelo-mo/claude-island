@@ -74,7 +74,10 @@ function loadRendererRules() {
   }
   const start = rendererSource.indexOf(RULES_START) + RULES_START.length;
   const block = rendererSource.slice(start, rendererSource.indexOf(RULES_END));
-  const exported = ['PERMISSION_ARM_MS', 'SETTLE_STABLE_MS', 'PRESS_DWELL_MS', 'settleStep', 'canPress', 'isValidRelease'];
+  const exported = [
+    'PERMISSION_ARM_MS', 'SETTLE_STABLE_MS', 'PRESS_DWELL_MS', 'WHEEL_SETTLE_MS', 'READ_TOLERANCE_PX',
+    'settleStep', 'canPress', 'isValidRelease', 'isWheelSettled', 'canMarkRead',
+  ];
   return vm.runInNewContext(`${block}\n({ ${exported.join(', ')} })`, Object.create(null));
 }
 
@@ -84,6 +87,7 @@ test('as constantes do bloco do renderer são as do fixture', () => {
   assert.equal(rules.PERMISSION_ARM_MS, vectors.armMs);
   assert.equal(rules.SETTLE_STABLE_MS, vectors.settleStableMs);
   assert.equal(rules.PRESS_DWELL_MS, vectors.pressDwellMs);
+  assert.equal(rules.WHEEL_SETTLE_MS, vectors.wheelSettleMs);
 });
 
 for (const vector of vectors.settleStep) {
@@ -102,6 +106,19 @@ for (const vector of vectors.canPress) {
 for (const vector of vectors.isValidRelease) {
   test(`isValidRelease: ${vector.name}`, () => {
     assert.equal(loadRendererRules().isValidRelease(vector.input), vector.expect);
+  });
+}
+
+for (const vector of vectors.isWheelSettled) {
+  test(`isWheelSettled: ${vector.name}`, () => {
+    const { contentChangedAt, now } = vector.input;
+    assert.equal(loadRendererRules().isWheelSettled(contentChangedAt, now), vector.expect);
+  });
+}
+
+for (const vector of vectors.canMarkRead) {
+  test(`canMarkRead: ${vector.name}`, () => {
+    assert.equal(loadRendererRules().canMarkRead(vector.input), vector.expect);
   });
 }
 

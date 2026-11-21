@@ -1697,5 +1697,108 @@
       },
       "expect": false
     }
+  ],
+  "wheelSettleMs": 400,
+  "isWheelSettled": [
+    {
+      "name": "no instante da troca ainda não assentou",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1000
+      },
+      "expect": false
+    },
+    {
+      "name": "399 ms depois da troca ainda não assentou",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1399
+      },
+      "expect": false
+    },
+    {
+      "name": "400 ms depois da troca assentou",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1400
+      },
+      "expect": true
+    },
+    {
+      "name": "relógio antes da troca não assentou",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 900
+      },
+      "expect": false
+    },
+    {
+      "name": "sem contentChangedAt não assentou",
+      "input": {
+        "now": 1500
+      },
+      "expect": false
+    }
+  ],
+  "canMarkRead": [
+    {
+      "name": "rolou até o fim depois da janela da roda marca lido",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 105,
+        "hiddenBelow": 0
+      },
+      "expect": true
+    },
+    {
+      "name": "faltando 2 px ainda conta como fim",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 105,
+        "hiddenBelow": 2
+      },
+      "expect": true
+    },
+    {
+      "name": "faltando 3 px não conta como fim",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 105,
+        "hiddenBelow": 3
+      },
+      "expect": false
+    },
+    {
+      "name": "texto sem altura visível não marca lido",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 0,
+        "hiddenBelow": 0
+      },
+      "expect": false
+    },
+    {
+      "name": "dentro da janela da roda não marca lido",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1300,
+        "clientHeight": 105,
+        "hiddenBelow": 0
+      },
+      "expect": false
+    },
+    {
+      "name": "sem hiddenBelow não marca lido",
+      "input": {
+        "contentChangedAt": 1000,
+        "now": 1500,
+        "clientHeight": 105
+      },
+      "expect": false
+    }
   ]
 }
