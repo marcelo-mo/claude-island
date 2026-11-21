@@ -286,8 +286,10 @@
     if (permissionText.clientHeight > 0 && hiddenBelow <= 2) readPermissionId = permission.id;
     const wasRead = readPermissionId === permission.id;
     permissionHint.hidden = wasRead;
-    // Depois do clique os botões ficam travados até o pedido sair do estado.
-    const locked = permission.id !== armedPermissionId || permission.id === answeredPermissionId;
+    // Depois do clique os botões ficam travados até o pedido sair do estado. answeredId vem do
+    // main e trava também a ilha que não recebeu o clique: o outro monitor já decidiu este pedido.
+    const locked = permission.id !== armedPermissionId || permission.id === answeredPermissionId
+      || permission.id === current.answeredId;
     denyButton.disabled = locked;
     allowButton.disabled = locked || !wasRead;
   }

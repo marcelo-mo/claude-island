@@ -4,7 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, acceptDecision, defaultIslandPosition, clampIslandPosition,
+  pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -36,6 +36,9 @@ let shownWindowPid = null;
 // ou "Negar" se refere. O renderer só devolve o id como eco, que apenas pode recusar.
 let shownPermissionId = null;
 let shownPermissionSince = 0;
+// Último pedido cuja decisão foi gravada. Primeiro clique vence: só o main enxerga as duas ilhas
+// (cada renderer só trava o próprio botão), então é ele que recusa a segunda decisão.
+let decidedPermissionId = null;
 
 const positionsFile = () => path.join(app.getPath('userData'), 'positions.json');
 
@@ -148,7 +151,8 @@ function savedPosition(display) {
 // Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.
 function sendState(island) {
   const isFirstIsland = island === islands.values().next().value;
-  island.webContents.send('island:state', lastPickedState, isFirstIsland);
+  // answeredId faz a outra ilha travar os botões do pedido que uma ilha já decidiu.
+  island.webContents.send('island:state', { ...lastPickedState, answeredId: decidedPermissionId }, isFirstIsland);
 }
 
 function createIsland(display) {
@@ -249,17 +253,28 @@ function registerIpcHandlers() {
   // ('allow' ou 'deny') e o eco do id que ele estava mostrando; o eco só serve para recusar
   // (o pedido mudou entre ver e clicar). O alvo é sempre o pedido em exibição, guardado aqui.
   ipcMain.on('island:decide', (event, behavior, pressedId) => {
-    if (![...islands.values()].includes(islandOf(event))) return;
+    const island = islandOf(event);
+    if (![...islands.values()].includes(island)) return;
+    const display = displayOf(island);
     const verdict = acceptDecision({
       behavior,
       echoedId: pressedId,
       shownId: shownPermissionId,
       shownSince: shownPermissionSince,
       now: performance.now(),
+      decidedId: decidedPermissionId,
+      windowVisible: island.isVisible() && !island.isMinimized(),
+      // ponytail: sem sonda de tela cheia até a Fase 4 (TELA-01); a entrada já existe no contrato e nos vetores.
+      coveredByFullscreen: false,
+      withinVisibleArea: Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK),
     });
     if (!verdict.accept) return;
     try {
       writeDecision(verdict.permissionId, verdict.behavior);
+      // Só depois de gravar: marcar antes impediria tentar de novo se a gravação falhar. O handler
+      // roda num turno síncrono do event loop, sem intercalação entre checar e marcar.
+      decidedPermissionId = verdict.permissionId;
+      for (const each of islands.values()) sendState(each);
     } catch (error) {
       console.error('Não foi possível gravar a decisão do pedido de permissão:', error.message);
     }

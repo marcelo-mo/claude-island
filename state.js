@@ -129,11 +129,19 @@ const refuseDecision = (reason) => ({ accept: false, reason });
  * alvo. Ou devolve { accept: false, reason }. A ordem das checagens é contrato, fixada pelos
  * vetores de fixtures/permission-vectors.json.
  */
-function acceptDecision({ behavior, echoedId, shownId, shownSince, now }) {
+function acceptDecision({
+  behavior, echoedId, shownId, shownSince, now, decidedId, windowVisible, coveredByFullscreen, withinVisibleArea,
+}) {
   if (decisionOutput(behavior) === null) return refuseDecision('invalid-behavior');
   if (typeof shownId !== 'string' || shownId === '') return refuseDecision('nothing-shown');
   // Igualdade estrita: eco ausente, de outro tipo, de outro pedido ou com outra caixa recusa.
   if (echoedId !== shownId) return refuseDecision('echo-mismatch');
+  // Duas ilhas podem mostrar o mesmo pedido: só o primeiro clique vale.
+  if (decidedId === shownId) return refuseDecision('already-decided');
+  // Os três fatos abaixo só aceitam o valor exato: fato ausente ou de outro tipo recusa.
+  if (windowVisible !== true) return refuseDecision('window-hidden');
+  if (coveredByFullscreen !== false) return refuseDecision('covered-by-fullscreen');
+  if (withinVisibleArea !== true) return refuseDecision('outside-visible-area');
   // Cobre também o relógio que andou para trás (delta negativo) e dado que não é número.
   if (!Number.isFinite(now) || !Number.isFinite(shownSince) || now - shownSince < PERMISSION_ARM_MS) {
     return refuseDecision('not-armed');
@@ -191,6 +199,29 @@ function pickState(sessions, now) {
   };
 }
 
+// getBounds() arredonda com escala de DPI fracionária (como 125%), e a janela pode medir 1 ou 2 px
+// a mais que o esperado. Recusar por engano é seguro (o terminal segue valendo), mas não pode
+// virar recusa permanente de uma janela que está de fato na tela.
+const WORK_AREA_TOLERANCE_PX = 2;
+
+/**
+ * A janela está dentro da área útil do monitor? `horizontalSlack` é a folga lateral que a
+ * janela transparente já tem (ver clampIslandPosition). Devolve false quando `bounds` ou
+ * `workArea` não têm todos os campos numéricos: dado que não confere não decide. Num monitor
+ * menor que a janela também devolve false, que é o lado seguro.
+ */
+function isWithinWorkArea(bounds, workArea, horizontalSlack) {
+  const fields = [bounds && bounds.x, bounds && bounds.y, bounds && bounds.width, bounds && bounds.height,
+    workArea && workArea.x, workArea && workArea.y, workArea && workArea.width, workArea && workArea.height,
+    horizontalSlack];
+  if (!fields.every(Number.isFinite)) return false;
+  const sideMargin = horizontalSlack + WORK_AREA_TOLERANCE_PX;
+  return bounds.x >= workArea.x - sideMargin
+    && bounds.x + bounds.width <= workArea.x + workArea.width + sideMargin
+    && bounds.y >= workArea.y - WORK_AREA_TOLERANCE_PX
+    && bounds.y + bounds.height <= workArea.y + workArea.height + WORK_AREA_TOLERANCE_PX;
+}
+
 /** Posição padrão da janela da ilha: topo central da área útil do monitor. */
 function defaultIslandPosition(workArea, windowSize) {
   return { x: Math.round(workArea.x + (workArea.width - windowSize.width) / 2), y: workArea.y };
@@ -213,5 +244,5 @@ function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
 module.exports = {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
-  pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
+  pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
 };
