@@ -1,0 +1,479 @@
+{
+  "version": 1,
+  "armMs": 800,
+  "acceptReasons": [
+    "invalid-behavior",
+    "nothing-shown",
+    "echo-mismatch",
+    "not-armed"
+  ],
+  "acceptDecision": [
+    {
+      "name": "aceita allow com eco igual e 800 ms exatos",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "allow"
+      }
+    },
+    {
+      "name": "aceita deny com eco igual e 800 ms exatos",
+      "input": {
+        "behavior": "deny",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "deny"
+      }
+    },
+    {
+      "name": "aceita allow com 801 ms",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1801,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "allow"
+      }
+    },
+    {
+      "name": "aceita allow com o pedido na tela há 10 000 ms",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 11000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": true,
+        "permissionId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "behavior": "allow"
+      }
+    },
+    {
+      "name": "recusa behavior em maiúsculas",
+      "input": {
+        "behavior": "ALLOW",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa behavior com espaço no fim",
+      "input": {
+        "behavior": "allow ",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa behavior nulo",
+      "input": {
+        "behavior": null,
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa behavior objeto",
+      "input": {
+        "behavior": {},
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa behavior ausente",
+      "input": {
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "recusa quando nada está exibido (shownId nulo)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": null,
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "nothing-shown"
+      }
+    },
+    {
+      "name": "recusa quando nada está exibido (shownId ausente)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "nothing-shown"
+      }
+    },
+    {
+      "name": "recusa quando nada está exibido (shownId vazio)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "nothing-shown"
+      }
+    },
+    {
+      "name": "recusa eco de outro pedido",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa eco do mesmo UUID em maiúsculas",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa eco ausente",
+      "input": {
+        "behavior": "allow",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa eco numérico",
+      "input": {
+        "behavior": "allow",
+        "echoedId": 42,
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa eco nulo",
+      "input": {
+        "behavior": "allow",
+        "echoedId": null,
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa clique dado olhando A quando B tomou a tela (pedido mudou no instante do clique)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownSince": 1000,
+        "now": 11000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    },
+    {
+      "name": "recusa com 0 ms na tela",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa com 799 ms na tela",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1799,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa quando o relógio andou para trás",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 900,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa com shownSince ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa com now ausente",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "recusa pedido novo logo após o clique (eco igual ao novo, há 100 ms)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownSince": 1700,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "not-armed"
+      }
+    },
+    {
+      "name": "behavior inválido vence nada exibido",
+      "input": {
+        "behavior": "ALLOW",
+        "echoedId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownId": null,
+        "shownSince": 1000,
+        "now": 1800,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "invalid-behavior"
+      }
+    },
+    {
+      "name": "eco divergente vence o relógio (0 ms)",
+      "input": {
+        "behavior": "allow",
+        "echoedId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "shownId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "shownSince": 1000,
+        "now": 1000,
+        "decidedId": null,
+        "windowVisible": true,
+        "coveredByFullscreen": false,
+        "withinVisibleArea": true
+      },
+      "expect": {
+        "accept": false,
+        "reason": "echo-mismatch"
+      }
+    }
+  ]
+}
