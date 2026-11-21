@@ -251,12 +251,24 @@ function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
   };
 }
 
+/**
+ * Opacidade com que a ilha deve aparecer. Devolve 1 quando há pedido na tela ou o fato é
+ * desconhecido (`hasPermission !== false`, fail-safe) e quando a preferência não é um número em
+ * (0, 1]; senão devolve a preferência. Ainda sem consumidor: a transparência de 100/85/70/55% da
+ * Fase 4 (PREF-06) a usa, e com pedido na tela a transparência nunca vale (invariante I5).
+ */
+function effectiveOpacity(preferredOpacity, hasPermission) {
+  if (hasPermission !== false) return 1;
+  if (typeof preferredOpacity !== 'number' || !(preferredOpacity > 0 && preferredOpacity <= 1)) return 1;
+  return preferredOpacity;
+}
+
 // Explícito protege de regressão: ligar nodeIntegration desligaria o sandbox em silêncio. O renderer
 // só carrega o index.html local, com CSP default-src 'none'.
 const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: true, nodeIntegration: false });
 
 module.exports = {
-  SECURE_WEB_PREFERENCES,
+  SECURE_WEB_PREFERENCES, effectiveOpacity,
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
