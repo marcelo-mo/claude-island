@@ -1800,5 +1800,18 @@
       },
       "expect": false
     }
+  ],
+  "effectiveOpacity": [
+    { "name": "pedido na tela com 0.55 vale 1", "input": { "preferredOpacity": 0.55, "hasPermission": true }, "expect": 1 },
+    { "name": "pedido na tela com 0.85 vale 1", "input": { "preferredOpacity": 0.85, "hasPermission": true }, "expect": 1 },
+    { "name": "sem pedido com 0.85 vale 0.85", "input": { "preferredOpacity": 0.85, "hasPermission": false }, "expect": 0.85 },
+    { "name": "sem pedido com 1 vale 1", "input": { "preferredOpacity": 1, "hasPermission": false }, "expect": 1 },
+    { "name": "sem pedido com 0.55 vale 0.55", "input": { "preferredOpacity": 0.55, "hasPermission": false }, "expect": 0.55 },
+    { "name": "fato hasPermission ausente é desconhecido e vale 1", "input": { "preferredOpacity": 0.7 }, "expect": 1 },
+    { "name": "preferência ausente vale 1", "input": { "hasPermission": false }, "expect": 1 },
+    { "name": "preferência acima de 1 vale 1", "input": { "preferredOpacity": 1.5, "hasPermission": false }, "expect": 1 },
+    { "name": "preferência 0 vale 1", "input": { "preferredOpacity": 0, "hasPermission": false }, "expect": 1 },
+    { "name": "preferência negativa vale 1", "input": { "preferredOpacity": -0.2, "hasPermission": false }, "expect": 1 },
+    { "name": "preferência em string vale 1", "input": { "preferredOpacity": "0.5", "hasPermission": false }, "expect": 1 }
   ]
 }

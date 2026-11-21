@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
+  effectiveOpacity,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -121,6 +122,13 @@ for (const vector of vectors.isWheelSettled) {
 for (const vector of vectors.canMarkRead) {
   test(`canMarkRead: ${vector.name}`, () => {
     assert.equal(loadRendererRules().canMarkRead(vector.input), vector.expect);
+  });
+}
+
+for (const vector of vectors.effectiveOpacity) {
+  test(`effectiveOpacity: ${vector.name}`, () => {
+    const { preferredOpacity, hasPermission } = vector.input;
+    assert.equal(effectiveOpacity(preferredOpacity, hasPermission), vector.expect);
   });
 }
 
