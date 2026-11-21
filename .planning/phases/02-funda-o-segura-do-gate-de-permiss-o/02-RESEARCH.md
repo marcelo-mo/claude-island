@@ -547,15 +547,15 @@ for (const { name, input, expect } of vectors.acceptDecision) {
 | A8 | Os três hex do tema Nord do mod são da paleta Nord do Sven Greb | CONV-04 | só afeta o texto do aviso Nord; conferir com a paleta oficial ao portar na Fase 3 |
 | A9 | `island.on('show')` dispara ao reexibir (`show`/`showInactive`) e é suficiente para "reexibir rearma" | SEG-02/06 | só verificável com a UI de esconder (Fase 4); registrar como verificação adiada |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **"Em tela cheia não aceita decisão" é verificável nesta fase?**
+1. **"Em tela cheia não aceita decisão" é verificável nesta fase?** — RESOLVED: 02-01 Task 2 (`coveredByFullscreen` na regra, constante `false` com `ponytail:`; prova ponta a ponta adiada à Fase 4, TELA-01).
    - Sabemos: não há API do Electron para saber se outra janela está em tela cheia (PITFALLS #13); a ilha hoje aparece **por cima** de tela cheia (`setAlwaysOnTop(true, 'screen-saver')`, `visibleOnFullScreen: true`, `main.js:170-171`); a sonda é TELA-01 (Fase 4).
    - Falta: critério 3 do roadmap menciona tela cheia.
    - Recomendação: a Fase 2 entrega a **regra e o contrato** (`coveredByFullscreen` na função pura, vetores, constante `false` com comentário `ponytail:`); a prova ponta a ponta fica para TELA-01/02. O planner deve registrar isso explicitamente no plano para o verificador não cobrar o que não existe.
-2. **"Reexibir rearma" sem UI de esconder.** Hoje nada esconde a ilha. Recomendação: ligar `island.on('show', …)` e o rearme agora (barato, protege a Fase 4) e marcar a verificação ponta a ponta como adiada à Fase 4 (A9).
-3. **Dois commits ou um para o eco?** Ver Pitfall 1: main+preload+renderer do eco juntos.
-4. **Transparência/opacidade sem preferência ainda.** `effectiveOpacity` entra pura e testada, sem consumidor; a Fase 4 (PREF-06) a usa. O enforcement em runtime desta fase é a exigência `opacity === 1` no armamento do renderer.
+2. **"Reexibir rearma" sem UI de esconder.** — RESOLVED: 02-02 Task 2 (rearme em `show`/`restore`; verificação ponta a ponta adiada à Fase 4). Hoje nada esconde a ilha. Recomendação: ligar `island.on('show', …)` e o rearme agora (barato, protege a Fase 4) e marcar a verificação ponta a ponta como adiada à Fase 4 (A9).
+3. **Dois commits ou um para o eco?** — RESOLVED: 02-01 Task 1 (um único commit no GREEN). Ver Pitfall 1: main+preload+renderer do eco juntos.
+4. **Transparência/opacidade sem preferência ainda.** — RESOLVED: 02-04 Task 3 (`effectiveOpacity`) + `opacity === 1` no armamento (02-03). `effectiveOpacity` entra pura e testada, sem consumidor; a Fase 4 (PREF-06) a usa. O enforcement em runtime desta fase é a exigência `opacity === 1` no armamento do renderer.
 
 ## Project Constraints (from CLAUDE.md)
 
