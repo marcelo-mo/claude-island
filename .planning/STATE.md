@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 3
 current_phase_name: Palco fixo, animação e visual
-status: ready_to_plan
-stopped_at: Fases 1 e 2 entregues
+status: human_needed
+stopped_at: Fase 3 executada, revisada e auditada; PR aberto sem merge
 last_updated: "2026-11-21T14:18:42.392Z"
 last_activity: 2026-11-21
-last_activity_desc: "Fases 1 e 2 entregues (PRs #5 e #4); UAT manual dispensada pelo autor"
+last_activity_desc: "Fase 3 executada (3 planos), revisão com 3 correções, verificação human_needed, segurança 17/17; PR aberto"
 state_head: 34e2b970910b614af86e72d70b59b3d9d3af45df
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 11
   percent: 33
 ---
 
@@ -27,9 +27,9 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 
 ## Current Position
 
-Phase: 3 (Palco fixo, animação e visual) — READY TO EXECUTE
-Status: Fases 1 e 2 entregues; UAT manual das duas dispensada pelo autor (itens seguem em 01-UAT.md e 02-UAT.md)
-Last activity: 2026-11-21 — Fases 1 e 2 entregues (PRs #5 e #4)
+Phase: 3 (Palco fixo, animação e visual) — AGUARDANDO REVISÃO DO PR
+Status: 3/3 planos executados; verificação human_needed (9 itens visuais em 03-UAT.md, 1 bloqueante: 125%/150%); segurança threats_open 0
+Last activity: 2026-11-21 — Fase 3 entregue em PR, sem merge
 
 Progress: [███░░░░░░░] 33%
 
