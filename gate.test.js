@@ -1610,6 +1610,63 @@ test('readSessions apaga a sessão morta antes de ela ganhar chave e ordem, e s�
   assert.ok(body.includes('const now = Date.now();'));
 });
 
+// Roda o readSessions de verdade, com um disco de mentira: `disk` mapeia nome do arquivo para o texto dele.
+function runReadSessions(disk, { alive = () => true, firstSeen = new Map(), lastGood = new Map() } = {}) {
+  const { isSessionFile, isSessionDead } = require('./state');
+  const removed = [];
+  const stubs = {
+    fs: {
+      readdirSync: () => Object.keys(disk),
+      readFileSync: (file) => disk[path.basename(file)],
+      statSync: () => ({ birthtimeMs: 500 }),
+      rmSync: (file) => { removed.push(path.basename(file)); delete disk[path.basename(file)]; },
+    },
+    path, STATE_DIR: '/estado', isSessionFile, isSessionDead, isPidAlive: alive, readContextPercent: () => null,
+    firstSeenAtByKey: firstSeen, lastGoodSessionByKey: lastGood, Date: { now: () => 10_000 },
+  };
+  const readSessions = vm.runInNewContext(`${mainFunctionBody('readSessions')}\n}\nreadSessions`, stubs);
+  return { read: () => [...readSessions()].map((session) => session.key), removed, firstSeen, lastGood };
+}
+
+test('readSessions: arquivo pela metade num ciclo mantém o último estado lido, sem a sessão sair da lista', () => {
+  const live = JSON.stringify({ state: 'waiting', updatedAt: 9_000, windowPid: 4242 });
+  const disk = { 'a.json': live, 'b.json': live };
+  const { read } = runReadSessions(disk);
+  assert.deepEqual(read(), ['a', 'b']);
+  disk['a.json'] = '{"state":"wai'; // hook gravando agora
+  disk['b.json'] = '';
+  assert.deepEqual(read(), ['a', 'b'], 'JSON cortado e arquivo vazio contam como a sessão ainda aqui');
+  disk['a.json'] = live;
+  assert.deepEqual(read(), ['a', 'b']);
+});
+
+test('readSessions: a sessão que sumiu, morreu ou venceu sai mesmo quando o arquivo está ilegível', () => {
+  const live = JSON.stringify({ state: 'running', updatedAt: 9_000, windowPid: 4242 });
+  const gone = runReadSessions({ 'a.json': live });
+  assert.deepEqual(gone.read(), ['a']);
+  const { lastGood } = gone;
+  // arquivo apagado: nada para ler, a sessão sai e a última leitura boa também
+  const disk = { 'b.json': live };
+  const afterDelete = runReadSessions(disk, { lastGood, firstSeen: gone.firstSeen });
+  assert.deepEqual(afterDelete.read(), ['b']);
+  assert.equal(lastGood.has('a'), false, 'a última leitura de um arquivo que sumiu é podada');
+
+  // terminal fechado enquanto o arquivo estava ilegível: não ressuscita pelo cache
+  let terminalOpen = true;
+  const diskDead = { 'c.json': live };
+  const dead = runReadSessions(diskDead, { alive: () => terminalOpen });
+  assert.deepEqual(dead.read(), ['c']);
+  diskDead['c.json'] = '{';
+  terminalOpen = false;
+  assert.deepEqual(dead.read(), [], 'a leitura boa antiga não vale para sessão de terminal fechado');
+
+  // sessão com mais de 12 h: o caminho normal apaga o arquivo e a lista não a guarda
+  const old = JSON.stringify({ state: 'running', updatedAt: 10_000 - 13 * 60 * 60_000 });
+  const expired = runReadSessions({ 'd.json': old });
+  assert.deepEqual(expired.read(), []);
+  assert.deepEqual(expired.removed, ['d.json']);
+});
+
 // --- Fase 5: mola da troca de sessão (D-17) ---
 
 const tabRules = loadInlineBlock(SPRING_START, SPRING_END, [

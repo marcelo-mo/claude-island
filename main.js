@@ -334,6 +334,11 @@ function updateCursorTick() {
 // a ordem sobrevive a reiniciar a ilha; é um statSync por sessão nova, não por ciclo.
 const firstSeenAtByKey = new Map();
 
+// Última leitura boa de cada sessão. O hook grava o arquivo no lugar (abre, trunca, escreve), então a ilha pode
+// ler um JSON vazio ou pela metade; sem isto a sessão sumiria da lista por um ciclo, e a seleção trataria isso
+// como a sessão ter saído e andaria sozinha para outra.
+const lastGoodSessionByKey = new Map();
+
 // O sinal 0 não envia nada: só pergunta ao sistema se o processo existe. ESRCH quer dizer que não existe;
 // EPERM (existe, é de outro usuário) e qualquer outro erro contam como vivo, porque apagar a sessão de um
 // terminal aberto perderia o estado dela.
@@ -356,6 +361,7 @@ function readSessions() {
     files = fs.readdirSync(STATE_DIR);
   } catch {
     firstSeenAtByKey.clear();
+    lastGoodSessionByKey.clear();
     return []; // pasta ainda não existe: nenhum hook rodou
   }
   const sessions = [];
@@ -393,15 +399,23 @@ function readSessions() {
       session.key = key;
       session.firstSeenAt = firstSeenAtByKey.get(key);
       session.contextPercent = readContextPercent(key);
+      lastGoodSessionByKey.set(key, session);
       sessions.push(session);
     } catch {
-      // arquivo pela metade (hook gravando agora): o próximo ciclo pega
+      // Arquivo pela metade (hook gravando agora): vale o último estado lido, desde que a sessão ainda esteja
+      // viva. Arquivo que sumiu nem chega aqui, e o que continua ilegível é a sessão morta ou vencida saindo
+      // pela mesma regra do caminho normal.
+      const previous = lastGoodSessionByKey.get(key);
+      if (previous && !isSessionDead(previous, now, isPidAlive)) sessions.push(previous);
     }
   }
   // A chave sai quando o arquivo some; podar pela lista viva faria um statSync por ciclo para cada
   // "concluído" que já expirou.
   for (const key of firstSeenAtByKey.keys()) {
     if (!presentKeys.has(key)) firstSeenAtByKey.delete(key);
+  }
+  for (const key of lastGoodSessionByKey.keys()) {
+    if (!presentKeys.has(key)) lastGoodSessionByKey.delete(key);
   }
   return sessions;
 }
