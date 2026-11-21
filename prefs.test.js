@@ -14,6 +14,7 @@ const VALUES_BY_KEY = {
   animationSpeed: ANIMATION_SPEED_STEPS,
   expandOn: EXPAND_ON,
   anchor: ANCHORS,
+  islandMode: ISLAND_MODES,
 };
 
 const checkedValue = (submenu) => submenu.submenu.filter((item) => item.checked).map((item) => item.value);
@@ -22,8 +23,16 @@ const submenuOf = (template, label) => template.find((item) => item.label === la
 test('o menu padrão tem os itens, na ordem', () => {
   assert.deepEqual(
     menuTemplate(DEFAULT_PREFERENCES).map((item) => item.label),
-    ['Tema', 'Forma', 'Estilo da animação', 'Velocidade da animação', 'Expandir', 'Fixar aberta', 'Âncora'],
+    ['Tema', 'Forma', 'Estilo da animação', 'Velocidade da animação', 'Expandir', 'Fixar aberta', 'Âncora', 'Ilhas'],
   );
+});
+
+test("'Ilhas' oferece uma por monitor (padrão), só no principal e no monitor do cursor", () => {
+  const islands = submenuOf(menuTemplate(DEFAULT_PREFERENCES), 'Ilhas');
+  assert.deepEqual(islands.submenu.map((item) => item.label), ['Uma por monitor', 'Só no monitor principal', 'No monitor do cursor']);
+  assert.deepEqual(islands.submenu.map((item) => item.value), ['perDisplay', 'primary', 'cursor']);
+  assert.deepEqual(checkedValue(islands), ['perDisplay']);
+  assert.deepEqual(checkedValue(submenuOf(menuTemplate({ islandMode: 'cursor' }), 'Ilhas')), ['cursor']);
 });
 
 test("'Âncora' oferece as seis posições, com o rótulo de cada uma, e marca a atual", () => {

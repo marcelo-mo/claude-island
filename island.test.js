@@ -10,6 +10,7 @@ const {
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES,
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
   anchorPosition, horizontalSlackFor, ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
+  islandDisplays,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -459,4 +460,58 @@ test('isWithinWorkArea com folga em objeto: lado ausente, NaN ou texto devolve f
     assert.equal(isWithinWorkArea(bounds, MONITOR_WORK_AREA, slack), false, JSON.stringify(slack));
   }
   assert.equal(isWithinWorkArea({ ...bounds, x: -60 }, MONITOR_WORK_AREA, 60), true, 'número vale para os dois lados, como hoje');
+});
+
+// ---- Uma ilha só (D-15) ----
+
+test('islandDisplays: uma por monitor, modo desconhecido ou ausente e entrada inválida', () => {
+  const base = { displayIds: [3, 1, 2], primaryId: 1, cursorDisplayId: 2, currentIds: [], hasPermission: false };
+  for (const mode of ['perDisplay', 'per-display', 'x', undefined, null, 'constructor']) {
+    assert.deepEqual(islandDisplays({ ...base, mode }), [3, 1, 2], String(mode));
+  }
+  assert.deepEqual(islandDisplays({ ...base, mode: 'perDisplay', displayIds: [1, 'a', 2, NaN, null] }), [1, 2]);
+  for (const displayIds of [[], undefined, null, 'ab', 7, {}, ['a', 'b']]) {
+    for (const mode of ['perDisplay', 'primary', 'cursor']) assert.deepEqual(islandDisplays({ ...base, mode, displayIds }), [], `${mode} ${JSON.stringify(displayIds)}`);
+  }
+  assert.deepEqual(islandDisplays(null), []);
+  assert.deepEqual(islandDisplays(undefined), []);
+});
+
+test("islandDisplays: 'primary' é só o monitor principal, ou o primeiro se ele não está na lista", () => {
+  const base = { mode: 'primary', displayIds: [3, 1, 2], cursorDisplayId: 2, currentIds: [2], hasPermission: false };
+  assert.deepEqual(islandDisplays({ ...base, primaryId: 1 }), [1]);
+  assert.deepEqual(islandDisplays({ ...base, primaryId: 9 }), [3]);
+  assert.deepEqual(islandDisplays({ ...base, primaryId: undefined }), [3]);
+});
+
+test("islandDisplays: 'cursor' sem pedido na tela segue o cursor, e cursor fora da lista vale o principal", () => {
+  const base = { mode: 'cursor', displayIds: [1, 2], primaryId: 1, currentIds: [1], hasPermission: false };
+  assert.deepEqual(islandDisplays({ ...base, cursorDisplayId: 2 }), [2]);
+  assert.deepEqual(islandDisplays({ ...base, cursorDisplayId: 1 }), [1]);
+  assert.deepEqual(islandDisplays({ ...base, cursorDisplayId: 9 }), [1]);
+  assert.deepEqual(islandDisplays({ ...base, cursorDisplayId: undefined, primaryId: 2 }), [2]);
+});
+
+test("islandDisplays: 'cursor' com pedido na tela, ou sem saber, nunca troca de monitor (T-04-10)", () => {
+  const base = { mode: 'cursor', displayIds: [1, 2], primaryId: 1, cursorDisplayId: 1, currentIds: [2] };
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true }), [2], 'com pedido, fica onde está');
+  for (const hasPermission of [undefined, null, 'false', 0, 1, 'true']) {
+    assert.deepEqual(islandDisplays({ ...base, hasPermission }), [2], `fato desconhecido ${String(hasPermission)}`);
+  }
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: [1, 2], cursorDisplayId: 2 }), [2], 'vinda de uma por monitor, fica no do cursor');
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: [1, 2], cursorDisplayId: 9 }), [1], 'cursor fora da lista cai no principal');
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: [9] }), [1], 'o monitor dela saiu: segue o cursor');
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: [] }), [1], 'sem ilha ainda: segue o cursor');
+  assert.deepEqual(islandDisplays({ ...base, hasPermission: true, currentIds: undefined }), [1]);
+});
+
+test('islandDisplays não muta a entrada e devolve sempre um array novo', () => {
+  const input = Object.freeze({
+    mode: 'perDisplay', displayIds: Object.freeze([1, 2]), primaryId: 1, cursorDisplayId: 2, currentIds: Object.freeze([1, 2]), hasPermission: false,
+  });
+  const first = islandDisplays(input);
+  assert.notEqual(first, input.displayIds);
+  assert.notEqual(first, islandDisplays(input));
+  assert.deepEqual(input.displayIds, [1, 2]);
+  assert.notEqual(islandDisplays({ mode: 'cursor', displayIds: [1], currentIds: [1], hasPermission: true }), islandDisplays({ mode: 'cursor', displayIds: [1], currentIds: [1], hasPermission: true }));
 });

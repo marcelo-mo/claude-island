@@ -354,6 +354,32 @@ test('a âncora escolhe a posição, a folga e zera os deslocamentos', () => {
   assert.ok(sync > apply.indexOf('writePreferences();') && sync < apply.indexOf("refresh('rearm');"), 'reposiciona antes de rearmar');
 });
 
+// Trava de regressão (texto): no modo de uma ilha só a troca de monitor nunca acontece com pedido na tela
+// (o botão pararia sob o cursor) e sempre rearma; a ilha sobrando é destruída com a limpeza completa e o
+// timer do cursor reavaliado (T-04-10).
+test('uma ilha só nunca troca de monitor com pedido na tela e rearma ao trocar', () => {
+  const bodyOf = (opening) => {
+    assert.equal(mainSource.split(opening).length - 1, 1, `ausente ou repetido no main.js: ${opening}`);
+    const rest = mainSource.slice(mainSource.indexOf(opening));
+    return rest.slice(0, rest.indexOf('\n}'));
+  };
+  const sync = bodyOf('function syncIslands(');
+  assert.ok(sync.includes('islandDisplays({'), 'syncIslands decide os monitores por islandDisplays');
+  assert.ok(sync.includes('hasPermission: Boolean(lastPickedState.permission)'), 'o pedido na tela vem do estado do main');
+  assert.ok(sync.includes('mode: preferences.islandMode'));
+  const destroyAt = sync.indexOf('.destroy()');
+  assert.ok(destroyAt >= 0, 'syncIslands destrói a ilha sobrando');
+  const leftovers = sync.slice(sync.lastIndexOf('for (', destroyAt), destroyAt);
+  for (const cleanup of ['dragStartPositions.delete(', 'captureRequests.delete(', 'nearIslands.delete(']) {
+    assert.ok(leftovers.includes(cleanup), `a ilha destruída fica sem a limpeza: ${cleanup}`);
+  }
+  assert.ok(sync.indexOf('updateCursorTick();') > destroyAt, 'o timer do cursor é reavaliado depois de destruir');
+  const tick = bodyOf('function cursorTick(');
+  for (const needle of ["preferences.islandMode === 'cursor'", '!lastPickedState.permission', 'dragStartPositions.size === 0', "refresh('rearm');"]) {
+    assert.ok(tick.includes(needle), `cursorTick sem: ${needle}`);
+  }
+});
+
 // Trava de nomes (execução do texto): a casca Tauri do spike não pode ficar com um nome velho quando o
 // preload muda. Roda os dois arquivos com um electron e um window de mentira e compara as chaves.
 test('o shim da casca Tauri expõe os mesmos nomes do preload', () => {
