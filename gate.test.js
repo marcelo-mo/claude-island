@@ -1706,3 +1706,25 @@ test('a mola da troca nunca alcança um botão da pílula: só #lead, #detail e 
   assert.equal(rendererLf.split("createElement('button')").length - 1, 1, 'só um lugar cria botão');
   assert.ok(functionBody('renderSessions').includes("createElement('button')"), 'e é renderSessions');
 });
+
+test('o acento é uma cor registrada e a transição base da pílula o interpola sem animar o tamanho', () => {
+  const property = rendererLf.match(/@property --accent \{([^{}]*)\}/);
+  assert.ok(property, '@property --accent ausente');
+  assert.match(property[1], /syntax:\s*'<color>'/);
+  assert.match(property[1], /inherits:\s*true/);
+  assert.match(property[1], /initial-value:\s*\S/);
+  const transition = cssDeclarations('#pill').transition;
+  assert.match(transition, /--accent \.18s ease-out/);
+  assert.equal(/\b(?:width|height|transform)\b/.test(transition), false, 'a transição base não anima o tamanho');
+  const media = rendererLf.slice(rendererLf.indexOf('@media (prefers-reduced-motion: reduce) {'), rendererLf.indexOf('</style>'));
+  assert.match(media, /#pill,[^{]*\{[^}]*transition: opacity \.2s;/, 'com movimento reduzido a transição da pílula é só a opacidade, sem acento');
+});
+
+test('o bloco do pedido não usa o acento: tem tokens próprios e opacos', () => {
+  const rules = [...styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, selector]) => selector.trim().startsWith('#permission'));
+  assert.ok(rules.length >= 5, 'regras do pedido encontradas');
+  for (const [, selector, body] of rules) {
+    assert.equal(body.includes('var(--accent)'), false, `${selector.trim()} usa o acento`);
+  }
+  assert.match(rendererLf, /--perm-label: var\(--waiting\);/);
+});
