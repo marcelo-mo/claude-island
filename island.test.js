@@ -1077,3 +1077,127 @@ test('isSessionDead: o concluído recente de terminal vivo fica, e o de terminal
   assert.equal(isSessionDead(done, now, () => true), false);
   assert.equal(isSessionDead(done, now, () => false), true);
 });
+
+// --- Fase 5, D-21: o "concluído" exibido não vence com outra sessão viva; a sessão exibida que sai de fato
+// leva ao pedido nunca exibido ou à vizinha ---
+
+const heldSession = (key, firstSeenAt, state, updatedAt) => ({ key, firstSeenAt, state, project: key, updatedAt });
+const dotsOf = (picked) => picked.sessions.map((dot) => `${dot.state}${dot.current ? '*' : ''}`);
+
+test('o concluído exibido fica na lista e na tela com outra sessão viva, inclusive uma hora depois (SESS-06, D-21)', () => {
+  const now = 1_000_000_000;
+  const expiredDone = heldSession('a', 1, 'done', now - 10_001);
+  const working = heldSession('b', 2, 'running', now);
+  const selection = { key: 'a', requests: [] };
+  const list = sessionList([expiredDone, working], now, 'a');
+  assert.deepEqual(list.map((entry) => entry.key), ['a', 'b']);
+  assert.equal(nextSelection(selection, list, pollEvent(1000, { previousKeys: ['a', 'b'] })).key, 'a');
+  const picked = pickState([expiredDone, working], now, selection);
+  assert.equal(picked.state, 'done');
+  assert.equal(picked.count, 2);
+  assert.deepEqual(dotsOf(picked), ['done*', 'running']);
+  // uma hora depois, com B ainda atualizado, nada mudou
+  const later = now + 3_600_000;
+  const stillWorking = heldSession('b', 2, 'running', later);
+  assert.deepEqual(sessionList([expiredDone, stillWorking], later, 'a').map((entry) => entry.key), ['a', 'b']);
+  assert.deepEqual(dotsOf(pickState([expiredDone, stillWorking], later, selection)), ['done*', 'running']);
+  // sem a chave exibida tudo segue como antes: o vencido está fora
+  assert.deepEqual(sessionList([expiredDone, working], now).map((entry) => entry.key), ['b']);
+  assert.equal(pickState([expiredDone, working], now).state, 'running');
+  assert.equal(pickState([expiredDone, working], now, { key: null, requests: [] }).count, 1);
+});
+
+test('o concluído sozinho vence aos 10 s e a ilha fica ociosa, sem trocar para nada (D-21)', () => {
+  const now = 1_000_000_000;
+  const alone = heldSession('a', 1, 'done', now - 10_001);
+  assert.deepEqual(sessionList([alone], now, 'a'), []);
+  assert.deepEqual(pickState([alone], now, { key: 'a', requests: [] }), { state: 'idle', count: 0 });
+  assert.equal(nextSelection({ key: 'a', requests: [] }, [], pollEvent(1000, { previousKeys: ['a'] })).key, null);
+  // dentro do prazo ele aparece como sempre
+  assert.equal(pickState([heldSession('a', 1, 'done', now - 9_000)], now, { key: 'a', requests: [] }).state, 'done');
+});
+
+test('deixando de ser exibido o concluído vencido sai na hora, e o vencido que não é o exibido nunca entra (D-21)', () => {
+  const now = 1_000_000_000;
+  const expiredDone = heldSession('a', 1, 'done', now - 10_001);
+  const working = heldSession('b', 2, 'running', now);
+  const both = [expiredDone, working];
+  // o usuário escolhe B: a lista seguinte não tem A e há um ponto só
+  const chosen = nextSelection({ key: 'a', requests: [] }, sessionList(both, now, 'a'), { type: 'select', index: 1 });
+  assert.equal(chosen.key, 'b');
+  assert.deepEqual(sessionList(both, now, chosen.key).map((entry) => entry.key), ['b']);
+  assert.deepEqual(dotsOf(pickState(both, now, chosen)), ['running*']);
+  // vencido, mas a chave exibida é outra: fora
+  assert.deepEqual(sessionList(both, now, 'b').map((entry) => entry.key), ['b']);
+  // chave exibida que é texto mas não existe, ou não é texto: nada é segurado
+  for (const key of ['zzz', null, 5, undefined]) {
+    assert.deepEqual(sessionList(both, now, key).map((entry) => entry.key), ['b'], String(key));
+  }
+  // um "em andamento" vencido e exibido não é segurado: só o concluído o é
+  const staleRunning = heldSession('r', 3, 'running', now - 2 * 60 * 60_000 - 1);
+  assert.deepEqual(sessionList([staleRunning, working], now, 'r').map((entry) => entry.key), ['b']);
+  // A (exibida, vencida) e B em concluído recente: A fica enquanto B estiver no prazo; depois as duas saem
+  const recentDone = heldSession('b', 2, 'done', now - 1_000);
+  assert.deepEqual(sessionList([expiredDone, recentDone], now + 8_000, 'a').map((entry) => entry.key), ['a', 'b']);
+  assert.deepEqual(sessionList([expiredDone, recentDone], now + 9_000, 'a'), []);
+  assert.deepEqual(pickState([expiredDone, recentDone], now + 9_000, { key: 'a', requests: [] }), { state: 'idle', count: 0 });
+});
+
+const exitList = (...entries) => entries.map(([key, permissionId]) => waitingEntry(key, permissionId));
+const requestOf = (id, seenAt, shown) => ({ id, seenAt, handled: true, shown });
+
+test('a sessão exibida que sai de fato vai ao pedido nunca exibido mais antigo, senão à vizinha, nunca à mais urgente (D-21)', () => {
+  // o nunca exibido vem antes, mesmo sendo mais novo que o já deixado
+  const requests = [requestOf(PEDIDO_B, 100, true), requestOf(PEDIDO_C, 200, false)];
+  const list = exitList(['x'], ['b', PEDIDO_B], ['c', PEDIDO_C]);
+  const toRequest = nextSelection({ key: 'a', requests }, list, pollEvent(9000, { previousKeys: ['x', 'a', 'b', 'c'] }));
+  assert.deepEqual([toRequest.key, toRequest.snapped], ['c', true]);
+  assert.deepEqual(toRequest.requests.map((request) => [request.id, request.handled, request.shown]), [
+    [PEDIDO_B, true, true],
+    [PEDIDO_C, true, true],
+  ]);
+  // só o já deixado pendente: a vizinha anterior, nunca b pela urgência nem pelo pedido já deixado
+  const onlyLeft = nextSelection({ key: 'a', requests: [requestOf(PEDIDO_B, 100, true)] }, exitList(['x'], ['b', PEDIDO_B], ['c']),
+    pollEvent(9000, { previousKeys: ['x', 'a', 'b', 'c'] }));
+  assert.deepEqual([onlyLeft.key, onlyLeft.snapped], ['x', false]);
+  assert.equal(onlyLeft.requests[0].shown, true);
+  // sem pedidos e a exibida era a primeira: a seguinte
+  const first = nextSelection({ key: 'a', requests: [] }, exitList(['b'], ['c']), pollEvent(9000, { previousKeys: ['a', 'b', 'c'] }));
+  assert.deepEqual([first.key, first.snapped], ['b', false]);
+  // a mais urgente (waiting) não ganha da vizinha
+  const urgent = nextSelection({ key: 'a', requests: [] }, [waitingEntry('x'), { key: 'y', state: 'waiting', updatedAt: 9, permissionId: null }],
+    pollEvent(9000, { previousKeys: ['x', 'a', 'y'] }));
+  assert.equal(urgent.key, 'x');
+  // sem registro da posição anterior, a primeira da lista
+  assert.equal(nextSelection({ key: 'a', requests: [] }, exitList(['b'], ['c']), pollEvent(9000)).key, 'b');
+});
+
+test('a vizinha com pedido já deixado é pulada; só com todas deixadas pousa na mais próxima; o gesto adia o nunca exibido (D-21)', () => {
+  // [b, a, c]: a anterior b tem pedido já deixado e é pulada, vai à seguinte
+  const skipped = nextSelection({ key: 'a', requests: [requestOf(PEDIDO_B, 100, true)] }, exitList(['b', PEDIDO_B], ['c']),
+    pollEvent(9000, { previousKeys: ['b', 'a', 'c'] }));
+  assert.deepEqual([skipped.key, skipped.snapped], ['c', false]);
+  // [c, b, a]: b é pulada e a anterior mais próxima sem pedido já deixado é c
+  const farther = nextSelection({ key: 'a', requests: [requestOf(PEDIDO_B, 100, true)] }, exitList(['c'], ['b', PEDIDO_B]),
+    pollEvent(9000, { previousKeys: ['c', 'b', 'a'] }));
+  assert.equal(farther.key, 'c');
+  // todas as restantes com pedido já deixado: a vizinha mais próxima (exceção registrada); o pedido segue shown
+  const landing = nextSelection({ key: 'a', requests: [requestOf(PEDIDO_B, 100, true)] }, exitList(['b', PEDIDO_B]),
+    pollEvent(9000, { previousKeys: ['b', 'a'] }));
+  assert.deepEqual([landing.key, landing.snapped], ['b', false]);
+  assert.deepEqual(landing.requests, [requestOf(PEDIDO_B, 100, true)]);
+  const allLeft = nextSelection({ key: 'a', requests: [requestOf(PEDIDO_B, 100, true), requestOf(PEDIDO_C, 200, true)] },
+    exitList(['b', PEDIDO_B], ['c', PEDIDO_C]), pollEvent(9000, { previousKeys: ['b', 'a', 'c'] }));
+  assert.equal(allLeft.key, 'b');
+  // gesto em curso: vai à vizinha e o nunca exibido continua com shown false
+  const requests = [requestOf(PEDIDO_B, 100, true), requestOf(PEDIDO_C, 200, false)];
+  const list = exitList(['x'], ['b', PEDIDO_B], ['c', PEDIDO_C]);
+  const gesture = nextSelection({ key: 'a', requests }, list,
+    pollEvent(9000, { previousKeys: ['x', 'a', 'b', 'c'], lastWheelAt: 9000 - SNAP_GESTURE_GAP_MS + 1 }));
+  assert.deepEqual([gesture.key, gesture.snapped], ['x', false]);
+  assert.equal(gesture.requests.find((request) => request.id === PEDIDO_C).shown, false);
+  // passado o gesto, o mesmo pedido vira alvo
+  const after = nextSelection({ key: 'a', requests }, list,
+    pollEvent(9000, { previousKeys: ['x', 'a', 'b', 'c'], lastWheelAt: 9000 - SNAP_GESTURE_GAP_MS }));
+  assert.deepEqual([after.key, after.snapped], ['c', true]);
+});
