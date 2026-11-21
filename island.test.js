@@ -1049,3 +1049,31 @@ test('isSessionDead: entrada inválida nunca lança nem muta a sessão (SESS-07)
   assert.equal(isSessionDead(session, 2_000, () => false), true);
   assert.deepEqual(session, { state: 'running', windowPid: 4242, updatedAt: 1_000 });
 });
+
+test('isSessionDead: arquivo com mais de 12 h sem atualização é lixo de qualquer estado, vivo o PID ou não (SESS-07)', () => {
+  const twelveHours = 12 * 60 * 60_000;
+  const now = 5 * twelveHours;
+  const stale = (extra) => ({ state: 'waiting', updatedAt: now - twelveHours - 1, ...extra });
+  assert.equal(isSessionDead(stale({ windowPid: 4242 }), now, () => true), true);
+  assert.equal(isSessionDead(stale({}), now, () => true), true);
+  for (const state of ['running', 'done', 'waiting', 'outro']) {
+    assert.equal(isSessionDead(stale({ state }), now, () => true), true, state);
+  }
+  // 12 h exatas, futuro, instante ausente ou texto: a idade não condena
+  assert.equal(isSessionDead({ state: 'waiting', updatedAt: now - twelveHours }, now, () => true), false);
+  assert.equal(isSessionDead({ state: 'waiting', updatedAt: now + 1_000 }, now, () => true), false);
+  for (const updatedAt of [undefined, null, 'ontem', NaN, Infinity]) {
+    assert.equal(isSessionDead({ state: 'waiting', updatedAt }, now, () => true), false, String(updatedAt));
+  }
+  // relógio que não é número finito: a regra da idade não vale
+  for (const brokenNow of [undefined, NaN, Infinity, 'agora']) {
+    assert.equal(isSessionDead(stale({}), brokenNow, () => true), false, String(brokenNow));
+  }
+});
+
+test('isSessionDead: o concluído recente de terminal vivo fica, e o de terminal fechado sai (SESS-07)', () => {
+  const now = 100_000;
+  const done = { state: 'done', windowPid: 7, updatedAt: now - 1_000 };
+  assert.equal(isSessionDead(done, now, () => true), false);
+  assert.equal(isSessionDead(done, now, () => false), true);
+});
