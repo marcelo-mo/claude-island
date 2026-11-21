@@ -154,7 +154,7 @@ Plans:
 - [ ] 05-02-PLAN.md — um ponto por sessão, troca pelo clique no ponto e o projeto da sessão exibida sempre à vista
 - [ ] 05-03-PLAN.md — troca pela roda com as regras do mod; roda sobre o pedido só rola o texto; "Rolar janelas inativas"
 - [ ] 05-04-PLAN.md — snap uma vez por pedido, fila "1 de N" e avanço ao próximo pendente
-- [ ] 05-05-PLAN.md — sessão morta sai da lista e o arquivo é apagado
+- [ ] 05-05-PLAN.md — sessão morta sai da lista e o arquivo é apagado; o "concluído" exibido não vence com outra sessão viva (D-21)
 - [ ] 05-06-PLAN.md — mola de troca de sessão do mod e transição do acento
 - [ ] 05-07-PLAN.md — vetores do gate para toda troca de sessão e checklist "Testar manualmente"
 **UI hint**: yes
