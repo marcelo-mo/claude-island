@@ -90,17 +90,17 @@ Plans:
   3. A janela não muda de tamanho durante a animação, nenhum quadro de animação roda com a ilha em repouso, e os botões de permissão seguem desarmados enquanto qualquer mola estiver em movimento (invariante da Fase 2 preservada)
   4. Os 8 temas (Obsidian, Graphite, Slate, Nord, Evergreen, Espresso, Plum, Porcelain) e o automático claro/escuro, e as formas pílula, notch e Windows 11, estão disponíveis quando aplicados por valor de preferência
   5. A superfície tem profundidade, sombra e um reflexo no topo tingido pela cor do estado (laranja trabalhando, âmbar precisa de você, verde concluído); o bloco de permissão passa no teste de contraste (texto ≥4,5:1, controles ≥3:1) nos 9 temas, o reflexo nunca pinta o comando exibido, e as fontes são as do sistema, sem larguras presas a uma fonte específica
-**Plans**: 3 plans (sequenciais: os três editam o `index.html`)
+**Plans**: 3/3 plans executed (sequenciais: os três editam o `index.html`)
 
 Plans:
 **Wave 1**
-- [ ] 03-01-PLAN.md — Traçador: preferências lidas pelo main e aplicadas no renderer; mola pura (4 estilos, 0,5× a 2×, encolher sem balanço) e `canArm`; molas de tamanho com laço que para sozinho e movimento reduzido (ANIM-01, ANIM-02, ANIM-04, ANIM-05, VIS-05)
+- [x] 03-01-PLAN.md — Traçador: preferências lidas pelo main e aplicadas no renderer; mola pura (4 estilos, 0,5× a 2×, encolher sem balanço) e `canArm`; molas de tamanho com laço que para sozinho e movimento reduzido (ANIM-01, ANIM-02, ANIM-04, ANIM-05, VIS-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 03-02-PLAN.md — Nudge e hover por molas neutras sem tocar nos botões, formas pílula/notch/Windows 11, palco fixo 520×410 dimensionado por simulação sem mover posições salvas (ANIM-03, ANIM-04, ANIM-05, VIS-02)
+- [x] 03-02-PLAN.md — Nudge e hover por molas neutras sem tocar nos botões, formas pílula/notch/Windows 11, palco fixo 520×410 dimensionado por simulação sem mover posições salvas (ANIM-03, ANIM-04, ANIM-05, VIS-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 03-03-PLAN.md — 8 temas e o automático, bloco de permissão opaco com contraste provado nos 10 casos, material com reflexo da cor do estado, tipografia 400/600 (VIS-01, VIS-03, VIS-04, VIS-05)
+- [x] 03-03-PLAN.md — 8 temas e o automático, bloco de permissão opaco com contraste provado nos 10 casos, material com reflexo da cor do estado, tipografia 400/600 (VIS-01, VIS-03, VIS-04, VIS-05)
 **UI hint**: yes
 **Research flag**: não. A mola já foi validada em Node. Confirmar só a carga de `spring.js` sob a CSP (`script-src 'self'` via `file://`, teste de 10 min) e validar visualmente o palco ampliado para o estilo Elástico a 2× (~520×410).
 
@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 (condicional) → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Spike de medição e decisão de base | 4/4 | Complete | 2026-11-21 |
 | 2. Fundação segura do gate de permissão | 4/4 | Complete | 2026-11-21 |
-| 3. Palco fixo, animação e visual | 0/3 | Planned | - |
+| 3. Palco fixo, animação e visual | 3/3 | In Progress | - |
 | 4. Entrada, preferências e comportamento no sistema | 0/TBD | Not started | - |
 | 5. Sessões | 0/TBD | Not started | - |
 | 6. Convivência com a ilha do sistema | 0/TBD | Not started | - |
