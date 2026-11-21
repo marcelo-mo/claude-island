@@ -1,13 +1,13 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 4
-current_phase_name: Entrada, preferências e comportamento no sistema
-current_plan: 6
+current_phase: 6
+current_phase_name: Convivência com a ilha do sistema
+current_plan: 2
 status: human_needed
-stopped_at: "Fase 4 executada, revisada e auditada; PR aberto sem merge"
+stopped_at: "Fase 6 executada, revisada e auditada; PR aberto sem merge"
 last_updated: "2026-11-21T17:20:01.260Z"
 last_activity: 2026-11-21
-last_activity_desc: "Fase 4 executada (6 planos), revisão com 4 correções, verificação gaps_found só por D-20 (TELA-01 parcial), segurança 26/26; PR aberto"
+last_activity_desc: "Fase 6 executada (2 planos), revisão com 11 correções, verificação human_needed (mod escondido; issue pendente do autor), segurança 7/7; PR aberto"
 state_head: f3549f7d07ffe368b80756d0f6d3824d528f8585
 progress:
   total_phases: 6
@@ -24,15 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-21)
 
 **Core value:** Saber de relance o que cada sessão do Claude Code está fazendo e responder ao que ela pede sem trocar de janela, sem nunca aprovar algo que o usuário não viu.
-**Current focus:** Phase 4 — Entrada, preferências e comportamento no sistema
+**Current focus:** Phase 6 — Convivência com a ilha do sistema (a Fase 5 corre em paralelo noutra branch)
 
 ## Current Position
 
-Phase: 4 (Entrada, preferências e comportamento no sistema) — AGUARDANDO REVISÃO DO PR
-Current Plan: 6
-Total Plans in Phase: 6
-Status: 6/6 planos executados; verificação gaps_found só pelo TELA-01 parcial (D-20, koffi não autorizado; sensor pendente da escolha do autor) e 15 itens de tela em 04-UAT.md; segurança threats_open 0
-Last activity: 2026-11-21 — Fase 4 entregue em PR, sem merge
+Phase: 6 (Convivência com a ilha do sistema) — AGUARDANDO REVISÃO DO PR
+Current Plan: 2
+Total Plans in Phase: 2
+Status: 2/2 planos executados; verificação human_needed (9 itens em 06-UAT.md com a ilha do mod na tela; issue ao autor do mod pendente do Marcelo; CR-01 da revisão levado ao autor); segurança threats_open 0
+Last activity: 2026-11-21 — Fase 6 entregue em PR, sem merge
 
 Progress: [███░░░░░░░] 33%
 

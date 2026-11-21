@@ -101,6 +101,13 @@ ociosa, a pílula fica invisível e sem `pointer-events`, e os cliques passam pa
 - **Transparência.** Vale para a ilha inteira, mas nunca com um pedido de permissão na tela: ele fica
   100% opaco e, ao terminar, a ilha volta à escolhida. Com a ilha escondida, um pedido só toca o som;
   responda no terminal ou mostre a ilha pelo atalho.
+- **Ao lado da ilha do Windhawk.** Com o mod "Dynamic Island for Windows" no topo da tela, escolha
+  *Âncora > Ao lado da ilha do sistema, à direita* (ou *à esquerda*): a nossa pílula fica ao lado da dele,
+  cresce para fora sem cobri-la e o arraste ajusta o lugar. Precisa de 1220 DIP de área útil (abaixo disso não
+  cabe ao lado e fica por cima do mod) e combina com as formas Pílula e Windows 11. A ilha nunca reafirma o
+  "sempre no topo" por timer. O que foi verificado dessa convivência, do toast do Windows e dos apps de notch está em
+  [`docs/INTEGRACOES.md`](docs/INTEGRACOES.md); `scripts/measure-coexistence.ps1` mede as duas ilhas juntas
+  por 5 minutos, só lendo as janelas.
 - **Tela cheia: ainda não está ativo.** A regra de esconder a ilha do monitor ocupado por um app em tela
   cheia está pronta, mas o sensor depende de uma decisão pendente. Por enquanto a ilha continua por
   cima de app em tela cheia, e o atalho é o jeito de tirá-la do caminho.
