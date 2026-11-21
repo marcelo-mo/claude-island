@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
-  SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences,
+  SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
 } = require('./state');
 const { focusWindow } = require('./window');
@@ -127,7 +127,7 @@ function readSessions() {
   }
   const sessions = [];
   for (const file of files) {
-    if (!file.endsWith('.json')) continue;
+    if (!isSessionFile(file)) continue;
     try {
       const session = JSON.parse(fs.readFileSync(path.join(STATE_DIR, file), 'utf8'));
       session.contextPercent = readContextPercent(path.basename(file, '.json'));

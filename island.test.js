@@ -6,7 +6,7 @@ const path = require('node:path');
 const {
   eventToState, pickState, contextUsage, defaultIslandPosition, clampIslandPosition,
   keepsPermission, permissionRequest, validPermission, decisionOutput, isHeartbeatFresh, PERMISSION_TEXT_LIMIT,
-  normalizePreferences, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES,
+  normalizePreferences, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES, isSessionFile,
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
@@ -342,4 +342,12 @@ test('ilha salva na borda de baixo sobe o necessário para a janela caber na ár
 test('na posição padrão a janela do palco novo está dentro da área útil e a decisão segue aceita', () => {
   const standard = defaultIslandPosition(MONITOR_WORK_AREA, WINDOW_SIZE);
   assert.equal(isWithinWorkArea({ ...standard, ...WINDOW_SIZE }, MONITOR_WORK_AREA, HORIZONTAL_SLACK), true);
+});
+
+test('só arquivo de sessão entra na leitura da pasta: o preferences.json nunca vira sessão fantasma', () => {
+  assert.equal(isSessionFile('abc-123.json'), true);
+  assert.equal(isSessionFile('preferences.json'), false);
+  assert.equal(isSessionFile('.heartbeat'), false);
+  assert.equal(isSessionFile('abc.json.tmp'), false);
+  assert.equal(isSessionFile(undefined), false);
 });

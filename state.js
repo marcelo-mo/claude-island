@@ -322,6 +322,15 @@ const ANIMATION_SPEED_MAX = 2;
 const DEFAULT_PREFERENCES = Object.freeze({ theme: 'auto', shape: 'pill', animationStyle: 'default', animationSpeed: 1 });
 
 /**
+ * Diz se um nome de arquivo da pasta da ilha é o estado de uma sessão. O preferences.json mora na
+ * mesma pasta e é editável à mão: sem esta exclusão explícita, uma chave `state` ou `permission`
+ * nele viraria uma sessão fantasma (e alimentaria o gate). Nunca lança.
+ */
+function isSessionFile(fileName) {
+  return typeof fileName === 'string' && fileName.endsWith('.json') && fileName !== path.basename(PREFERENCES_FILE);
+}
+
+/**
  * Preferências visuais válidas a partir do que veio do arquivo, que pode estar ausente, corrompido
  * ou ter sido editado à mão. Devolve sempre um objeto novo com só as quatro chaves
  * { theme, shape, animationStyle, animationSpeed }; cada chave inválida ou ausente cai sozinha no
@@ -354,5 +363,5 @@ module.exports = {
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   nextShownPermission,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
-  normalizePreferences,
+  normalizePreferences, isSessionFile,
 };
