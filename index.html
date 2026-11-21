@@ -272,6 +272,9 @@
   }
   #permission[hidden] { display: none; }
   #permission-tool { display: block; font-size: 11px; font-weight: 600; color: var(--perm-label); margin-bottom: 3px; overflow-wrap: anywhere; }
+  /* Posição deste pedido na fila, só com mais de um pedido pendente. A cor é a da dica, que o teste de contraste já mede. */
+  #permission-queue { float: right; margin-left: 8px; color: var(--perm-hint); font-variant-numeric: tabular-nums; }
+  #permission-queue[hidden] { display: none; }
   /* Só o projeto pode ser cortado; a ferramenta nunca: é o que diz o que se está aprovando. */
   #permission-project { display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   #permission-text {
@@ -351,7 +354,7 @@
     </div>
     <span id="detail"></span>
     <div id="permission" hidden>
-      <span id="permission-tool"><span id="permission-project"></span><span id="permission-tool-name"></span></span>
+      <span id="permission-tool"><span id="permission-queue" hidden></span><span id="permission-project"></span><span id="permission-tool-name"></span></span>
       <pre id="permission-text" tabindex="0" aria-label="Pedido de permissão"></pre>
       <span id="permission-hint" hidden>Role até o fim para poder permitir</span>
     </div>
@@ -687,6 +690,7 @@
   const contextValue = context.querySelector('.value');
 
   const permissionBox = document.getElementById('permission');
+  const permissionQueue = document.getElementById('permission-queue');
   const permissionProject = document.getElementById('permission-project');
   const permissionToolName = document.getElementById('permission-tool-name');
   const permissionText = document.getElementById('permission-text');
@@ -897,6 +901,9 @@
     if (!permission) return;
     // Saber de qual projeto é o pedido que se aprova é regra de segurança: só o projeto pode ser cortado
     // (reticências no CSS), a ferramenta nunca.
+    // Com mais de um pedido pendente, mostra a posição deste na fila por ordem de chegada.
+    permissionQueue.hidden = !current.queue;
+    if (current.queue) permissionQueue.textContent = `${current.queue.position} de ${current.queue.total}`;
     const permissionProjectName = multiSession && current.project ? current.project : '';
     permissionProject.textContent = permissionProjectName;
     permissionToolName.textContent = permissionProjectName ? ` · ${permission.tool}` : permission.tool;

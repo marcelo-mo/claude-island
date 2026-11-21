@@ -102,6 +102,16 @@ deixa sempre à vista de qual projeto é a sessão na tela.
   por "Rolar janelas inativas ao passar o mouse sobre elas" (Configurações > Bluetooth e
   dispositivos > Mouse), ligado por padrão, porque a ilha nunca recebe o foco; sem isso, clique no
   ponto.
+- **Um pedido de permissão novo leva a ilha até a sessão que pediu, uma vez por pedido.** Se você
+  rolar ou clicar para longe, ela não puxa de novo e o ponto da sessão segue pulsando. Ela espera a
+  roda parar antes de trocar e, depois da troca, ignora a roda por 0,4 s.
+- **Pedidos simultâneos entram numa fila por ordem de chegada.** Com mais de um pendente, o pedido
+  mostra a posição ("1 de N") e um pedido novo nunca toma o lugar do que está na tela.
+- **Ao responder, na ilha ou no terminal, a ilha vai ao próximo pendente.** Sem outro pendente, fica
+  onde está; se você estava numa sessão sem pedido, nada se move.
+- **Toda troca reinicia os 0,8 s dos botões e a exigência de rolar o texto até o fim**, para uma
+  troca automática nunca deixar Permitir ou Negar atingir um pedido que você não viu.
+- **Com a ilha escondida ou em tela cheia, um pedido novo não a faz reaparecer.** Só a seleção muda.
 - **O projeto fica à vista.** O nome da pasta da sessão é o título da pílula compacta e abre o
   cabeçalho do pedido ("projeto · ferramenta"). Dois projetos com a mesma pasta final mostram o
   mesmo nome; a posição do ponto diz qual é qual.
