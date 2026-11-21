@@ -126,7 +126,7 @@ public static class IslandWindows {
   }
 
   // Janelas visíveis de tamanho não nulo dos PIDs dados, em pixels FÍSICOS (thread em DPI por monitor).
-  // Com captureBase, grava também {captureBase}-{n}.png por PrintWindow (flag 2 = renderiza o conteúdo).
+  // Com captureBase (vazio ou nulo = sem captura), grava também {captureBase}-{n}.png por PrintWindow (flag 2 = renderiza o conteúdo).
   public static List<IslandWindowInfo> ForPids(uint[] pids, string captureBase) {
     // -4 = DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2; restaura o anterior no fim.
     IntPtr previous = SetThreadDpiAwarenessContext(new IntPtr(-4));
@@ -157,7 +157,7 @@ public static class IslandWindows {
           info.workHeight = monitor.rcWork.Bottom - monitor.rcWork.Top;
         }
         found.Add(info);
-        if (captureBase != null) {
+        if (!string.IsNullOrEmpty(captureBase)) {
           using (var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb)) {
             using (var graphics = Graphics.FromImage(bitmap)) {
               IntPtr hdc = graphics.GetHdc(); PrintWindow(hwnd, hdc, 2); graphics.ReleaseHdc(hdc);
