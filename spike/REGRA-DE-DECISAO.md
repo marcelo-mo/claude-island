@@ -44,11 +44,11 @@ Igual para toda variante. Uma execução só vale se cada janela da ilha tem:
 
 - `WS_EX_TOPMOST` ligado (TOPMOST);
 - `WS_EX_APPWINDOW` desligado (APPWINDOW);
-- retângulo do tamanho esperado na base declarada.
+- retângulo do tamanho esperado na base declarada, com tolerância de 2% em largura e altura (ver Errata).
 
 Base declarada: pixels físicos do `GetWindowRect`, lido com a thread em DPI por monitor
 (`SetThreadDpiAwarenessContext` com PER_MONITOR_AWARE_V2). Esperado 440×324 no monitor a 100% e 550×405 no monitor a
-125% (440 e 324 × DPI/96, arredondado). `WS_EX_TOOLWINDOW` não é exigido: o Electron não o usa (estilo estendido
+125% (440 e 324 × DPI/96, arredondado), com tolerância de 2% em largura e altura (ver Errata). `WS_EX_TOOLWINDOW` não é exigido: o Electron não o usa (estilo estendido
 `0x8280028`: TOPMOST, TRANSPARENT, LAYERED, NOREDIRECTIONBITMAP, NOACTIVATE); a casca Tauri o liga só para escapar do
 gerenciador de janelas em mosaico. O JSON guarda o retângulo físico e em DIP.
 
@@ -120,6 +120,20 @@ Etapa 2 não roda e o caminho de permissão não é portado (BASE-03).
 Decisão automática de teste (D-14): qualquer decisão automática usada para testar o F6 só existe atrás da feature do
 cargo `spike-autodecide`, desligada no build padrão, usada só pelo `spike/tauri/check-permission.ps1`, e não pode
 existir em nenhum porte.
+
+## Errata (antes de qualquer medição)
+
+Corrige a validade de janela (D-10), sem mexer em N1, N2, nos cenários, nas tentativas nem na elegibilidade de E2.
+Uma execução de mecânica do medidor, feita antes de existir qualquer arquivo em `spike/results/`, mostrou que o
+Electron atual abre a janela do monitor a 125% com 550×410 em pixels físicos (328 DIP de altura), de forma repetível,
+e não 550×405: o arredondamento de escala fracionária do Windows para a janela transparente (o `main.js` já
+comenta essa instabilidade em `moveIsland`). Com a conta exata, toda execução de E0 e E1 (2 janelas) ficaria
+INVÁLIDA e o spike perderia a evidência da CPU ociosa de E1 contra E0. O critério passa a aceitar diferença de até
+2% (arredondada para cima) em largura e altura sobre o tamanho calculado: 410 num esperado de 405 vale; uma janela
+retiliada por gerenciador de janelas em mosaico (por exemplo 1091×466) continua inválida, que é o que o critério
+existe para pegar. TOPMOST ligado e APPWINDOW desligado seguem exatos. Esse critério filtra execuções mal
+montadas e não é limiar de decisão. A execução de mecânica imprimiu valores de memória e CPU de E1 (brilho original,
+só um cenário); nenhum foi anotado nem usado para ajustar N1, N2 ou qualquer limiar.
 
 ## Divulgação pré-regra
 
