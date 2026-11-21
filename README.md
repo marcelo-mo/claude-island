@@ -115,6 +115,11 @@ deixa sempre à vista de qual projeto é a sessão na tela.
 - **O projeto fica à vista.** O nome da pasta da sessão é o título da pílula compacta e abre o
   cabeçalho do pedido ("projeto · ferramenta"). Dois projetos com a mesma pasta final mostram o
   mesmo nome; a posição do ponto diz qual é qual.
+- **Sessão morta sai da lista.** Se o terminal de uma sessão foi fechado sem encerrar o Claude Code,
+  o ponto dela some e o arquivo de estado é apagado. Fechar só uma aba do Windows Terminal não fecha
+  a janela, e aí a sessão sai pelo prazo (2 h trabalhando, 12 h esperando). Arquivos de sessão com
+  mais de 12 h também são apagados: um terminal parado por mais de 12 h sai da lista e, quando a
+  sessão voltar a trabalhar, o ponto dela entra no fim da ordem.
 
 ### Menu, atalho e tela cheia
 

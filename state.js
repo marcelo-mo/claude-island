@@ -452,14 +452,20 @@ function nextSelection(selection, list, event) {
 }
 
 /**
- * A sessão é lixo de terminal fechado sem SessionEnd? Morta é a de `windowPid` válido (inteiro maior que 0)
- * cujo processo não existe mais, o que `isPidAlive(windowPid)` decide: ele é injetado e só o valor exatamente
- * false conta, então fato desconhecido (outro valor, ou `isPidAlive` que não é função) mantém a sessão, porque
- * apagar a de um terminal aberto perderia o estado dela. Sem `windowPid` válido o PID nem é consultado.
+ * A sessão é lixo de terminal fechado sem SessionEnd? Morta é a de arquivo com mais de `WAITING_STALE_MS`
+ * sem atualização, de qualquer estado (nenhum hook espera tanto), ou a de `windowPid` válido (inteiro maior
+ * que 0) cujo processo não existe mais, o que `isPidAlive(windowPid)` decide: ele é injetado e só o valor
+ * exatamente false conta, então fato desconhecido (outro valor, ou `isPidAlive` que não é função) mantém a
+ * sessão, porque apagar a de um terminal aberto perderia o estado dela. Sem `windowPid` válido o PID nem é
+ * consultado, e `updatedAt` ou `now` que não são números finitos tiram a regra da idade. O "concluído"
+ * recente de terminal vivo nunca é morto: o hook reaproveita o windowPid guardado nele e evita a busca de 0,4 s.
  * Nunca lança nem muta; sessão que não é objeto devolve false.
+ * ponytail: um terminal vivo mas parado por mais de 12 h também perde o arquivo e sai da lista; quando a sessão
+ * volta a ter um evento o hook recria o arquivo, que nasce com birthtime novo, e o ponto entra no fim da ordem.
  */
 function isSessionDead(session, now, isPidAlive) {
   if (!session || typeof session !== 'object') return false;
+  if (Number.isFinite(session.updatedAt) && Number.isFinite(now) && now - session.updatedAt > WAITING_STALE_MS) return true;
   const { windowPid } = session;
   return Number.isInteger(windowPid) && windowPid > 0 && typeof isPidAlive === 'function' && isPidAlive(windowPid) === false;
 }
