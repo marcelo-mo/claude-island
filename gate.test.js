@@ -228,6 +228,19 @@ test('recusa do main destrava os botões sem o renderer reenviar a decisão', ()
   assert.equal(rendererSource.split('window.island.decide(').length - 1, 1, 'a decisão sai de um só lugar: o clique');
 });
 
+// Trava de regressão (texto): medir #actions deixava passar botões que andam dentro dele (has-window).
+// O assentamento mede os próprios botões, guarda onde armaram, e render e pointerdown rearmam se eles saíram dali.
+test('o armamento acompanha o retângulo dos próprios botões', () => {
+  assert.equal(rendererSource.includes('actions.getBoundingClientRect()'), false);
+  assert.match(rendererSource, /function buttonsRect\(\) \{[^}]*allowButton\.getBoundingClientRect\(\)[^}]*denyButton\.getBoundingClientRect\(\)/);
+  assert.match(rendererSource, /const rect = buttonsRect\(\);/);
+  assert.match(rendererSource, /armedAt = now;\s*armedRect = rect;/);
+  const moved = 'if (armed && !isSameRect(armedRect, buttonsRect())) restartArming();';
+  assert.equal(rendererSource.split(moved).length - 1, 2, 'render e pointerdown conferem o retângulo armado');
+  const pointerdown = rendererSource.slice(rendererSource.indexOf("button.addEventListener('pointerdown'"));
+  assert.ok(pointerdown.indexOf(moved) < pointerdown.indexOf('canPress('), 'a conferência vem antes de canPress');
+});
+
 test('o main escuta só com ipcMain.on, nos seis canais do renderer', () => {
   const { methods, channels } = collectChannels(mainSource, 'ipcMain');
   assert.deepEqual([...methods], ['on']);

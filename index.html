@@ -337,6 +337,8 @@
   let armedAt = 0;
   let armToken = 0;
   let armTimer = null;
+  // Onde Negar e Permitir estavam quando armaram: botão que saiu daí não vale até rearmar.
+  let armedRect = null;
   let lastArmEpoch = null;
   let lastPointerMoveAt = 0;
   // Gesto em andamento: null ou { behavior, id, armToken }, capturado no pointerdown.
@@ -386,6 +388,8 @@
     permissionHint.hidden = wasRead;
     // Depois do clique os botões travam até o main responder; se ele aceitou, answeredId mantém a
     // trava até o pedido sair do estado, também na ilha que não recebeu o clique (outro monitor).
+    // A troca de has-window, logo acima, move os botões sem mudar o tamanho de #actions nem de #pill.
+    if (armed && !isSameRect(armedRect, buttonsRect())) restartArming();
     const locked = !armed || permission.id === answeredPermissionId || permission.id === current.answeredId;
     denyButton.disabled = locked;
     allowButton.disabled = locked || !wasRead;
@@ -409,14 +413,23 @@
     render();
   }
 
+  // Retângulo que cobre Negar e Permitir. É o que o cursor mira, então é ele que precisa estar parado:
+  // os botões podem andar dentro de #actions sem a caixa de #actions mudar.
+  function buttonsRect() {
+    const allow = allowButton.getBoundingClientRect();
+    const deny = denyButton.getBoundingClientRect();
+    const left = Math.min(allow.left, deny.left);
+    const top = Math.min(allow.top, deny.top);
+    return { left, top, width: Math.max(allow.right, deny.right) - left, height: Math.max(allow.bottom, deny.bottom) - top };
+  }
+
   // O laço de quadros só existe enquanto há pedido a armar: em repouso a ilha não anima nada.
   function waitUntilSettled(token) {
     let previousRect = null;
     let stableSince = null;
     function frame() {
       if (token !== armToken || !current.permission) return;
-      const box = actions.getBoundingClientRect();
-      const rect = { left: box.left, top: box.top, width: box.width, height: box.height };
+      const rect = buttonsRect();
       const now = performance.now();
       const step = settleStep({
         previousRect,
@@ -431,6 +444,7 @@
       if (step.settled) {
         armed = true;
         armedAt = now;
+        armedRect = rect;
         render();
         return;
       }
@@ -451,6 +465,9 @@
   // checagem do mesmo botão vale mesmo que o Chromium já não gere click entre elementos diferentes.
   for (const [button, behavior] of [[allowButton, 'allow'], [denyButton, 'deny']]) {
     button.addEventListener('pointerdown', (event) => {
+      // Última conferência, para movimento que não passou por render nem mudou tamanho: botão fora do
+      // lugar em que armou rearma, e este clique não vale (armed volta a false).
+      if (armed && !isSameRect(armedRect, buttonsRect())) restartArming();
       const valid = event.button === 0 && canPress({
         hasPermission: Boolean(current.permission), armed, armedAt, lastPointerMoveAt, now: performance.now(),
       });
