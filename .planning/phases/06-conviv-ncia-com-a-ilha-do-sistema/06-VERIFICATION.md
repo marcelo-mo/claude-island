@@ -15,7 +15,7 @@ os demais caminhos de integração ficam registrados com o que foi verificado.
 | # | Critério | Status | Evidência |
 |---|----------|--------|-----------|
 | 1a | O usuário define um deslocamento e a nossa fica ao lado da do mod, expandindo para fora | ✓ (do nosso lado) | Âncoras `right-of-island`/`left-of-island` + arraste; medido pelo CDP a 100% e 125%: borda interna a 210 px do centro, parada em todos os quadros das transições no Elástico; `coexistence.test.js` |
-| 1b | ...sem cobrir a do mod, com a ilha do mod ativa | ? humano | A ilha do mod está escondida (`ManuallyHidden = 1`) e nenhum agente a mostra. Por geometria a janela invade a pílula expandida do mod em ≤ 5 px (teste). CHK-62/63/64 |
+| 1b | ...sem cobrir a do mod, com a ilha do mod ativa | ? humano | A ilha do mod está escondida (`ManuallyHidden = 1`) e nenhum agente a mostra. Por geometria, com área útil ≥ 1220 DIP, a janela invade a pílula expandida do mod em ≤ 5 px (teste); abaixo disso não cabe (limite documentado, CR-01 levado ao autor). CHK-62/63/64 |
 | 2a | A nossa nunca reafirma o "sempre no topo" por timer | ✓ | Um `setAlwaysOnTop` (em `createIsland`), nenhum `moveTop`, nenhum timer mexendo no z: trava de texto em `coexistence.test.js`, que pegou o primeiro rascunho do comentário |
 | 2b | Em 5 minutos medidos nenhuma das duas some atrás da outra | ? humano | `scripts/measure-coexistence.ps1` pronto e exercitado (recusa com o mod escondido; laço em cópia descartável). CHK-61 |
 | 3a | Toast do Windows e apps de notch registrados com o que foi verificado | ✓ | `docs/INTEGRACOES.md` |
@@ -31,7 +31,7 @@ os demais caminhos de integração ficam registrados com o que foi verificado.
 
 ## Automatizado
 
-- `node --test`: **361/361** (348 de antes + 13 novos), incluindo a suíte do gate e `fixtures/permission-vectors.json`.
+- `node --test`: **362/362** (348 de antes + 14 novos), incluindo a suíte do gate e `fixtures/permission-vectors.json`.
 - Gate inalterado: nenhuma mudança em `acceptDecision`, `island:decide`, armamento ou IPC.
 
 ## Itens humanos

@@ -12,7 +12,7 @@ key-files:
 key-decisions: [D-02 nomes sem sufixo de lado, D-03 210 px e +17 px, D-04 arraste como ajuste fino, D-05 todos os monitores, D-08 trava em arquivo próprio]
 metrics:
   tests_before: 348
-  tests_after: 361
+  tests_after: 362
 ---
 
 # 06-01: âncoras ao lado da ilha do sistema e trava do topo
@@ -35,12 +35,16 @@ metrics:
 
 - Nomes `right-of-island`/`left-of-island` em vez de `beside-right`/`beside-left` da pesquisa (D-02): o sufixo
   `-right` faria o CSS e o teste da Fase 4 alinharem a pílula do lado errado.
+- O CSS repete as regras de lado em vez de agrupar os seletores (D-06 dizia "entra no grupo"): agrupar quebra a
+  trava de `visual.test.js`, que exige uma regra só por seletor da Fase 4.
+- Depois da revisão (06-REVIEW-FIX.md): centro arredondado uma vez, limite de 1220 DIP registrado e travado, trava
+  de CONV-02 mais robusta.
 - A trava de CONV-02 pegou o primeiro rascunho do comentário (que citava `moveTop()` com parêntese); o texto foi
   reescrito. Prova de que a trava morde.
 
 ## Verificação
 
-- `node --test`: 361/361 (348 de antes + 13 novos).
+- `node --test`: 362/362 (348 de antes + 14 novos).
 - Na tela, pelo CDP, com a ilha do worktree a 100% e a 125%: borda interna em 1490 (= 1280 + 210) e em 1070 (=
   1280 − 210) no principal, −558 e −978 no de 125%; topo da janela em `workArea.y + 17`; em 1.142 e 557 quadros
   de transições no Elástico a borda interna não se mexeu (20 px do palco, ±0,00002) e a externa chegou a 429,75

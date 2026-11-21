@@ -13,7 +13,7 @@ name: Convivência medida por 5 minutos (CHK-61)
 expected: |
   Com a ilha do mod visível e a nossa em "Ao lado da ilha do sistema, à direita" com uma sessão na tela,
   `powershell -NoProfile -File scripts/measure-coexistence.ps1 -DurationSec 300` sai com 0 e imprime
-  inversoes=0, sumicos=0 e amostras_com_sobreposicao 0 ou 1.
+  inversoes=0, amostras_com_sumico=0 e amostras_com_sobreposicao 0 ou 1.
 awaiting: user response
 
 ## Tests
@@ -23,7 +23,7 @@ autor, ou reiniciando o mod no Windhawk). Nenhum agente faz isso. A nossa ilha e
 sistema, à direita*, no monitor principal, com uma sessão na tela (por exemplo, um prompt rodando).
 
 ### 1. CHK-61: convivência medida por 5 minutos
-expected: `scripts/measure-coexistence.ps1 -DurationSec 300` sem mexer no mouse sai com 0; inversoes=0, sumicos=0, amostras_com_sobreposicao ≤ 1; colar o resumo e o caminho do CSV aqui
+expected: `scripts/measure-coexistence.ps1 -DurationSec 300` sem mexer no mouse sai com 0; inversoes=0, amostras_com_sumico=0, amostras_com_sobreposicao ≤ 1; colar o resumo e o caminho do CSV aqui
 result: [pending]
 
 ### 2. CHK-62: hover alternado nas duas pílulas
