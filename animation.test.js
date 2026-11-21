@@ -54,7 +54,7 @@ test('o brilho só anima fora do estado ocioso, numa camada própria', () => {
 test('a página escondida pausa toda animação, e o listener de visibilitychange marca o estado', () => {
   const pausing = selectorsWhere(html, (body) => /animation-play-state\s*:\s*paused/.test(body));
   assert.ok(pausing.some((selector) => selector.includes('html[data-hidden="true"]')), 'sem pausa sob data-hidden');
-  assert.match(html, /addEventListener\('visibilitychange',[^)]*\bdocument\.documentElement\.dataset\.hidden = document\.hidden/);
+  assert.match(html, /addEventListener\('visibilitychange',.*document\.documentElement\.dataset\.hidden = document\.hidden/);
 });
 
 test('com movimento reduzido o brilho também fica parado', () => {
