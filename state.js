@@ -477,6 +477,9 @@ const DEFAULT_SHORTCUT = 'Control+Alt+Shift+C';
 // ponytail: só letras, números e +; teclas de pontuação ficam de fora até alguém pedir. Um
 // acelerador com forma válida que o Electron recusa vira status 'invalid' no registro do atalho.
 const SHORTCUT_PATTERN = /^[A-Za-z0-9]+(?:\+[A-Za-z0-9]+)*$/;
+// Uma tecla sozinha só vale se for de função (F1 a F24): uma letra ou um número sem modificador viraria
+// atalho global e engoliria aquela tecla em todo programa.
+const SHORTCUT_LONE_KEY_PATTERN = /^F(?:[1-9]|1\d|2[0-4])$/;
 const SHORTCUT_MAX_LENGTH = 64;
 // Sobe quando uma chave muda de nome ou de sentido, para a leitura poder migrar o arquivo antigo.
 const PREFERENCES_VERSION = 1;
@@ -514,7 +517,8 @@ const PREFERENCE_VALIDATORS = Object.freeze({
   opacity: (value) => OPACITY_LEVELS.includes(value),
   anchor: isOneOf(ANCHORS),
   islandMode: isOneOf(ISLAND_MODES),
-  shortcut: (value) => typeof value === 'string' && value.length <= SHORTCUT_MAX_LENGTH && SHORTCUT_PATTERN.test(value),
+  shortcut: (value) => typeof value === 'string' && value.length <= SHORTCUT_MAX_LENGTH && SHORTCUT_PATTERN.test(value)
+    && (value.includes('+') || SHORTCUT_LONE_KEY_PATTERN.test(value)),
   version: (value) => Number.isInteger(value) && value >= 1,
 });
 

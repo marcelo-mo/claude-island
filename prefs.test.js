@@ -213,11 +213,11 @@ test('islandMode: perDisplay, primary e cursor', () => {
   assert.equal(normalizeKey('islandMode', 'per-display'), 'perDisplay');
 });
 
-test('shortcut: só letras, números e +, até 64 caracteres', () => {
-  for (const value of ['Control+Alt+Shift+C', 'F12', 'CommandOrControl+Shift+Z']) {
+test('shortcut: só letras, números e +, até 64 caracteres; tecla sozinha só se for de função', () => {
+  for (const value of ['Control+Alt+Shift+C', 'F12', 'F24', 'CommandOrControl+Shift+Z']) {
     assert.equal(normalizeKey('shortcut', value), value);
   }
-  for (const value of ['', 'Control+Alt+&', 'Control++C', 'a'.repeat(65), 7, 'Control+Alt+Shift+C\n']) {
+  for (const value of ['', 'Control+Alt+&', 'Control++C', 'a'.repeat(65), 7, 'Control+Alt+Shift+C\n', 'A', '7', 'F25', 'Space']) {
     assert.equal(normalizeKey('shortcut', value), DEFAULT_SHORTCUT, JSON.stringify(value));
   }
 });
