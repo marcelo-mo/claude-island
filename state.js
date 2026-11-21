@@ -358,6 +358,7 @@ const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: 
 module.exports = {
   SECURE_WEB_PREFERENCES, effectiveOpacity, isIslandSender,
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
+  PERMISSION_TOOL_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,

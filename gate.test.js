@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
   effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES, WINDOW_SIZE, HORIZONTAL_SLACK,
+  PERMISSION_TOOL_LIMIT,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -781,11 +782,33 @@ function fontMetrics(value, what) {
 const lineHeightOfBody = fontMetrics(cssDeclarations('body').font, 'font do body').lineHeight;
 const textLine = (selector) => cssPixels(cssDeclarations(selector)['font-size'], `font-size de ${selector}`) * lineHeightOfBody;
 
-// Altura da pílula com o pior pedido, somada das regras do CSS (hoje 46 + 31,2 + 165,6 + 40,9 + 16 ≈ 299,7):
+// Largura útil do rótulo da ferramenta: a pílula expandida menos o padding dela e o do bloco de pedido.
+function horizontalPadding(value, what) {
+  // O "0" sem unidade é válido no atalho (`padding: 0 17px`); o resto precisa estar em px.
+  const parts = String(value).trim().split(/\s+/).map((part) => (part === '0' ? 0 : cssPixels(part, what)));
+  return (parts[1] ?? parts[0]) + (parts[3] ?? parts[1] ?? parts[0]);
+}
+// Largura média de um caractere do rótulo (negrito, sem serifa), em múltiplos do tamanho da fonte.
+// Suposição: 0,6 cobre nome misto com sublinhados; um nome de 100 'W' passaria disso e teria uma linha a mais.
+const TOOL_CHAR_WIDTH_EM = 0.6;
+
+// Linhas que o rótulo da ferramenta ocupa no pior caso: PERMISSION_TOOL_LIMIT caracteres. O modelo
+// só vale porque o rótulo quebra em qualquer ponto (overflow-wrap: anywhere): sem isso um nome sem
+// espaço, como mcp__servidor__ferramenta, passaria da caixa e seria cortado.
+function toolLabelLines() {
+  assert.equal(cssDeclarations('#permission-tool')['overflow-wrap'], 'anywhere', 'o rótulo da ferramenta precisa quebrar em qualquer ponto');
+  const labelWidth = cssPixels(cssDeclarations('#pill.expanded').width, 'largura da expandida')
+    - horizontalPadding(cssDeclarations('#pill').padding, 'padding de #pill')
+    - horizontalPadding(cssDeclarations('#permission').padding, 'padding de #permission');
+  const fontSize = cssPixels(cssDeclarations('#permission-tool')['font-size'], 'font-size de #permission-tool');
+  return Math.ceil((PERMISSION_TOOL_LIMIT * TOOL_CHAR_WIDTH_EM * fontSize) / labelWidth);
+}
+
+// Altura da pílula com o pior pedido, somada das regras do CSS (hoje 46 + 31,2 + 179,9 + 40,9 + 16 ≈ 314):
 //   barra (#bar) ........................ 46
 //   detalhe (#detail): 2 linhas de 12 px . 12 × 1,3 × 2 = 31,2
-//   pedido (#permission) ................ margem 8 + padding 16 + título (11 × 1,3 + 3) + texto com max-height 105
-//                                         + dica (5 + 11 × 1,3) = 165,6
+//   pedido (#permission) ................ margem 8 + padding 16 + título (2 linhas de 11 × 1,3, + 3) + texto com
+//                                         max-height 105 + dica (5 + 11 × 1,3) = 179,9
 //   ações (#actions) .................... margem 8 + botão (13 × 1,3 + 8 × 2) = 40,9
 //   respiro de baixo (has-permission) ... 16
 function pillMaxHeight() {
@@ -796,7 +819,7 @@ function pillMaxHeight() {
   const hint = cssDeclarations('#permission-hint');
   const permissionHeight = cssPixels(permission['margin-top'], 'margin-top de #permission')
     + verticalPadding(permission.padding, 'padding de #permission')
-    + textLine('#permission-tool') + cssPixels(tool['margin-bottom'], 'margin-bottom de #permission-tool')
+    + textLine('#permission-tool') * toolLabelLines() + cssPixels(tool['margin-bottom'], 'margin-bottom de #permission-tool')
     + cssPixels(cssDeclarations('#permission-text')['max-height'], 'max-height de #permission-text')
     + cssPixels(hint['margin-top'], 'margin-top de #permission-hint') + textLine('#permission-hint');
   const button = cssDeclarations('#actions button');
