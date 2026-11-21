@@ -282,3 +282,102 @@ test('o main escuta só com ipcMain.on, nos seis canais do renderer', () => {
   assert.deepEqual([...methods], ['on']);
   assert.deepEqual([...channels].sort(), RENDERER_CHANNELS.filter((channel) => channel !== 'island:state').sort());
 });
+
+// Travas da cola (texto): as regras puras têm vetores, mas a ligação dos argumentos que as chama
+// não. Trocar um argumento (eco vindo do main, alvo vindo do eco, fato da janela fixo) passava na
+// suíte. Lê o objeto literal da chamada, uma chave por linha, ignorando comentários e o fim de linha.
+function objectArgument(source, opening) {
+  assert.equal(source.split(opening).length - 1, 1, `chamada ausente ou repetida: ${opening}`);
+  const start = source.indexOf(opening) + opening.length;
+  const body = source.slice(start, start + source.slice(start).search(/\n\s*\}\)/));
+  return body.split('\n').map((line) => line.trim()).filter((line) => line && !line.startsWith('//')).map((line) => {
+    const entry = line.match(/^(\w+)(?::\s*(.+?))?,?$/);
+    assert.ok(entry, `linha fora do formato chave: valor: ${line}`);
+    return [entry[1], entry[2] ?? entry[1]];
+  });
+}
+
+test('island:decide: o eco vem do renderer, o alvo e o relógio do main, os fatos da janela real', () => {
+  assert.ok(mainSource.includes("ipcMain.on('island:decide', (event, behavior, pressedId) => {"));
+  assert.deepEqual(objectArgument(mainSource, 'acceptDecision({'), [
+    ['behavior', 'behavior'],
+    ['echoedId', 'pressedId'],
+    ['shownId', 'shown.id'],
+    ['shownSince', 'shown.since'],
+    ['now', 'performance.now()'],
+    ['decidedId', 'decidedPermissionId'],
+    ['windowVisible', 'island.isVisible() && !island.isMinimized()'],
+    ['coveredByFullscreen', 'false'],
+    ['withinVisibleArea', 'Boolean(display) && isWithinWorkArea(island.getBounds(), display.workArea, HORIZONTAL_SLACK)'],
+  ]);
+  // O renderer manda o eco como o segundo argumento do preload; sem ele toda decisão seria recusada.
+  assert.ok(preloadSource.includes("decide: (behavior, pressedId) => ipcRenderer.send('island:decide', behavior, pressedId),"));
+});
+
+test('island:decide grava o veredito antes de marcar o pedido como decidido', () => {
+  const decide = mainSource.slice(mainSource.indexOf("ipcMain.on('island:decide'"));
+  // Grava o id e o comportamento do veredito (nunca os do renderer) e só então marca: marcar antes
+  // impediria tentar de novo se a gravação falhasse.
+  assert.match(decide, /try \{\s*writeDecision\(verdict\.permissionId, verdict\.behavior\);\s*(\/\/[^\n]*\n\s*)*decidedPermissionId = verdict\.permissionId;/);
+  const assignments = mainSource.match(/(?<![\w.])decidedPermissionId\s*=(?!=)/g) || [];
+  assert.equal(assignments.length, 2, 'decidedPermissionId só muda na declaração e depois de gravar');
+  assert.match(mainSource, /^let decidedPermissionId = null;/m);
+});
+
+test('refresh não engole o rearme e o estado enviado leva answeredId e armEpoch', () => {
+  for (const glue of [
+    "nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm')",
+    'if (serialized === lastSent && nextShown.epoch === shown.epoch) return;',
+    '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch }',
+  ]) {
+    assert.ok(mainSource.includes(glue), `main.js sem a cola: ${glue}`);
+  }
+});
+
+// Ampliar o botão no hover (ou a pílula inteira) move o alvo sob o cursor: o clique a caminho cai
+// no botão que cresceu. Só regras de hover ou dos botões; as animações de estado da pílula ficam.
+test('botões e hover sem transform, scale, translate, rotate ou zoom', () => {
+  const style = rendererSource.slice(rendererSource.indexOf('<style>'), rendererSource.indexOf('</style>'));
+  const rules = [...style.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+  const guarded = rules.filter(([, selector]) => /button|#allow|#deny|#actions|:hover/.test(selector));
+  assert.ok(guarded.some(([, selector]) => selector.includes('#actions button:hover')));
+  for (const [, selector, body] of guarded) {
+    assert.equal(/(?:^|[;\s])(?:transform|scale|translate|rotate|zoom)\s*:/.test(body), false, `regra que move o botão: ${selector.trim()}`);
+  }
+});
+
+test('a roda sobre o texto não vaza e não rola na janela depois da troca', () => {
+  assert.match(rendererSource, /permissionText\.addEventListener\('wheel', \(event\) => \{\s*event\.stopPropagation\(\);\s*if \(!isWheelSettled\(contentChangedAt, performance\.now\(\)\)\) event\.preventDefault\(\);\s*\}, \{ passive: false \}\);/);
+});
+
+test('o clique só decide com o press validado e ecoa o id capturado no pointerdown', () => {
+  for (const glue of [
+    'const valid = event.button === 0 && canPress({',
+    'press = valid ? { behavior, id: current.permission.id, armToken } : null;',
+  ]) {
+    assert.ok(rendererSource.includes(glue), `index.html sem a cola: ${glue}`);
+  }
+  assert.deepEqual(objectArgument(rendererSource, 'if (!isValidRelease({'), [
+    ['pressedBehavior', 'pressed?.behavior'],
+    ['releasedBehavior', 'behavior'],
+    ['pressedId', 'pressed?.id'],
+    ['currentId', 'current.permission?.id'],
+    ['armed', 'armed'],
+    ['pressedArmToken', 'pressed?.armToken'],
+    ['currentArmToken', 'armToken'],
+  ]);
+  const click = rendererSource.slice(rendererSource.indexOf('if (!isValidRelease({'));
+  assert.match(click, /^[^]*?\}\)\) return;\s*answeredPermissionId = pressed\.id;\s*(\/\/[^\n]*\n\s*)*window\.island\.decide\(behavior, pressed\.id\);/);
+});
+
+test('render trava pelo answeredId e só libera Permitir lido; id ou época nova rearma', () => {
+  for (const glue of [
+    'const wasRead = readPermissionId === permission.id;',
+    'const locked = !armed || permission.id === answeredPermissionId || permission.id === current.answeredId;',
+    'denyButton.disabled = locked;',
+    'allowButton.disabled = locked || !wasRead;',
+  ]) {
+    assert.ok(rendererSource.includes(glue), `index.html sem a cola: ${glue}`);
+  }
+  assert.match(rendererSource, /if \(epochChanged \|\| \(permissionId && permissionId !== previousPermissionId\)\) \{\s*lastArmEpoch = next\.armEpoch;\s*restartArming\(\);/);
+});
