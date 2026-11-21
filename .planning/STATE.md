@@ -1,18 +1,19 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 4
-current_phase_name: Palco fixo, animação e visual
-status: human_needed
-stopped_at: Phase 4 context gathered
-last_updated: "2026-11-21T16:41:05.543Z"
+current_phase_name: Entrada, preferências e comportamento no sistema
+current_plan: 2
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-11-21T16:47:51.441Z"
 last_activity: 2026-11-21
-last_activity_desc: Fase 3 executada (3 planos), revisão com 3 correções, verificação human_needed, segurança 17/17; PR aberto
-state_head: ddda2e471b90a035054c475835cb3498649ea867
+last_activity_desc: Phase 4 execution started
+state_head: 36efbe29ecf7a24defa4c80bcae5c8bdfb0fe049
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 17
-  completed_plans: 11
+  completed_plans: 12
   percent: 33
 ---
 
@@ -23,13 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-21)
 
 **Core value:** Saber de relance o que cada sessão do Claude Code está fazendo e responder ao que ela pede sem trocar de janela, sem nunca aprovar algo que o usuário não viu.
-**Current focus:** Phase 3 — Palco fixo, animação e visual
+**Current focus:** Phase 4 — Entrada, preferências e comportamento no sistema
 
 ## Current Position
 
-Phase: 4 (Palco fixo, animação e visual) — READY TO EXECUTE
-Status: 3/3 planos executados; verificação human_needed (9 itens visuais em 03-UAT.md, 1 bloqueante: 125%/150%); segurança threats_open 0
-Last activity: 2026-11-21 — Fase 3 entregue em PR, sem merge
+Phase: 4 (Entrada, preferências e comportamento no sistema) — EXECUTING
+Current Plan: 2
+Total Plans in Phase: 6
+Status: Ready to execute
+Last activity: 2026-11-21 — Phase 4 execution started
 
 Progress: [███░░░░░░░] 33%
 
@@ -63,6 +66,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 02 P02 | 4min | 2 tasks | 4 files |
 | Phase 02 P03 | 14min | 2 tasks | 3 files |
 | Phase 02 P04 | 10min | 3 tasks | 5 files |
+| Phase 04 P01 | 25 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -88,6 +92,8 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Phase 1]: Etapa 1 reprovada: T0 de 117,6% a 136,7% do WS de E3 e CPU ociosa acima; base continua Electron, sem Etapa 2 nem fase 3.1 (só Windows)
 - [Phase 1]: E2 inelegível (capturas PrintWindow pretas com --in-process-gpu); E_ref = E3
 - [Phase 1]: Plano 01-04: Etapa 2 pulada (Etapa 1 reprovada, D-04/BASE-03); Task 3 pending-human, halo D-03 a conferir pelo autor no PR
+- [Phase 04]: Menu nativo no clique direito: applyPreference é o único caminho de mudança de preferência e termina em refresh('rearm'); menu-will-show e menu-will-close rearmam Permitir e Negar
+- [Phase 04]: Preferências inválidas ou acima de 64 KB vão para preferences.json.<carimbo>.bad em vez de serem sobrescritas pela próxima gravação; positions.json passou a ser gravado por .tmp + rename
 
 ### Pending Todos
 
@@ -112,6 +118,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T15:22:45.676Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-entrada-prefer-ncias-e-comportamento-no-sistema/04-CONTEXT.md
+Last session: 2026-11-21T16:47:51.037Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None

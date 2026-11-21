@@ -52,7 +52,7 @@ Escopo deste milestone: reformular a ilha com o comportamento e o visual do mod 
 ### Preferências e controles (PREF)
 
 - [ ] **PREF-01**: Clique direito na ilha abre um menu com tema, forma, estilo e velocidade da animação, expandir no hover/clique, fixar aberta, transparência, âncora e esconder
-- [ ] **PREF-02**: As escolhas ficam salvas e voltam iguais após reiniciar; um arquivo de preferências corrompido ou antigo não impede a ilha de subir (cada valor inválido volta ao padrão)
+- [x] **PREF-02**: As escolhas ficam salvas e voltam iguais após reiniciar; um arquivo de preferências corrompido ou antigo não impede a ilha de subir (cada valor inválido volta ao padrão)
 - [ ] **PREF-03**: Um atalho global esconde e mostra a ilha; o padrão é Ctrl+Alt+C se não conflitar com AltGr+C no teclado ABNT2, senão outro padrão sem conflito; se o atalho não puder ser registrado, o menu avisa
 - [ ] **PREF-04**: O usuário escolhe a âncora da ilha (topo central, cantos e base) e o arraste ajusta o deslocamento a partir dela, preso ao monitor da própria ilha
 - [ ] **PREF-05**: O usuário pode optar por uma ilha só (monitor principal ou o monitor do cursor) em vez de uma por monitor, que continua sendo o padrão
@@ -143,7 +143,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | HOV-03 | Phase 4 | Pending |
 | HOV-04 | Phase 4 | Pending |
 | PREF-01 | Phase 4 | Pending |
-| PREF-02 | Phase 4 | Pending |
+| PREF-02 | Phase 4 | Complete |
 | PREF-03 | Phase 4 | Pending |
 | PREF-04 | Phase 4 | Pending |
 | PREF-05 | Phase 4 | Pending |

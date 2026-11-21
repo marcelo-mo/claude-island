@@ -115,11 +115,11 @@ Plans:
   3. O clique direito abre um menu com tema, forma, estilo e velocidade da animação, expandir no hover/clique, fixar aberta, transparência, âncora e esconder; as escolhas voltam iguais após reiniciar, e um arquivo de preferências corrompido ou antigo não impede a ilha de subir (cada valor inválido volta ao padrão)
   4. Um atalho global esconde e mostra a ilha (Ctrl+Alt+C se não conflitar com AltGr+C no ABNT2, senão outro padrão sem conflito; se não registrar, o menu avisa); esconder nunca aprova nada e reexibir rearma os botões; a âncora (topo central, cantos, base) e o arraste preso ao monitor da própria ilha funcionam; o modo "uma ilha só" é opcional e a transparência de 100/85/70/55% nunca vale com pedido na tela
   5. No Windows, quando um app ocupa o monitor inteiro a ilha daquele monitor some e volta quando ele sai (desktop e a própria ilha não contam); um pedido de permissão nessa hora só toca o som, a ilha não reaparece por cima e o terminal segue valendo
-**Plans**: 6 plans (sequenciais: de 01 a 05 todos editam `main.js` e `gate.test.js`; o 06 fecha com ferramenta e documentação)
+**Plans**: 1/6 plans executed (sequenciais: de 01 a 05 todos editam `main.js` e `gate.test.js`; o 06 fecha com ferramenta e documentação)
 
 Plans:
 **Wave 1**
-- [ ] 04-01-PLAN.md — Traçador: menu nativo do clique direito grava a escolha por .tmp + rename e rearma ao abrir e fechar; esquema completo das preferências com quarentena `.bad` (PREF-01, PREF-02)
+- [x] 04-01-PLAN.md — Traçador: menu nativo do clique direito grava a escolha por .tmp + rename e rearma ao abrir e fechar; esquema completo das preferências com quarentena `.bad` (PREF-01, PREF-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 04-02-PLAN.md — Hover pela posição do cursor (main entrega o ponto, renderer decide com histerese 2/8 px, captura sem forward); expandir no hover ou no clique e fixar aberta (HOV-01..04)
@@ -175,6 +175,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 (condicional) → 4 → 5
 | 1. Spike de medição e decisão de base | 4/4 | Complete | 2026-11-21 |
 | 2. Fundação segura do gate de permissão | 4/4 | Complete | 2026-11-21 |
 | 3. Palco fixo, animação e visual | 3/3 | In Progress | - |
-| 4. Entrada, preferências e comportamento no sistema | 0/TBD | Not started | - |
+| 4. Entrada, preferências e comportamento no sistema | 1/6 | In Progress | - |
 | 5. Sessões | 0/TBD | Not started | - |
 | 6. Convivência com a ilha do sistema | 0/TBD | Not started | - |
