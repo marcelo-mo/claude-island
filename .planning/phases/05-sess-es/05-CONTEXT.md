@@ -63,11 +63,16 @@ Fica de fora:
   - Se ela for a única sessão, o prazo de 10 s vale como hoje e a ilha fica ociosa. Isso não é troca de sessão, e a ilha continua existindo só enquanto o Claude roda.
   - Assim, "concluído" e "voltou a trabalhar" nunca trocam a sessão sozinhos (ROADMAP SC3, SESS-06), nem pela expiração.
   - Sair de fato da lista (`SessionEnd`, sessão morta, prazo de `running`/`waiting`) não é troca por estado. Ajustado na terceira revisão do plano, para não contrariar a D-13 ("uma vez por pedido"):
-    - a ilha vai à sessão do pedido pendente **nunca exibido** mais antigo, se houver;
+    - a ilha vai à sessão do pedido pendente **nunca exibido** mais antigo, se houver e se não houver gesto de roda em curso (a mesma espera de 400 ms do snap, D-13);
     - senão, à **vizinha na ordem estável** (a anterior, ou a seguinte se a que saiu era a primeira), nunca à "mais urgente".
+    - **A vizinha pula as sessões com pedido já exibido e deixado.**
     - Um pedido que já foi exibido e que o usuário deixou nunca é alvo de troca automática, nem por essa saída.
     - O estado dos pedidos no main distingue "nunca exibido" (entrou na fila sem snap) de "já exibido".
-    - Se a vizinha calhar de ter um pedido já deixado, ele reaparece por posição, não por urgência, e com rearme.
+    - **Exceção registrada** (fechamento do plano, depois do limite de revisões): só quando **todas** as sessões restantes têm pedido já deixado, a ilha pousa na vizinha mais próxima, porque não há outro lugar. O pedido reaparece por posição, com rearme, e vai como item de tela no PR.
+    - Com gesto de roda em curso, o pedido nunca exibido não vira alvo nessa saída: a ilha vai à vizinha, e ele segue pulsando como nunca exibido.
+  - Notas do fechamento do plano:
+    - O fade da mola de troca sobre `#permission` não contraria o SEG-05, que é a opacidade da janela. A janela segue 100% com pedido na tela, e Permitir/Negar seguem desarmados até as molas pararem.
+    - O reserva da roda (`wheelDeltaY || -deltaY × 1,2`) também converte quando `wheelDeltaY` é 0. Isso é inofensivo: delta 0 não gera passo.
 
 ### Pontos e rótulo (SESS-01)
 - **D-07:** **Um ponto por sessão viva, no lugar de `#count`, só com 2 ou mais sessões.**
