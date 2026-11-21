@@ -52,6 +52,13 @@ status: all_fixed
 **Correção aplicada:** novo teste de comportamento em `prefs.test.js`: o `menuTemplate` real passa por `toMenuItem` com callbacks espiões. O último item tem `click` com atalho `ok` e o `click` chama `onHide`; sem atalho não tem `click`; rádio e "Fixar aberta" chamam `onPreference` com `key`/`value`. Para rearme e menu destruído, que são cola do Electron e dependem de estado de janela, ficaram travas de texto: uma função pura de "movimento exige rearme" seria sempre `true` e não foi criada.
 **Status:** corrigido (parcial por escolha: cola de Electron segue coberta por texto).
 
+### IN-01: Atalho aceitava uma tecla comum sozinha (corrigido pelo orquestrador, fora do escopo crítico/aviso)
+
+**Arquivos modificados:** `state.js`, `prefs.test.js`
+**Commit:** 945858f
+**Correção aplicada:** sem modificador, só tecla de função (F1 a F24) vale como atalho; letra ou número sozinho volta ao padrão. Vetores `'A'`, `'7'`, `'F25'` e `'Space'` no teste.
+**Status:** corrigido. IN-02 (JSON válido porém inútil não vai para a quarentena) e IN-04 (`island:cursor` sem conferir a página; só vazaria a posição do cursor) ficam registrados, sem correção nesta fase. IN-03 é dormência por D-20.
+
 ---
 
 _Corrigido: 2026-11-21_
