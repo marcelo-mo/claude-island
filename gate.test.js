@@ -53,7 +53,20 @@ const mainSource = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
 test('o pedido exibido só é atribuído na declaração e dentro de refresh (invariante I2)', () => {
   const assignments = mainSource.match(/(?<![\w.])shown\s*=(?!=)/g) || [];
   assert.equal(assignments.length, 2);
-  assert.ok(mainSource.includes('function refresh(reason)'));
+  assert.match(mainSource, /^let shown = \{/m);
+  const refreshStart = mainSource.indexOf('function refresh(reason)');
+  assert.ok(refreshStart >= 0);
+  const refreshBody = mainSource.slice(refreshStart, mainSource.indexOf('\nfunction ', refreshStart));
+  assert.match(refreshBody, /(?<![\w.])shown = nextShown;/);
+  // Escrever num campo também troca o alvo da decisão ou o relógio do armamento fora de refresh.
+  for (const mutation of [
+    /(?<![\w.])shown\s*(?:\.\s*\w+|\[[^\]]*\])\s*(?:[-+*/%&|^]?=(?!=)|\+\+|--)/,
+    /(?:\+\+|--)\s*shown\s*[.[]/,
+    /delete\s+shown\s*[.[]/,
+    /Object\.(?:assign|defineProperty|defineProperties|setPrototypeOf)\(\s*shown\b/,
+  ]) {
+    assert.equal(mutation.test(mainSource), false, `main.js muda um campo de shown: ${mutation}`);
+  }
 });
 
 // Trava de regressão (texto exato), não prova de comportamento: o comportamento do rearme é o do
@@ -181,16 +194,30 @@ test('webPreferences de main.js termina no spread seguro e não tem valor insegu
 // exige editar este teste de propósito. Os canais de posição (drag-end, reset-position) gravam
 // valores calculados no main a partir de getBounds(), não uma preferência vinda do renderer.
 function collectChannels(source, objectName) {
-  const calls = [...source.matchAll(new RegExp(`${objectName}\\.(\\w+)\\(\\s*'([^']+)'`, 'g'))];
-  return { methods: new Set(calls.map((call) => call[1])), channels: new Set(calls.map((call) => call[2])) };
+  const calls = [...source.matchAll(new RegExp(`${objectName}\\.(\\w+)\\(\\s*(['"\`])([^'"\`]+)\\2`, 'g'))];
+  // Toda menção além da do require tem de ser uma chamada com canal literal: alias, renomear no
+  // require, acesso por colchete ou canal numa variável ficam fora da contagem e quebram o teste.
+  const mentions = (source.match(new RegExp(`\\b${objectName}\\b`, 'g')) || []).length;
+  assert.equal(mentions, calls.length + 1, `${objectName} usado fora de uma chamada com canal literal`);
+  assert.equal(new RegExp(`\\b${objectName}\\s*:`).test(source), false, `${objectName} renomeado no require`);
+  return { methods: new Set(calls.map((call) => call[1])), channels: new Set(calls.map((call) => call[3])) };
 }
+
+const preloadSource = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+
+// A IPC por webContents (webContents.ipc, evento ipc-message) recebe mensagens sem passar por ipcMain.
+test('nenhum canal escapa pela IPC por webContents', () => {
+  for (const source of [mainSource, preloadSource]) {
+    assert.equal(/\.ipc\b|ipc-message/.test(source), false);
+  }
+});
 
 const RENDERER_CHANNELS = [
   'island:state', 'island:hover', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end', 'island:reset-position',
 ];
 
 test('o preload usa só send e on, nos sete canais conhecidos', () => {
-  const { methods, channels } = collectChannels(fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8'), 'ipcRenderer');
+  const { methods, channels } = collectChannels(preloadSource, 'ipcRenderer');
   assert.deepEqual([...methods].sort(), ['on', 'send']);
   assert.deepEqual([...channels].sort(), [...RENDERER_CHANNELS].sort());
 });
