@@ -1383,3 +1383,48 @@ test('a pílula compacta tem teto na largura da expandida e os pontos ficam na p
   assert.ok(render.includes("pill.classList.toggle('multi-session', "));
   assert.ok(render.includes('current.sessions.length >= 2'));
 });
+
+test('com várias sessões o título tem largura fixa e corta com reticências, então o projeto não muda a largura da pílula', () => {
+  const title = cssDeclarations('#pill.multi-session #title');
+  assert.equal(title.flex, '0 1 140px');
+  assert.equal(title['min-width'], '0');
+  assert.equal(title['text-overflow'], 'ellipsis');
+  assert.equal(title.overflow, 'hidden');
+  assert.equal(cssDeclarations('#lead')['min-width'], '0');
+  assert.ok(functionBody('renderContent').includes("pill.classList.toggle('multi-session', "));
+});
+
+test('o cabeçalho do pedido corta só o projeto: a ferramenta quebra em qualquer ponto e nunca leva reticências', () => {
+  assert.equal(cssDeclarations('#permission-tool')['overflow-wrap'], 'anywhere');
+  for (const [, selector, body] of styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (['#permission-tool', '#permission-tool-name'].includes(selector.trim())) {
+      assert.equal(body.includes('text-overflow'), false, `a regra ${selector.trim()} não pode cortar com reticências`);
+    }
+  }
+  const project = cssDeclarations('#permission-project');
+  assert.equal(project['text-overflow'], 'ellipsis');
+  assert.equal(project['white-space'], 'nowrap');
+  cssPixels(project['max-width'], 'max-width de #permission-project');
+  const render = functionBody('renderContent');
+  assert.match(render, /permissionToolName\.textContent = [^\n]*permission\.tool[^\n]*;/);
+  assert.equal(render.includes('.slice('), false, 'o nome da ferramenta não pode ser fatiado');
+  assert.ok(rendererLf.includes('id="permission-project"') && rendererLf.includes('id="permission-tool-name"'));
+});
+
+test('o título é o projeto só com várias sessões e a pílula compacta, senão o do estado', () => {
+  const render = functionBody('renderContent');
+  assert.ok(render.includes("const multiSession = Array.isArray(current.sessions) && current.sessions.length >= 2;"));
+  assert.ok(render.includes("title.textContent = multiSession && !pill.classList.contains('expanded') && current.project ? current.project : TITLES[current.state];"));
+  assert.equal(render.split('current.project').length - 1 >= 3, true, 'título, cabeçalho do pedido e detalhe usam o projeto');
+});
+
+test('o ponto de quem pede permissão pulsa por opacidade e para com movimento reduzido', () => {
+  assert.match(rendererLf, /@keyframes session-pulse \{[^{}]*\{[^{}]*\}\s*\}/);
+  assert.equal(cssDeclarations('#sessions [data-pending="true"] i').animation.includes('session-pulse'), true);
+  const reduced = rendererLf.match(/@media \(prefers-reduced-motion: reduce\) \{([^{}]*)\{/);
+  assert.ok(reduced, 'regra de movimento reduzido não encontrada');
+  assert.ok(reduced[1].includes('#sessions i'));
+  // o anel parado vive dentro do @media de movimento reduzido, que é o último bloco do CSS
+  const media = rendererLf.slice(rendererLf.indexOf('@media (prefers-reduced-motion: reduce) {'), rendererLf.indexOf('</style>'));
+  assert.ok(media.includes('#sessions [data-pending="true"] i { box-shadow: 0 0 0 2px '));
+});
