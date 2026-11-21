@@ -252,6 +252,18 @@ function isAliveSession(session, now) {
   return false;
 }
 
+// As sessões vivas pelo filtro de hoje e, com `keptKey`, também o "concluído" que está na tela depois do prazo,
+// se houver outra sessão viva: ele não vence enquanto exibido, para a ilha nunca trocar de sessão sozinha por
+// causa dele (SESS-06). Sozinho ele vence aos 10 s como antes e a ilha fica ociosa, o que não é troca; quando
+// deixa de ser exibido, a chave exibida é outra e ele vence na hora.
+function aliveSessions(sessions, now, keptKey) {
+  const alive = sessions.filter((session) => isAliveSession(session, now));
+  if (typeof keptKey !== 'string' || alive.length === 0) return alive;
+  const kept = sessions.find((session) => session && typeof session === 'object' && session.key === keptKey
+    && session.state === 'done' && Number.isFinite(session.updatedAt) && !isAliveSession(session, now));
+  return kept ? [...alive, kept] : alive;
+}
+
 const byUrgency = (a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt;
 
 // Ordem dos pontos: quem apareceu primeiro vem primeiro. Sem primeira aparição válida a sessão vai
@@ -285,12 +297,13 @@ function queuePosition(permissionId, requests) {
  * estável de primeira aparição: `{ state, pending, current }`, com `pending` para quem tem pedido
  * válido e `current` só na exibida; nenhuma chave, PID ou texto de outra sessão sai daqui. `queue`
  * é `{ position, total }` quando o pedido exibido está entre dois ou mais de `selection.requests`,
- * senão null. Sem sessão viva devolve `{ state: 'idle', count: 0 }`.
+ * senão null. Sem sessão viva devolve `{ state: 'idle', count: 0 }`. O "concluído" exibido (`selection.key`)
+ * continua vivo depois dos 10 s enquanto houver outra sessão viva; sozinho vence no prazo de sempre.
  */
 function pickState(sessions, now, selection) {
-  const alive = sessions.filter((session) => isAliveSession(session, now));
-  if (alive.length === 0) return { state: 'idle', count: 0 };
   const selectedKey = selection && typeof selection.key === 'string' ? selection.key : null;
+  const alive = aliveSessions(sessions, now, selectedKey);
+  if (alive.length === 0) return { state: 'idle', count: 0 };
   const shownSession = (selectedKey !== null && alive.find((session) => session.key === selectedKey))
     || [...alive].sort(byUrgency)[0];
   const { state, detail, project, windowPid, contextPercent, permission } = shownSession;
@@ -317,12 +330,12 @@ function pickState(sessions, now, selection) {
  * crescente e, no empate, a chave. A ordem nunca segue urgência nem recência, para um ponto não mudar
  * de lugar no meio de um gesto. Cada item é `{ key, state, updatedAt, permissionId }`, com o id do
  * pedido válido só em `waiting` (senão null). Leva chaves de sessão: só o main usa. Entrada que não
- * é array dá [].
+ * é array dá []. `selectedKey` (opcional, a chave exibida) segura o "concluído" exibido depois dos 10 s
+ * enquanto houver outra sessão viva, como pickState; sem ele, ou com outra chave, o vencido fica fora.
  */
-function sessionList(sessions, now) {
+function sessionList(sessions, now, selectedKey) {
   if (!Array.isArray(sessions)) return [];
-  return sessions
-    .filter((session) => isAliveSession(session, now))
+  return aliveSessions(sessions, now, selectedKey)
     .sort(byFirstSeen)
     .map((session) => ({
       key: session.key,
@@ -333,19 +346,19 @@ function sessionList(sessions, now) {
 }
 
 // Chave da sessão exibida depois de um ciclo de leitura. Com sessão exibida ela fica; saindo da lista,
-// vai à vizinha dela na ordem estável (a anterior mais próxima que sobrou, ou a seguinte); só sem
-// sessão exibida a escolha é por urgência.
-function keyAfterPoll(key, list, previousKeys) {
+// vai à vizinha dela na ordem estável (a anterior mais próxima que sobrou, ou a seguinte) que não tenha
+// pedido já deixado (`leftKeys`); só se todas as restantes tiverem, pousa na vizinha mais próxima, porque
+// não há outro lugar (exceção registrada). Só sem sessão exibida a escolha é por urgência.
+function keyAfterPoll(key, list, previousKeys, leftKeys) {
   if (list.length === 0) return null;
   if (key === null) return [...list].sort(byUrgency)[0].key;
   const remaining = new Set(list.map((entry) => entry.key));
   if (remaining.has(key)) return key;
   const previous = Array.isArray(previousKeys) ? previousKeys : [];
   const at = previous.indexOf(key);
-  if (at < 0) return list[0].key;
-  const before = previous.slice(0, at).reverse().find((candidate) => remaining.has(candidate));
-  if (before !== undefined) return before;
-  return previous.slice(at + 1).find((candidate) => remaining.has(candidate)) ?? list[0].key;
+  const near = at < 0 ? [] : [...previous.slice(0, at).reverse(), ...previous.slice(at + 1)].filter((candidate) => remaining.has(candidate));
+  const candidates = [...near, ...list.map((entry) => entry.key).filter((candidate) => !near.includes(candidate))];
+  return candidates.find((candidate) => !leftKeys.has(candidate)) ?? candidates[0];
 }
 
 // Quanto tempo sem roda para o gesto ter acabado e o snap poder acontecer, e por quanto tempo a roda fica
@@ -377,15 +390,28 @@ function pollSelection(key, previous, entries, event) {
   }
   requests.sort(byRequestOrder);
 
-  let chosen = keyAfterPoll(key, entries, previousKeys);
+  // Sessões com um pedido pendente que já esteve na tela e foi deixado: a vizinha da saída de fato as pula.
+  const leftKeys = new Set(requests.filter((request) => request.shown).map((request) => sessionOf.get(request.id)));
+  let chosen = keyAfterPoll(key, entries, previousKeys, leftKeys);
   let snapped = false;
   const markAllHandled = () => requests.forEach((request) => { request.handled = true; });
   const hasShownRequest = typeof shownPermissionId === 'string';
   const shownIsPending = hasShownRequest && sessionOf.has(shownPermissionId);
   const inGesture = Number.isFinite(lastWheelAt) && Number.isFinite(now) && now - lastWheelAt < SNAP_GESTURE_GAP_MS;
   const unhandled = requests.filter((request) => !request.handled);
+  // A sessão exibida saiu de fato da lista (e ainda há sessões).
+  const exited = key !== null && entries.length > 0 && !entries.some((entry) => entry.key === key);
+  const neverShown = requests.find((request) => !request.shown);
 
-  if (key !== null && entries.some((entry) => entry.key === key) && hasShownRequest && !shownIsPending && requests.length > 0) {
+  if (exited) {
+    // Vai ao pedido nunca exibido mais antigo, se o gesto da roda acabou; senão fica na vizinha de keyAfterPoll
+    // e o pedido espera. Um pedido já exibido e deixado nunca é alvo (uma vez por pedido).
+    if (!inGesture) markAllHandled();
+    if (neverShown && !inGesture) {
+      chosen = sessionOf.get(neverShown.id);
+      snapped = true;
+    }
+  } else if (key !== null && entries.some((entry) => entry.key === key) && hasShownRequest && !shownIsPending && requests.length > 0) {
     // O pedido exibido saiu e a sessão dele continua viva: vai ao mais antigo restante. Não espera o gesto
     // (quem respondeu na ilha acabou de clicar, não de rolar) e rearma como toda troca.
     markAllHandled();
@@ -423,6 +449,11 @@ function pollSelection(key, previous, entries, event) {
  * e nunca por cima de um pedido que está na tela (entra na fila, sem snap). Quando o pedido exibido sai
  * (respondido na ilha ou no terminal), a ilha vai ao mais antigo restante, sem esperar o gesto; se o
  * usuário estava numa sessão sem pedido, nada se move.
+ * Sair de fato da lista (SessionEnd, terminal fechado, prazo de "trabalhando" ou "precisa de você") não é troca
+ * por estado: a ilha vai à sessão do pedido nunca exibido (`shown: false`) mais antigo, se o gesto da roda
+ * acabou, e senão à vizinha na ordem estável, nunca à mais urgente. A vizinha pula as sessões com pedido já
+ * exibido e deixado; só se todas as restantes o tiverem, pousa na mais próxima (exceção registrada, o refresh
+ * rearma). Um pedido já exibido e deixado nunca é alvo dessa saída (uma vez por pedido).
  * Devolve sempre um objeto novo `{ key, requests, snapped }` (`requests` é cópia; `snapped` é true só
  * quando o poll levou a seleção a um pedido). Evento ausente, desconhecido ou índice inválido mantém a
  * chave. Nunca lança nem muta.

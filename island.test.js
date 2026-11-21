@@ -884,8 +884,10 @@ test('o poll poda os pedidos que saíram, preserva os que ficam e nunca lança n
   const kept = nextSelection({ key: 'a', requests }, [waitingEntry('a'), waitingEntry('b', PEDIDO_B)], pollEvent(9000));
   assert.deepEqual(kept.requests, [{ id: PEDIDO_B, seenAt: 200, handled: true, shown: false }]);
   assert.equal(kept.key, 'a');
-  // saída de fato da sessão exibida: a vizinha, e o pedido nunca exibido de b fica como estava
-  const exit = nextSelection({ key: 'a', requests }, [waitingEntry('x'), waitingEntry('b', PEDIDO_B)], pollEvent(9000, { previousKeys: ['x', 'a', 'b'] }));
+  // saída de fato da sessão exibida com o gesto da roda em curso: a vizinha, e o pedido nunca exibido de b fica
+  // como estava (sem gesto ele seria o alvo)
+  const exit = nextSelection({ key: 'a', requests }, [waitingEntry('x'), waitingEntry('b', PEDIDO_B)],
+    pollEvent(9000, { previousKeys: ['x', 'a', 'b'], lastWheelAt: 8999 }));
   assert.deepEqual([exit.key, exit.snapped], ['x', false]);
   assert.equal(exit.requests[0].shown, false);
   // sem now finito nenhum pedido novo entra neste ciclo
@@ -925,10 +927,15 @@ test('quando o pedido exibido sai a ilha vai ao mais antigo restante, nunca de v
   // nenhum pendente: fica na mesma sessão
   const none = nextSelection({ key: 'a', requests: [] }, [waitingEntry('a'), waitingEntry('b')], pollEvent(9000, { shownPermissionId: PEDIDO_A }));
   assert.deepEqual([none.key, none.snapped, none.requests], ['a', false, []]);
-  // a sessão exibida saiu de fato: vale a regra de saída (a vizinha), não o avanço
-  const exit = nextSelection({ key: 'a', requests }, [waitingEntry('x'), waitingEntry('b', PEDIDO_B), waitingEntry('c', PEDIDO_C)],
+  // a sessão exibida saiu de fato: vale a regra de saída, não o avanço. Sem gesto vai ao nunca exibido mais antigo
+  // com gesto em curso, à vizinha
+  const afterExit = [waitingEntry('x'), waitingEntry('b', PEDIDO_B), waitingEntry('c', PEDIDO_C)];
+  const exit = nextSelection({ key: 'a', requests }, afterExit,
     pollEvent(9000, { shownPermissionId: PEDIDO_A, previousKeys: ['x', 'a', 'b', 'c'] }));
-  assert.deepEqual([exit.key, exit.snapped], ['x', false]);
+  assert.deepEqual([exit.key, exit.snapped], ['b', true]);
+  const exitInGesture = nextSelection({ key: 'a', requests }, afterExit,
+    pollEvent(9000, { shownPermissionId: PEDIDO_A, previousKeys: ['x', 'a', 'b', 'c'], lastWheelAt: 8999 }));
+  assert.deepEqual([exitInGesture.key, exitInGesture.snapped], ['x', false]);
 });
 
 test('quem estava numa sessão sem pedido não se move quando o pedido de outra sessão sai (D-14)', () => {
@@ -1078,13 +1085,13 @@ test('isSessionDead: o concluído recente de terminal vivo fica, e o de terminal
   assert.equal(isSessionDead(done, now, () => false), true);
 });
 
-// --- Fase 5, D-21: o "concluído" exibido não vence com outra sessão viva; a sessão exibida que sai de fato
+// --- Fase 5: o "concluído" exibido não vence com outra sessão viva; a sessão exibida que sai de fato
 // leva ao pedido nunca exibido ou à vizinha ---
 
 const heldSession = (key, firstSeenAt, state, updatedAt) => ({ key, firstSeenAt, state, project: key, updatedAt });
 const dotsOf = (picked) => picked.sessions.map((dot) => `${dot.state}${dot.current ? '*' : ''}`);
 
-test('o concluído exibido fica na lista e na tela com outra sessão viva, inclusive uma hora depois (SESS-06, D-21)', () => {
+test('o concluído exibido fica na lista e na tela com outra sessão viva, inclusive uma hora depois (SESS-06)',() => {
   const now = 1_000_000_000;
   const expiredDone = heldSession('a', 1, 'done', now - 10_001);
   const working = heldSession('b', 2, 'running', now);
@@ -1107,7 +1114,7 @@ test('o concluído exibido fica na lista e na tela com outra sessão viva, inclu
   assert.equal(pickState([expiredDone, working], now, { key: null, requests: [] }).count, 1);
 });
 
-test('o concluído sozinho vence aos 10 s e a ilha fica ociosa, sem trocar para nada (D-21)', () => {
+test('o concluído sozinho vence aos 10 s e a ilha fica ociosa, sem trocar para nada (SESS-06)',() => {
   const now = 1_000_000_000;
   const alone = heldSession('a', 1, 'done', now - 10_001);
   assert.deepEqual(sessionList([alone], now, 'a'), []);
@@ -1117,7 +1124,7 @@ test('o concluído sozinho vence aos 10 s e a ilha fica ociosa, sem trocar para 
   assert.equal(pickState([heldSession('a', 1, 'done', now - 9_000)], now, { key: 'a', requests: [] }).state, 'done');
 });
 
-test('deixando de ser exibido o concluído vencido sai na hora, e o vencido que não é o exibido nunca entra (D-21)', () => {
+test('deixando de ser exibido o concluído vencido sai na hora, e o vencido que não é o exibido nunca entra (SESS-06)',() => {
   const now = 1_000_000_000;
   const expiredDone = heldSession('a', 1, 'done', now - 10_001);
   const working = heldSession('b', 2, 'running', now);
@@ -1146,7 +1153,7 @@ test('deixando de ser exibido o concluído vencido sai na hora, e o vencido que 
 const exitList = (...entries) => entries.map(([key, permissionId]) => waitingEntry(key, permissionId));
 const requestOf = (id, seenAt, shown) => ({ id, seenAt, handled: true, shown });
 
-test('a sessão exibida que sai de fato vai ao pedido nunca exibido mais antigo, senão à vizinha, nunca à mais urgente (D-21)', () => {
+test('a sessão exibida que sai de fato vai ao pedido nunca exibido mais antigo, senão à vizinha, nunca à mais urgente (SESS-06)',() => {
   // o nunca exibido vem antes, mesmo sendo mais novo que o já deixado
   const requests = [requestOf(PEDIDO_B, 100, true), requestOf(PEDIDO_C, 200, false)];
   const list = exitList(['x'], ['b', PEDIDO_B], ['c', PEDIDO_C]);
@@ -1172,7 +1179,7 @@ test('a sessão exibida que sai de fato vai ao pedido nunca exibido mais antigo,
   assert.equal(nextSelection({ key: 'a', requests: [] }, exitList(['b'], ['c']), pollEvent(9000)).key, 'b');
 });
 
-test('a vizinha com pedido já deixado é pulada; só com todas deixadas pousa na mais próxima; o gesto adia o nunca exibido (D-21)', () => {
+test('a vizinha com pedido já deixado é pulada; só com todas deixadas pousa na mais próxima; o gesto adia o nunca exibido (SESS-06)',() => {
   // [b, a, c]: a anterior b tem pedido já deixado e é pulada, vai à seguinte
   const skipped = nextSelection({ key: 'a', requests: [requestOf(PEDIDO_B, 100, true)] }, exitList(['b', PEDIDO_B], ['c']),
     pollEvent(9000, { previousKeys: ['b', 'a', 'c'] }));
