@@ -1813,5 +1813,21 @@
     { "name": "preferência 0 vale 1", "input": { "preferredOpacity": 0, "hasPermission": false }, "expect": 1 },
     { "name": "preferência negativa vale 1", "input": { "preferredOpacity": -0.2, "hasPermission": false }, "expect": 1 },
     { "name": "preferência em string vale 1", "input": { "preferredOpacity": "0.5", "hasPermission": false }, "expect": 1 }
+  ],
+  "isIslandSender": [
+    { "name": "frame principal com a URL exata da ilha", "input": { "isMainFrame": true, "url": "file:///D:/ilha/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": true },
+    { "name": "letra de unidade em caixa diferente é o mesmo arquivo", "input": { "isMainFrame": true, "url": "file:///d:/ilha/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": true },
+    { "name": "espaço codificado e não codificado é o mesmo arquivo", "input": { "isMainFrame": true, "url": "file:///D:/minha%20ilha/index.html", "islandUrl": "file:///D:/minha ilha/index.html" }, "expect": true },
+    { "name": "subframe com a URL da ilha recusa", "input": { "isMainFrame": false, "url": "file:///D:/ilha/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "isMainFrame que não é exatamente true recusa", "input": { "isMainFrame": 1, "url": "file:///D:/ilha/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "outro arquivo local recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/outra.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "página remota recusa", "input": { "isMainFrame": true, "url": "https://exemplo.com/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "mesma página com query recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/index.html?x=1", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "mesma página com fragmento recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/index.html#x", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "caixa diferente fora da letra de unidade recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/INDEX.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "frame sem URL (destruído) recusa", "input": { "isMainFrame": true, "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "URL esperada vazia recusa", "input": { "isMainFrame": true, "url": "", "islandUrl": "" }, "expect": false },
+    { "name": "codificação malformada recusa", "input": { "isMainFrame": true, "url": "file:///D:/ilha/%E0%A4%A/index.html", "islandUrl": "file:///D:/ilha/index.html" }, "expect": false },
+    { "name": "entrada ausente recusa", "input": null, "expect": false }
   ]
 }

@@ -263,12 +263,32 @@ function effectiveOpacity(preferredOpacity, hasPermission) {
   return preferredOpacity;
 }
 
+// Mesma URL de arquivo escrita de dois jeitos que o Chromium e o Node produzem: letra de unidade em
+// caixa diferente e trecho com ou sem percent-encoding. Lança com codificação malformada.
+const canonicalFileUrl = (url) => decodeURI(url).replace(/^file:\/\/\/([a-z]):/i, (_match, drive) => `file:///${drive.toUpperCase()}:`);
+
+/**
+ * O remetente de uma mensagem IPC é a página da ilha? Só o frame principal (`isMainFrame` exatamente
+ * true) com a URL do index.html, sem query nem fragmento. Uma página para a qual a janela navegasse
+ * (arrastar um link ou arquivo) herdaria o preload e aprovaria pedidos. Devolve false para qualquer
+ * entrada que não confira, inclusive URL ausente ou com codificação malformada.
+ */
+function isIslandSender(input) {
+  const { isMainFrame, url, islandUrl } = input || {};
+  if (isMainFrame !== true || typeof url !== 'string' || typeof islandUrl !== 'string' || islandUrl === '') return false;
+  try {
+    return canonicalFileUrl(url) === canonicalFileUrl(islandUrl);
+  } catch {
+    return false; // decodeURI recusou a URL: dado que não confere não decide
+  }
+}
+
 // Explícito protege de regressão: ligar nodeIntegration desligaria o sandbox em silêncio. O renderer
 // só carrega o index.html local, com CSP default-src 'none'.
 const SECURE_WEB_PREFERENCES = Object.freeze({ contextIsolation: true, sandbox: true, nodeIntegration: false });
 
 module.exports = {
-  SECURE_WEB_PREFERENCES, effectiveOpacity,
+  SECURE_WEB_PREFERENCES, effectiveOpacity, isIslandSender,
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS, PERMISSION_ARM_MS, PERMISSION_TEXT_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,

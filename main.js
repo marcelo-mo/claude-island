@@ -2,10 +2,11 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, acceptDecision, defaultIslandPosition, clampIslandPosition, isWithinWorkArea, nextShownPermission,
-  SECURE_WEB_PREFERENCES,
+  SECURE_WEB_PREFERENCES, isIslandSender,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -16,6 +17,8 @@ const WINDOW_SIZE = { width: 440, height: 324 };
 // cada lado, que podem sair da tela para a pílula encostar na borda do monitor.
 const HORIZONTAL_SLACK = 20;
 const POLL_MS = 400;
+// A ilha carrega por esta URL e só aceita mensagens da página que está nela (ver islandOf).
+const ISLAND_URL = pathToFileURL(path.join(__dirname, 'index.html')).href;
 
 // Em Linux o "forward" de setIgnoreMouseEvents não existe, então não dá para
 // deixar o clique atravessar a área transparente e ainda detectar o hover.
@@ -153,6 +156,8 @@ function savedPosition(display) {
 
 // Só uma ilha toca o aviso sonoro; senão cada monitor tocaria o seu ao mesmo tempo.
 function sendState(island) {
+  // O estado leva o texto do pedido: só vai para a página da ilha, nunca para uma que a substituísse.
+  if (!isIslandSender({ isMainFrame: true, url: island.webContents.getURL(), islandUrl: ISLAND_URL })) return;
   const isFirstIsland = island === islands.values().next().value;
   // answeredId faz a outra ilha travar os botões do pedido que uma ilha já decidiu; armEpoch
   // sobe a cada troca, reexibição ou mudança de monitor, e o renderer rearma quando ele muda.
@@ -206,13 +211,18 @@ function createIsland(display) {
   // fica para lá (Assumption A9).
   island.on('show', () => refresh('rearm'));
   island.on('restore', () => refresh('rearm'));
+  // Por padrão o Chromium navega a janela quando um link ou arquivo é solto nela, e a página nova
+  // herdaria o preload (window.island). A ilha nunca sai do index.html nem abre outra janela.
+  island.webContents.on('will-navigate', (event) => event.preventDefault());
+  island.webContents.on('will-redirect', (event) => event.preventDefault());
+  island.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   island.setAlwaysOnTop(true, 'screen-saver'); // acima de apps em tela cheia
   island.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   if (CAN_CLICK_THROUGH) island.setIgnoreMouseEvents(true, { forward: true });
   islands.set(display.id, island);
   // Janela criada depois (monitor plugado) não pode esperar a próxima mudança de estado.
   island.webContents.on('did-finish-load', () => sendState(island));
-  island.loadFile('index.html');
+  island.loadURL(ISLAND_URL);
 }
 
 // Reconciliação única para monitor adicionado, removido ou alterado (resolução, escala,
@@ -237,7 +247,15 @@ function syncIslands() {
 }
 
 function registerIpcHandlers() {
-  const islandOf = (event) => BrowserWindow.fromWebContents(event.sender);
+  // Fronteira de confiança: só o index.html, no frame principal, fala com o main. Bloquear a navegação
+  // (createIsland) é a primeira camada; esta é a segunda, para todo canal. Remetente estranho: null,
+  // e o handler ignora a mensagem.
+  const islandOf = (event) => {
+    const frame = event.senderFrame;
+    const isMainFrame = Boolean(frame) && frame === event.sender.mainFrame;
+    if (!isIslandSender({ isMainFrame, url: frame?.url, islandUrl: ISLAND_URL })) return null;
+    return BrowserWindow.fromWebContents(event.sender);
+  };
 
   ipcMain.on('island:hover', (event, isOverPill) => {
     const island = islandOf(event);
@@ -278,7 +296,8 @@ function registerIpcHandlers() {
   });
 
   // O renderer só diz "focar"; o PID é o da sessão em exibição, guardado aqui.
-  ipcMain.on('island:focus', () => {
+  ipcMain.on('island:focus', (event) => {
+    if (!islandOf(event)) return;
     focusWindow(shownWindowPid, (error) => {
       if (error) console.error('Não foi possível focar a janela da sessão:', error.message);
     });

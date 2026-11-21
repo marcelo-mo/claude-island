@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
-  effectiveOpacity,
+  effectiveOpacity, isIslandSender,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -37,6 +37,12 @@ for (const vector of vectors.nextShownPermission) {
   test(`nextShownPermission: ${vector.name}`, () => {
     const { shown, permissionId, now, rearm } = vector.input;
     assert.deepEqual(nextShownPermission(shown, permissionId, now, rearm), vector.expect);
+  });
+}
+
+for (const vector of vectors.isIslandSender) {
+  test(`isIslandSender: ${vector.name}`, () => {
+    assert.equal(isIslandSender(vector.input), vector.expect);
   });
 }
 
@@ -187,6 +193,28 @@ test('o preload usa só send e on, nos sete canais conhecidos', () => {
   const { methods, channels } = collectChannels(fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8'), 'ipcRenderer');
   assert.deepEqual([...methods].sort(), ['on', 'send']);
   assert.deepEqual([...channels].sort(), [...RENDERER_CHANNELS].sort());
+});
+
+// Trava de regressão (texto): arrastar um link ou arquivo para a ilha navegaria a janela, e a página
+// nova herdaria o preload. Bloquear a navegação é a primeira camada; recusar remetente que não é o
+// index.html no frame principal é a segunda, e vale para todo handler, não só para island:decide.
+test('a janela da ilha não navega nem abre janela, e todo canal confere o remetente', () => {
+  for (const guard of [
+    "island.webContents.on('will-navigate', (event) => event.preventDefault())",
+    "island.webContents.on('will-redirect', (event) => event.preventDefault())",
+    "island.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))",
+    'island.loadURL(ISLAND_URL)',
+  ]) {
+    assert.ok(mainSource.includes(guard), `main.js sem a proteção: ${guard}`);
+  }
+  assert.equal(mainSource.includes('loadFile('), false, 'a ilha carrega pela mesma URL que confere');
+  assert.match(mainSource, /const islandOf = \(event\) => \{[^}]*isIslandSender\(/);
+  const handlers = mainSource.split('ipcMain.on(').slice(1);
+  assert.equal(handlers.length, 6);
+  for (const handler of handlers) {
+    const body = handler.slice(0, handler.indexOf('\n  });'));
+    assert.match(body, /islandOf\(event\)/, `canal sem conferir o remetente: ${body.split(',')[0]}`);
+  }
 });
 
 test('o main escuta só com ipcMain.on, nos seis canais do renderer', () => {
