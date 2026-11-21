@@ -264,6 +264,11 @@
   /* Com pedido na tela o detalhe repete projeto e ferramenta, que já estão no cabeçalho do pedido: uma
      linha paga a linha a mais do cabeçalho e mantém a conta do palco. */
   #pill.has-permission #detail { -webkit-line-clamp: 1; }
+  /* A troca de sessão anima só o ícone com o título, o detalhe e o pedido, que não têm controle clicável
+     dentro: pontos, "Abrir", Permitir e Negar ficam parados. Texto e id trocam juntos, sem camada antiga.
+     Mola e fade vêm das variáveis que o applySprings grava (SESS-02). */
+  #lead, #detail, #permission { translate: 0 var(--tab-offset, 0px); scale: var(--tab-scale, 1); }
+  #lead, #permission { opacity: var(--tab-fade, 1); }
   /* Pedido de permissão: o texto aparece inteiro, quebrando linha e rolando se preciso.
      Nada de reticências: não se aprova um comando cortado. */
   #permission {
@@ -492,16 +497,25 @@
     snappy: { stiffness: 1.5, damping: 1.25 },
   };
 
+  // Mola da troca de sessão portada do mod Dynamic Island for Windows (MIT, Copyright (c) 2026
+  // devcode90; ver THIRD_PARTY_NOTICES.md): k 250 e c 31, quase crítica, com 34 px de deslocamento
+  // vertical, escala mínima de 0,965 e fade. Não tem fator de estilo.
+  const SPRING_TAB = { stiffness: 250, damping: 31 };
+  const TAB_SWITCH_OFFSET_PX = 34;
+  const TAB_SWITCH_SCALE = 0.965;
+
   // Limiares de repouso em pixels: abaixo deles ninguém vê movimento, e a mola vai exatamente ao alvo.
   const REST_DISTANCE_PX = 0.05;
   const REST_SPEED_PX_S = 0.5;
 
   /**
    * Rigidez e amortecimento da mola para a direção e o estilo: objeto novo { stiffness, damping }.
-   * Estilo desconhecido vale o Padrão; direção que não seja 'grow' nem 'shrink' devolve a neutra,
-   * sem fator de estilo. Ao encolher o amortecimento nunca fica abaixo do crítico.
+   * Estilo desconhecido vale o Padrão; 'tab' devolve a mola da troca de sessão, sem fator de estilo;
+   * direção que não seja 'grow', 'shrink' nem 'tab' devolve a neutra, também sem fator de estilo.
+   * Ao encolher o amortecimento nunca fica abaixo do crítico.
    */
   function springParams(direction, style) {
+    if (direction === 'tab') return { ...SPRING_TAB };
     if (direction !== 'grow' && direction !== 'shrink') return { ...SPRING_NEUTRAL };
     const base = direction === 'grow' ? SPRING_GROW : SPRING_SHRINK;
     const factors = Object.hasOwn(SPRING_STYLE_FACTORS, style) ? SPRING_STYLE_FACTORS[style] : SPRING_STYLE_FACTORS.default;
@@ -610,6 +624,18 @@
     return hovering === true && hasPermission === false && reducedMotion === false && HOVER_SCALE_STATES.includes(state)
       ? HOVER_SCALE
       : 1;
+  }
+
+  /**
+   * Escala e opacidade do conteúdo da troca de sessão para o deslocamento atual da mola: parte de
+   * escala 1 e opacidade 1 com o conteúdo no lugar (offset 0) e chega a TAB_SWITCH_SCALE e 0 a
+   * TAB_SWITCH_OFFSET_PX px de distância, para qualquer lado. Só aceita número: offset não finito
+   * (NaN, string, ausente) conta como 0. Nunca lança.
+   */
+  function tabSwitchFrame(offset) {
+    const distance = Number.isFinite(offset) ? Math.abs(offset) : 0;
+    const progress = Math.min(1, distance / TAB_SWITCH_OFFSET_PX);
+    return { scale: 1 - (1 - TAB_SWITCH_SCALE) * progress, opacity: 1 - progress };
   }
   // mola:fim
 
@@ -745,6 +771,12 @@
       restDistance: SCALE_REST_DISTANCE, restSpeed: SCALE_REST_SPEED,
     },
   };
+  // A mola da troca de sessão (deslocamento do conteúdo, em px) entra no mesmo mapa: o laço de quadros
+  // a avança e allSpringsAtRest a espera, então os botões não armam enquanto o conteúdo se move.
+  springs.tab = {
+    position: 0, velocity: 0, target: 0, direction: 'tab',
+    restDistance: REST_DISTANCE_PX, restSpeed: REST_SPEED_PX_S,
+  };
   // Quando o último nudge começou (performance.now); null até o primeiro.
   let lastNudgeAt = null;
   let springLoopRunning = false;
@@ -780,6 +812,12 @@
     // Nudge e escala moram num só transform da pílula inteira, escrito por JS: nenhuma regra de CSS
     // de hover ou de botão escala ou desloca nada (SEG-03).
     pill.style.transform = `translateY(${springs.nudge.position}px) scale(${springs.scale.position})`;
+    // A troca de sessão só entrega números por variáveis CSS; quem as lê é a regra de #lead, #detail e
+    // #permission, que não têm nenhum botão dentro.
+    const tab = tabSwitchFrame(springs.tab.position);
+    pill.style.setProperty('--tab-offset', `${springs.tab.position}px`);
+    pill.style.setProperty('--tab-scale', String(tab.scale));
+    pill.style.setProperty('--tab-fade', String(tab.opacity));
   }
 
   // O conteúdo fica na largura final (--content-width) e a pílula recorta com overflow hidden, então
@@ -1104,6 +1142,9 @@
   window.island.onState((next, shouldChime) => {
     // Trocar de sessão não é a sessão mudar de estado: só a chegada a um "precisa de você" avisa.
     const switchDirection = sessionSwitchDirection(current.sessions, next.sessions);
+    // Para baixo (próxima sessão) o conteúdo novo vem de baixo. O render do fim desta função liga o laço,
+    // que com "reduzir movimento" ou a janela escondida vai direto ao alvo, sem deslocamento.
+    if (switchDirection !== 0) springs.tab = { ...springs.tab, position: switchDirection * TAB_SWITCH_OFFSET_PX, velocity: 0, target: 0 };
     if (shouldChime && next.state !== current.state && CHIMES[next.state] && (switchDirection === 0 || next.state === 'waiting')) {
       chime(CHIMES[next.state]);
     }
