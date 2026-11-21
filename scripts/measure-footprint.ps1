@@ -90,6 +90,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using System.Text;
 
 public class IslandWindowInfo {
   public uint pid;
@@ -108,6 +109,7 @@ public static class IslandWindows {
   [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc callback, IntPtr lParam);
   [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hwnd, StringBuilder name, int max);
   [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
   [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
   [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
@@ -136,6 +138,9 @@ public static class IslandWindows {
       EnumWindows((hwnd, lParam) => {
         uint pid; GetWindowThreadProcessId(hwnd, out pid);
         if (Array.IndexOf(pids, pid) < 0 || !IsWindowVisible(hwnd)) return true;
+        // Janela de mensagens interna do Tao (16x16, nunca desenha): não é a ilha e invalidaria a validade da D-10.
+        var className = new StringBuilder(256); GetClassName(hwnd, className, 256);
+        if (className.ToString() == "Tao Thread Event Target") return true;
         RECT rect; GetWindowRect(hwnd, out rect);
         int width = rect.Right - rect.Left, height = rect.Bottom - rect.Top;
         if (width <= 0 || height <= 0) return true;
@@ -297,7 +302,10 @@ foreach ($scenario in $Scenarios) {
     $saved = @{}; foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
     $env:USERPROFILE = $home1
     foreach ($pair in $ExtraEnv) { $k, $v = $pair.Split('=', 2); [Environment]::SetEnvironmentVariable($k, $v, 'Process') }
-    $proc = Start-Process -FilePath $Exe -ArgumentList $argumentTemplate.Replace('{home}', $home1) -PassThru `
+    # Start-Process rejeita -ArgumentList vazio (o Tauri sobe sem argumentos): só passa quando há algo.
+    $launchArgs = @{}
+    if ($argumentTemplate) { $launchArgs.ArgumentList = $argumentTemplate.Replace('{home}', $home1) }
+    $proc = Start-Process -FilePath $Exe @launchArgs -PassThru `
       -RedirectStandardOutput (Join-Path $home1 'out.txt') -RedirectStandardError (Join-Path $home1 'err.txt')
     foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
     try {
