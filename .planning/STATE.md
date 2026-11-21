@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Entrada, preferências e comportamento no sistema
-current_plan: 4
+current_plan: 5
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-11-21T17:05:03.646Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-11-21T17:10:05.398Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 4 execution started
-state_head: b9b40bc3db7fb37dd0c62f50917d005b63c351cb
+state_head: 3a239ff54f3e0e84613c587e7c6060e29c57bdc4
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
   percent: 33
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 4 (Entrada, preferências e comportamento no sistema) — EXECUTING
-Current Plan: 4
+Current Plan: 5
 Total Plans in Phase: 6
 Status: Ready to execute
 Last activity: 2026-11-21 — Phase 4 execution started
@@ -69,6 +69,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 04 P01 | 25 min | 2 tasks | 7 files |
 | Phase 04 P02 | 30min | 2 tasks | 8 files |
 | Phase 04 P03 | 12min | 3 tasks | 8 files |
+| Phase 4 P04 | 4min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,8 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Phase 04]: Folga lateral por âncora em { left, right } (20/100 nas de esquerda, 100/20 nas de direita, 60/60 no centro) no clamp, no fitsWorkArea e no gate: a pílula de canto nunca sai da tela
 - [Phase 04]: Tolerância do isWithinWorkArea segue em 2 px (D-14): +2 DIP a 125% aceito, +3 recusado; setBounds logo depois de criar a janela
 - [Phase 04]: Modo cursor só troca a ilha de monitor com hasPermission === false; a prova do palco da âncora de baixo exige a sombra inteira nos casos que coexistem e a pílula inteira no pior caso combinado
+- [Phase 4]: 04-04: atalho registrado uma vez em start e liberado em will-quit; sem atalho registrado, 'Esconder' fica desabilitado
+- [Phase 4]: 04-04: um único setOpacity no main, em applyOpacity, no laço do refresh antes de sendState; pedido na tela sempre a 100%
 
 ### Pending Todos
 
@@ -126,6 +129,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T17:05:03.268Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-11-21T17:10:05.050Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None
