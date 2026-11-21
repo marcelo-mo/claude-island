@@ -10,7 +10,7 @@ const {
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES,
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
   anchorPosition, horizontalSlackFor, ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
-  islandDisplays,
+  islandDisplays, isIslandVisible, nextUserHidden,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -514,4 +514,42 @@ test('islandDisplays não muta a entrada e devolve sempre um array novo', () => 
   assert.notEqual(first, islandDisplays(input));
   assert.deepEqual(input.displayIds, [1, 2]);
   assert.notEqual(islandDisplays({ mode: 'cursor', displayIds: [1], currentIds: [1], hasPermission: true }), islandDisplays({ mode: 'cursor', displayIds: [1], currentIds: [1], hasPermission: true }));
+});
+
+// D-12/D-19: o atalho não vence a tela cheia; entrada inválida esconde (lado seguro).
+test('isIslandVisible só mostra com o usuário não escondendo e sem tela cheia', () => {
+  assert.equal(isIslandVisible({ userHidden: false, covered: false }), true);
+  assert.equal(isIslandVisible({ userHidden: true, covered: false }), false);
+  assert.equal(isIslandVisible({ userHidden: false, covered: true }), false);
+  assert.equal(isIslandVisible({ userHidden: true, covered: true }), false);
+  assert.equal(isIslandVisible({ userHidden: false }), false);
+  assert.equal(isIslandVisible({ covered: false }), false);
+  assert.equal(isIslandVisible({ userHidden: 'false', covered: 0 }), false);
+  assert.equal(isIslandVisible(null), false);
+  assert.equal(isIslandVisible(), false);
+});
+
+test('nextUserHidden inverte, exceto quando toda ilha está coberta por tela cheia', () => {
+  const next = (userHidden, displayIds, coveredDisplayIds) => nextUserHidden({ userHidden, displayIds, coveredDisplayIds });
+  assert.equal(next(false, [1, 2], []), true);
+  assert.equal(next(true, [1, 2], []), false);
+  // uma coberta e outra não: inverte normalmente (a coberta segue escondida pela tela cheia)
+  assert.equal(next(false, [1, 2], [1]), true);
+  assert.equal(next(true, [1, 2], [1]), false);
+  // todas cobertas: o atalho não faz nada
+  assert.equal(next(false, [1, 2], [1, 2]), false);
+  assert.equal(next(true, [1, 2], [2, 1]), true);
+  assert.equal(next(false, [1], [1]), false);
+  // entradas fora do contrato
+  assert.equal(next(false, [], []), false);
+  assert.equal(next(true, [], []), true);
+  assert.equal(next('true', [1], []), true);
+  assert.equal(next(false, [1], 'x'), true);
+  assert.equal(next(false, 'x', [1]), false);
+  assert.equal(nextUserHidden(null), false);
+  assert.equal(nextUserHidden(), false);
+  const ids = [1, 2];
+  const covered = [1];
+  next(false, ids, covered);
+  assert.deepEqual([ids, covered], [[1, 2], [1]]);
 });
