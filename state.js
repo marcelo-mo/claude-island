@@ -242,32 +242,138 @@ function contextUsage(usedPercent) {
 
 const PRIORITY = { waiting: 3, running: 2, done: 1 };
 
+// Uma sessão só aparece enquanto o último evento dela é recente o bastante para o estado dela.
+function isAliveSession(session, now) {
+  if (!session || typeof session !== 'object') return false;
+  const age = now - session.updatedAt;
+  if (session.state === 'done') return age < DONE_VISIBLE_MS;
+  if (session.state === 'running') return age < RUNNING_STALE_MS;
+  if (session.state === 'waiting') return age < WAITING_STALE_MS;
+  return false;
+}
+
+const byUrgency = (a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt;
+
+// Ordem dos pontos: quem apareceu primeiro vem primeiro. Sem primeira aparição válida a sessão vai
+// para o fim (Infinity - Infinity dá NaN, que cai no desempate pela chave).
+const firstSeenOf = (session) => (Number.isFinite(session.firstSeenAt) ? session.firstSeenAt : Infinity);
+
+function byFirstSeen(a, b) {
+  const difference = firstSeenOf(a) - firstSeenOf(b);
+  if (difference) return difference;
+  const keyA = String(a.key ?? '');
+  const keyB = String(b.key ?? '');
+  return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+}
+
+// Posição do pedido exibido entre os pedidos que a seleção conhece, do mais antigo ao mais novo.
+function queuePosition(permissionId, requests) {
+  if (!permissionId || !Array.isArray(requests)) return null;
+  const known = requests.filter((request) => request && typeof request === 'object');
+  if (known.length < 2) return null;
+  const ordered = [...known].sort((a, b) => (a.seenAt - b.seenAt) || (String(a.id) < String(b.id) ? -1 : 1));
+  const index = ordered.findIndex((request) => request.id === permissionId);
+  return index < 0 ? null : { position: index + 1, total: ordered.length };
+}
+
 /**
- * Escolhe o que a ilha mostra entre todas as sessões: a mais urgente e, no empate,
- * a mais recente. `count` é quantas sessões estão ativas (para o contador da ilha) e
- * `windowPid` é o processo dono da janela do terminal dela (null se desconhecido).
- * `permission` é o pedido de permissão que a ilha pode responder (null se não houver).
+ * Escolhe o que a ilha mostra entre todas as sessões. `selection` (opcional, vem de nextSelection)
+ * diz qual sessão está exibida; sem ela, ou com uma chave que não está entre as vivas, vale a mais
+ * urgente e, no empate, a mais recente. `count` é quantas sessões estão ativas e `windowPid` é o
+ * processo dono da janela do terminal da exibida (null se desconhecido). `permission` é o pedido de
+ * permissão que a ilha pode responder (null se não houver). `sessions` descreve os pontos, na ordem
+ * estável de primeira aparição: `{ state, pending, current }`, com `pending` para quem tem pedido
+ * válido e `current` só na exibida; nenhuma chave, PID ou texto de outra sessão sai daqui. `queue`
+ * é `{ position, total }` quando o pedido exibido está entre dois ou mais de `selection.requests`,
+ * senão null. Sem sessão viva devolve `{ state: 'idle', count: 0 }`.
  */
-function pickState(sessions, now) {
-  const alive = sessions.filter((session) => {
-    const age = now - session.updatedAt;
-    if (session.state === 'done') return age < DONE_VISIBLE_MS;
-    if (session.state === 'running') return age < RUNNING_STALE_MS;
-    if (session.state === 'waiting') return age < WAITING_STALE_MS;
-    return false;
-  });
+function pickState(sessions, now, selection) {
+  const alive = sessions.filter((session) => isAliveSession(session, now));
   if (alive.length === 0) return { state: 'idle', count: 0 };
-  alive.sort((a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt);
-  const { state, detail, project, windowPid, contextPercent, permission } = alive[0];
+  const selectedKey = selection && typeof selection.key === 'string' ? selection.key : null;
+  const shownSession = (selectedKey !== null && alive.find((session) => session.key === selectedKey))
+    || [...alive].sort(byUrgency)[0];
+  const { state, detail, project, windowPid, contextPercent, permission } = shownSession;
   // windowPid vem de um arquivo em disco: só sai daqui se for um PID plausível.
   const hasWindow = Number.isInteger(windowPid) && windowPid > 0;
+  // Só quem está esperando resposta tem pedido pendente.
+  const shownPermission = state === 'waiting' ? validPermission(permission) : null;
   return {
     state, detail, project, count: alive.length,
     windowPid: hasWindow ? windowPid : null,
     context: contextUsage(contextPercent),
-    // Só quem está esperando resposta tem pedido pendente.
-    permission: state === 'waiting' ? validPermission(permission) : null,
+    permission: shownPermission,
+    sessions: [...alive].sort(byFirstSeen).map((session) => ({
+      state: session.state,
+      pending: session.state === 'waiting' && validPermission(session.permission) !== null,
+      current: session === shownSession,
+    })),
+    queue: queuePosition(shownPermission?.id, selection?.requests),
   };
+}
+
+/**
+ * Lista das sessões vivas, pelos mesmos prazos de pickState, na ordem dos pontos: primeira aparição
+ * crescente e, no empate, a chave. A ordem nunca segue urgência nem recência, para um ponto não mudar
+ * de lugar no meio de um gesto. Cada item é `{ key, state, updatedAt, permissionId }`, com o id do
+ * pedido válido só em `waiting` (senão null). Leva chaves de sessão: só o main usa. Entrada que não
+ * é array dá [].
+ */
+function sessionList(sessions, now) {
+  if (!Array.isArray(sessions)) return [];
+  return sessions
+    .filter((session) => isAliveSession(session, now))
+    .sort(byFirstSeen)
+    .map((session) => ({
+      key: session.key,
+      state: session.state,
+      updatedAt: session.updatedAt,
+      permissionId: session.state === 'waiting' ? (validPermission(session.permission)?.id ?? null) : null,
+    }));
+}
+
+// Chave da sessão exibida depois de um ciclo de leitura. Com sessão exibida ela fica; saindo da lista,
+// vai à vizinha dela na ordem estável (a anterior mais próxima que sobrou, ou a seguinte); só sem
+// sessão exibida a escolha é por urgência.
+function keyAfterPoll(key, list, previousKeys) {
+  if (list.length === 0) return null;
+  if (key === null) return [...list].sort(byUrgency)[0].key;
+  const remaining = new Set(list.map((entry) => entry.key));
+  if (remaining.has(key)) return key;
+  const previous = Array.isArray(previousKeys) ? previousKeys : [];
+  const at = previous.indexOf(key);
+  if (at < 0) return list[0].key;
+  const before = previous.slice(0, at).reverse().find((candidate) => remaining.has(candidate));
+  if (before !== undefined) return before;
+  return previous.slice(at + 1).find((candidate) => remaining.has(candidate)) ?? list[0].key;
+}
+
+/**
+ * Qual sessão a ilha exibe depois de um evento. `selection` é `{ key, requests }`, `list` é o que
+ * sessionList devolveu e `event` é `{ type: 'poll', previousKeys }` (um ciclo de leitura; `previousKeys`
+ * são as chaves da lista do ciclo anterior, na mesma ordem) ou `{ type: 'select', index }` (clique num
+ * ponto: só um índice inteiro dentro da lista vale). A sessão exibida só muda por um evento do usuário
+ * ou quando sai da lista, e então a ilha vai à vizinha dela, nunca à mais urgente: por isso "concluído"
+ * e "voltou a trabalhar" não trocam a sessão (SESS-06). A urgência só decide sem sessão exibida.
+ * Devolve sempre um objeto novo `{ key, requests, snapped }` (`requests` é cópia; `snapped` ainda é
+ * sempre false). Evento ausente, desconhecido ou índice inválido mantém a chave. Nunca lança nem muta.
+ */
+function nextSelection(selection, list, event) {
+  const valid = selection && typeof selection === 'object';
+  const key = valid && typeof selection.key === 'string' ? selection.key : null;
+  const requests = valid && Array.isArray(selection.requests) ? selection.requests.map((request) => ({ ...request })) : [];
+  const entries = Array.isArray(list) ? list : [];
+  const result = (chosen) => ({ key: chosen, requests, snapped: false });
+  switch (event?.type) {
+    case 'poll':
+      return result(keyAfterPoll(key, entries, event.previousKeys));
+    case 'select': {
+      const { index } = event;
+      return result(Number.isInteger(index) && index >= 0 && index < entries.length ? entries[index].key : key);
+    }
+    default:
+      return result(key);
+  }
 }
 
 // getBounds() arredonda com escala de DPI fracionária (como 125%), e a janela pode medir 1 ou 2 px
@@ -728,6 +834,7 @@ module.exports = {
   PERMISSION_TOOL_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
+  sessionList, nextSelection,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,
   ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, anchorPosition, horizontalSlackFor,
   BESIDE_GAP_PX, BESIDE_TOP_OFFSET_PX,

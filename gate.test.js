@@ -236,12 +236,12 @@ test('nenhum canal escapa pela IPC por webContents', () => {
 
 const RENDERER_CHANNELS = [
   'island:state', 'island:cursor', 'island:capture', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end',
-  'island:reset-position', 'island:menu',
+  'island:reset-position', 'island:menu', 'island:select',
 ];
 // Canais que o main envia e o renderer só escuta: o main não registra handler para eles.
 const MAIN_TO_RENDERER_CHANNELS = ['island:state', 'island:cursor'];
 
-test('o preload usa só send e on, nos nove canais conhecidos', () => {
+test('o preload usa só send e on, nos dez canais conhecidos', () => {
   const { methods, channels } = collectChannels(preloadSource, 'ipcRenderer');
   assert.deepEqual([...methods].sort(), ['on', 'send']);
   assert.deepEqual([...channels].sort(), [...RENDERER_CHANNELS].sort());
@@ -262,7 +262,7 @@ test('a janela da ilha não navega nem abre janela, e todo canal confere o remet
   assert.equal(mainSource.includes('loadFile('), false, 'a ilha carrega pela mesma URL que confere');
   assert.match(mainSource, /const islandOf = \(event\) => \{[^}]*isIslandSender\(/);
   const handlers = mainSource.split('ipcMain.on(').slice(1);
-  assert.equal(handlers.length, 7);
+  assert.equal(handlers.length, 8);
   for (const handler of handlers) {
     const body = handler.slice(0, handler.indexOf('\n  });'));
     assert.match(body, /islandOf\(event\)/, `canal sem conferir o remetente: ${body.split(',')[0]}`);
@@ -293,7 +293,7 @@ test('o armamento acompanha o retângulo dos próprios botões', () => {
   assert.ok(pointerdown.indexOf(moved) < pointerdown.indexOf('canPress('), 'a conferência vem antes de canPress');
 });
 
-test('o main escuta só com ipcMain.on, nos sete canais do renderer', () => {
+test('o main escuta só com ipcMain.on, nos oito canais do renderer', () => {
   const { methods, channels } = collectChannels(mainSource, 'ipcMain');
   assert.deepEqual([...methods], ['on']);
   assert.deepEqual(

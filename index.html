@@ -103,6 +103,9 @@
 
   #pill {
     width: max-content; height: 46px; padding: 0 17px;
+    /* Nunca passa da largura da expandida, que é o que a conta do palco cobre; abaixo disso a largura
+       segue o conteúdo, e quem cede é o título (#pill.multi-session #title). */
+    max-width: 400px;
     /* Três camadas estáticas, de cima para baixo: lavagem do acento do estado no topo (reflexo), profundidade
        e o preenchimento do tema. O raio vertical da lavagem é 56 px fixos, nunca proporcional à altura: ela
        termina antes do detalhe e do bloco de permissão, que além disso tem fundo opaco (VIS-04). Gradiente não
@@ -219,6 +222,19 @@
     border-radius: 11px; padding: 2px 9px; font-weight: 600;
   }
   #count:empty { display: none; }
+  /* Um ponto por sessão no lugar do contador: cor = estado (fixa nos temas, nunca o acento); o ponto da
+     sessão exibida é maior. O botão tem 16 px para ser fácil de acertar, e o ponto dentro dele é menor. */
+  #sessions { display: inline-flex; align-items: center; }
+  #sessions[hidden] { display: none; }
+  #sessions button {
+    width: 16px; height: 16px; padding: 0; border: 0; background: transparent;
+    display: grid; place-items: center; cursor: pointer;
+  }
+  #sessions button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  #sessions i { width: 6px; height: 6px; border-radius: 50%; background: var(--running); }
+  #sessions [data-state="waiting"] i { background: var(--waiting); }
+  #sessions [data-state="done"] i { background: var(--done); }
+  #sessions [aria-current="true"] i { width: 9px; height: 9px; }
   /* Ao concluir, a sessão costuma pedir uma olhada: o atalho fica à mão sem precisar do hover.
      Ele ocupa o lugar do contador, que cede a vez enquanto a pílula está compacta. */
   #open-compact {
@@ -312,6 +328,7 @@
       </span>
       <span id="count"></span>
       <button id="open-compact" type="button" aria-label="Abrir sessão">Abrir</button>
+      <span id="sessions" role="group" aria-label="Sessões" hidden></span>
     </span>
     </div>
     <span id="detail"></span>
@@ -618,11 +635,34 @@
   }
   // hover:fim
 
+  // sessoes:inicio
+  // Regras puras dos pontos de sessão. Inline pela CSP; o gate.test.js executa este texto num contexto
+  // vazio, então aqui só entram constantes e funções que nunca lançam.
+  // ponytail: até 8 pontos; acima disso volta o número e não dá para clicar numa sessão. Rolar a faixa de
+  // pontos se aparecer uso com mais de 8.
+  const MAX_SESSION_DOTS = 8;
+
+  /**
+   * Para que lado a sessão exibida andou entre duas listas de pontos: 1 se o ponto atual foi para a
+   * direita, -1 para a esquerda, 0 se não andou, se as listas têm tamanhos diferentes ou menos de dois
+   * itens, ou se algum dos dois lados não tem um item com `current` verdadeiro.
+   */
+  function sessionSwitchDirection(previousSessions, nextSessions) {
+    if (!Array.isArray(previousSessions) || !Array.isArray(nextSessions)) return 0;
+    if (previousSessions.length < 2 || previousSessions.length !== nextSessions.length) return 0;
+    const previousIndex = previousSessions.findIndex((session) => session && session.current === true);
+    const nextIndex = nextSessions.findIndex((session) => session && session.current === true);
+    if (previousIndex < 0 || nextIndex < 0) return 0;
+    return Math.sign(nextIndex - previousIndex);
+  }
+  // sessoes:fim
+
   // A CSS pausa as animações com a janela escondida; o Electron só reporta hidden com hide() ou minimizada.
   document.addEventListener('visibilitychange', () => { document.documentElement.dataset.hidden = document.hidden; });
   const pill = document.getElementById('pill');
   const title = document.getElementById('title');
   const count = document.getElementById('count');
+  const sessionsStrip = document.getElementById('sessions');
   const detail = document.getElementById('detail');
   const context = document.getElementById('context');
   const contextNumber = document.getElementById('context-number');
@@ -638,6 +678,8 @@
 
   const TITLES = { running: 'Trabalhando', waiting: 'Precisa de você', done: 'Concluído' };
   let current = { state: 'idle' };
+  // Assinatura dos pontos desenhados: o DOM só é refeito quando ela muda (a pílula tem aria-live).
+  let renderedSessions = null;
   let hovering = false;
   // Último ponto do cursor vindo do main, em coordenadas da janela; null com o cursor longe.
   let lastCursorPoint = null;
@@ -784,15 +826,37 @@
   // armamento dos botões até a janela voltar.
   document.addEventListener('visibilitychange', () => { if (document.hidden) snapAllSprings(); });
 
+  function renderSessions() {
+    const list = Array.isArray(current.sessions) ? current.sessions : [];
+    sessionsStrip.hidden = list.length < 2 || list.length > MAX_SESSION_DOTS;
+    const signature = JSON.stringify(list);
+    if (signature === renderedSessions) return;
+    renderedSessions = signature;
+    sessionsStrip.replaceChildren(...list.map((session, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.index = index;
+      button.dataset.state = session.state;
+      button.dataset.pending = session.pending === true;
+      if (session.current) button.setAttribute('aria-current', 'true');
+      button.setAttribute('aria-label', `Sessão ${index + 1} de ${list.length}: ${TITLES[session.state] ?? ''}`);
+      button.appendChild(document.createElement('i'));
+      return button;
+    }));
+  }
+
   function renderContent() {
     pill.dataset.state = current.state;
     // "Precisa de você" abre sozinho; "Concluído" não expande (o botão "Abrir" tem de ficar parado sob o
     // mouse); o resto segue a preferência (hover ou clique, e fixar aberta).
     pill.classList.toggle('expanded', shouldExpand({ state: current.state, hovering, clickExpanded, expandOn: current.preferences?.expandOn, pinExpanded: current.preferences?.pinExpanded }));
+    pill.classList.toggle('multi-session', Array.isArray(current.sessions) && current.sessions.length >= 2);
     if (current.state === 'idle') return; // mantém o texto durante o fade de saída
     pill.classList.toggle('has-window', Boolean(current.windowPid));
     title.textContent = TITLES[current.state];
-    count.textContent = current.count > 1 ? current.count : '';
+    // Até MAX_SESSION_DOTS sessões o número cede lugar aos pontos; acima disso ele volta.
+    count.textContent = current.count > MAX_SESSION_DOTS ? current.count : '';
+    renderSessions();
     const usage = current.context;
     context.hidden = !usage;
     if (usage) {
@@ -1003,7 +1067,11 @@
 
   // Com uma ilha por monitor, só a que o main indicar toca o aviso.
   window.island.onState((next, shouldChime) => {
-    if (shouldChime && next.state !== current.state && CHIMES[next.state]) chime(CHIMES[next.state]);
+    // Trocar de sessão não é a sessão mudar de estado: só a chegada a um "precisa de você" avisa.
+    const switchDirection = sessionSwitchDirection(current.sessions, next.sessions);
+    if (shouldChime && next.state !== current.state && CHIMES[next.state] && (switchDirection === 0 || next.state === 'waiting')) {
+      chime(CHIMES[next.state]);
+    }
     const previousPermissionId = current.permission ? current.permission.id : null;
     const previousText = current.permission ? current.permission.text : null;
     // O nudge decide com o estado antigo e o novo, e nunca com pedido na tela. O render do
@@ -1025,6 +1093,12 @@
     // Sem isto uma recusa do main (rearme no caminho, janela escondida) travaria o pedido para sempre.
     answeredPermissionId = null;
     const permissionId = next.permission ? next.permission.id : null;
+    // Trocar de pedido (inclusive voltar a um que já foi lido, ou ir a outro com o mesmo texto) volta a
+    // exigir a leitura até o fim.
+    if (permissionId !== previousPermissionId) {
+      readPermissionId = null;
+      permissionText.scrollTop = 0;
+    }
     const nextText = next.permission ? next.permission.text : null;
     const epochChanged = next.armEpoch !== lastArmEpoch;
     if (permissionId !== previousPermissionId || epochChanged || nextText !== previousText) {
@@ -1046,6 +1120,14 @@
   for (const id of ['open', 'open-compact']) {
     document.getElementById(id).addEventListener('click', () => window.island.focusSession());
   }
+
+  // O renderer só pede: quem confere o índice e escolhe a sessão é o main. O pointerdown da pílula já
+  // ignora botões, então clicar num ponto não arrasta a pílula nem a abre no modo clique.
+  sessionsStrip.addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (!button || button.getAttribute('aria-current') === 'true') return;
+    window.island.selectSession(Number(button.dataset.index));
+  });
 
   // A janela deixa o clique atravessar; só a pílula (e o botão dentro dela) captura o mouse. O hover vem
   // só do cursor que o main entrega (único jeito que funciona sob janela elevada): decide-se contra o

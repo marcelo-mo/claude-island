@@ -5,7 +5,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
-  pickState, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  pickState, sessionList, nextSelection, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
   effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem,
@@ -43,6 +43,13 @@ let shownWindowPid = null;
 // id que um clique em "Permitir" ou "Negar" se refere. O renderer só devolve o id como eco, que
 // apenas pode recusar. Só muda dentro de refresh (invariante I2), para toda troca rearmar.
 let shown = { id: null, since: 0, epoch: 0 };
+// Qual sessão está exibida e os pedidos que a ilha já viu. Uma seleção só para todas as ilhas, que
+// espelham a mesma sessão; só muda por nextSelection, no refresh e no handler do clique no ponto,
+// que termina em refresh.
+let selection = { key: null, requests: [] };
+// A lista viva do último refresh, na ordem dos pontos e com as chaves de sessão. O clique no ponto
+// anda nela; ela nunca vai ao renderer.
+let lastSessionList = [];
 // Último estado serializado enviado às ilhas; refresh só reenvia quando algo mudou.
 let lastSent = JSON.stringify(lastPickedState);
 // Último pedido cuja decisão foi gravada. Primeiro clique vence: só o main enxerga as duas ilhas
@@ -315,23 +322,51 @@ function updateCursorTick() {
   }
 }
 
+// Primeira aparição de cada sessão, que dá a ordem estável dos pontos. Vem do birthtime do arquivo, então
+// a ordem sobrevive a reiniciar a ilha; é um statSync por sessão nova, não por ciclo.
+const firstSeenAtByKey = new Map();
+
 function readSessions() {
   let files;
   try {
     files = fs.readdirSync(STATE_DIR);
   } catch {
+    firstSeenAtByKey.clear();
     return []; // pasta ainda não existe: nenhum hook rodou
   }
   const sessions = [];
+  const presentKeys = new Set();
   for (const file of files) {
     if (!isSessionFile(file)) continue;
+    const key = path.basename(file, '.json');
+    presentKeys.add(key);
     try {
       const session = JSON.parse(fs.readFileSync(path.join(STATE_DIR, file), 'utf8'));
-      session.contextPercent = readContextPercent(path.basename(file, '.json'));
+      if (!session || typeof session !== 'object') continue;
+      if (!firstSeenAtByKey.has(key)) {
+        let firstSeenAt = Date.now();
+        try {
+          const birthtime = fs.statSync(path.join(STATE_DIR, file)).birthtimeMs;
+          if (birthtime > 0) firstSeenAt = birthtime;
+        } catch {
+          // arquivo sumiu entre ler e medir, ou sistema sem birthtime: vale o instante em que a ilha viu a sessão
+        }
+        firstSeenAtByKey.set(key, firstSeenAt);
+      }
+      // A chave e a ordem vêm do nome do arquivo e da ilha, depois do parse de propósito: o arquivo é
+      // escrito por outro processo e não escolhe a própria chave nem a própria ordem.
+      session.key = key;
+      session.firstSeenAt = firstSeenAtByKey.get(key);
+      session.contextPercent = readContextPercent(key);
       sessions.push(session);
     } catch {
       // arquivo pela metade (hook gravando agora): o próximo ciclo pega
     }
+  }
+  // A chave sai quando o arquivo some; podar pela lista viva faria um statSync por ciclo para cada
+  // "concluído" que já expirou.
+  for (const key of firstSeenAtByKey.keys()) {
+    if (!presentKeys.has(key)) firstSeenAtByKey.delete(key);
   }
   return sessions;
 }
@@ -388,7 +423,13 @@ function sendState(island) {
  * e a época separados: olhar só o estado engoliria o rearme.
  */
 function refresh(reason) {
-  const picked = pickState(readSessions(), Date.now());
+  const now = Date.now();
+  const sessions = readSessions();
+  const list = sessionList(sessions, now);
+  // A lista do refresh anterior serve para achar a vizinha da sessão que saiu.
+  selection = nextSelection(selection, list, { type: 'poll', previousKeys: lastSessionList.map((entry) => entry.key) });
+  lastSessionList = list;
+  const picked = pickState(sessions, now, selection);
   const serialized = JSON.stringify(picked);
   const permissionId = picked.permission ? picked.permission.id : null;
   // Relógio monotônico: o de parede salta com NTP e suspensão, o que armaria os botões antes da
@@ -595,6 +636,17 @@ function registerIpcHandlers() {
     focusWindow(shownWindowPid, (error) => {
       if (error) console.error('Não foi possível focar a janela da sessão:', error.message);
     });
+  });
+
+  // O renderer manda só o índice do ponto clicado; o main confere que ele existe na lista que os pontos
+  // mostram e o traduz para a sessão. Chave de sessão e id de pedido nunca vêm do renderer; ociosa, não
+  // há pontos.
+  ipcMain.on('island:select', (event, index) => {
+    const island = islandOf(event);
+    if (!island || !Number.isInteger(index)) return;
+    if (lastPickedState.state === 'idle') return;
+    selection = nextSelection(selection, lastSessionList, { type: 'select', index });
+    refresh('select');
   });
 
   // Fronteira de confiança: isto aprova a execução de um comando. O renderer envia a intenção

@@ -36,7 +36,15 @@ test('a ilha mostra a sessão mais urgente e expira as antigas', () => {
     { state: 'waiting', detail: 'Permissão', project: 'b', windowPid: 4242, updatedAt: now - 60_000 },
     { state: 'done', detail: 'Concluído', project: 'c', updatedAt: now - 1_000 },
   ], now);
-  assert.deepEqual(picked, { state: 'waiting', detail: 'Permissão', project: 'b', count: 3, windowPid: 4242, context: null, permission: null });
+  assert.deepEqual(picked, {
+    state: 'waiting', detail: 'Permissão', project: 'b', count: 3, windowPid: 4242, context: null, permission: null,
+    sessions: [
+      { state: 'running', pending: false, current: false },
+      { state: 'waiting', pending: false, current: true },
+      { state: 'done', pending: false, current: false },
+    ],
+    queue: null,
+  });
 
   // PID ausente ou adulterado no arquivo de estado: a ilha fica sem botão, não com PID inválido
   for (const windowPid of [undefined, null, '4242; calc', 1.5, -3]) {
