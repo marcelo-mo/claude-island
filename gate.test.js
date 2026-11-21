@@ -1279,3 +1279,107 @@ test('a largura mínima ao lado é a soma das duas distâncias ao centro e é a 
   assert.equal(BESIDE_MIN_WORK_AREA_WIDTH_PX, 1220);
   assert.equal(BESIDE_MIN_WORK_AREA_WIDTH_PX, vectors.besideMinWorkAreaWidthPx);
 });
+
+// --- Fase 5: várias sessões (travas de texto, baratas e frágeis de propósito) ---
+
+const mainLf = mainSource.replace(/\r\n/g, '\n');
+const preloadLf = preloadSource.replace(/\r\n/g, '\n');
+
+// Corpo de uma função do main: do `function nome(` até o fecha-chaves da coluna 0.
+function mainFunctionBody(name) {
+  const start = mainLf.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `função ausente no main.js: ${name}`);
+  return mainLf.slice(start, mainLf.indexOf('\n}\n', start));
+}
+
+test('o canal island:select só leva um índice, conferido no main, e passa por refresh', () => {
+  const start = mainLf.indexOf("ipcMain.on('island:select', (event, index) => {");
+  assert.ok(start >= 0, 'handler de island:select ausente');
+  const handler = mainLf.slice(start, mainLf.indexOf('\n  });', start));
+  for (const piece of [
+    'islandOf(event)',
+    'Number.isInteger(index)',
+    "lastPickedState.state === 'idle'",
+    "nextSelection(selection, lastSessionList, { type: 'select', index })",
+    "refresh('select')",
+  ]) {
+    assert.ok(handler.includes(piece), `handler sem: ${piece}`);
+  }
+  assert.ok(preloadLf.includes("selectSession: (index) => ipcRenderer.send('island:select', index),"));
+});
+
+test('a seleção só muda por nextSelection e o refresh a calcula antes de escolher a sessão', () => {
+  const body = mainFunctionBody('refresh');
+  const order = [
+    'sessionList(sessions, now)',
+    "nextSelection(selection, list, { type: 'poll'",
+    'lastSessionList = list;',
+    'pickState(sessions, now, selection)',
+  ].map((piece) => {
+    const at = body.indexOf(piece);
+    assert.ok(at >= 0, `refresh sem: ${piece}`);
+    return at;
+  });
+  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'ordem do refresh');
+  assert.match(mainLf, /^let selection = \{ key: null, requests: \[\] \};/m);
+  const code = mainLf.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  const assignments = [...code.matchAll(/(?<![\w.])(let\s+)?selection\s*=(?!=)([^;]*);/g)].filter((match) => !match[1]);
+  assert.ok(assignments.length >= 2, 'refresh e island:select atribuem a seleção');
+  for (const [, , right] of assignments) assert.ok(right.includes('nextSelection('), `selection recebe algo que não é nextSelection: ${right}`);
+});
+
+test('readSessions sobrescreve a chave e a ordem depois do parse e guarda o statSync por sessão nova', () => {
+  const body = mainFunctionBody('readSessions');
+  const parse = body.indexOf('JSON.parse(');
+  assert.ok(parse >= 0);
+  assert.ok(body.indexOf('session.key = key;') > parse, 'a chave vem do nome do arquivo, depois do parse');
+  assert.ok(body.indexOf('session.firstSeenAt =') > parse, 'a ordem vem da ilha, depois do parse');
+  assert.ok(body.includes('birthtimeMs'));
+  const guard = body.indexOf('firstSeenAtByKey.has(key)');
+  assert.ok(guard >= 0 && guard < body.indexOf('statSync('), 'um statSync por sessão nova, não por ciclo');
+  assert.ok(body.includes('firstSeenAtByKey.delete('), 'a chave sai do mapa quando o arquivo some');
+});
+
+test('o clique no ponto manda só o índice, o pedido novo zera a leitura e a pílula não ganha botão fora do lugar', () => {
+  assert.equal(rendererLf.split('window.island.selectSession(').length - 1, 1);
+  assert.ok(rendererLf.includes('window.island.selectSession(Number(button.dataset.index))'));
+  const click = rendererLf.slice(rendererLf.indexOf("sessionsStrip.addEventListener('click'"));
+  assert.ok(click.slice(0, click.indexOf('\n  });')).includes('aria-current'), 'o ponto da exibida não faz nada');
+  assert.ok(rendererLf.includes('id="sessions"'));
+  const onState = rendererLf.slice(rendererLf.indexOf('window.island.onState('));
+  assert.match(onState, /if \(permissionId !== previousPermissionId\) \{[^}]*readPermissionId = null;[^}]*permissionText\.scrollTop = 0;[^}]*\}/);
+});
+
+test('sessionSwitchDirection dá a direção da troca e MAX_SESSION_DOTS é 8', () => {
+  const block = loadInlineBlock('// sessoes:inicio', '// sessoes:fim', ['MAX_SESSION_DOTS', 'sessionSwitchDirection']);
+  assert.equal(block.MAX_SESSION_DOTS, 8);
+  const at = (index, size) => Array.from({ length: size }, (_, position) => ({ current: position === index }));
+  assert.equal(block.sessionSwitchDirection(at(0, 2), at(1, 2)), 1);
+  assert.equal(block.sessionSwitchDirection(at(1, 2), at(0, 2)), -1);
+  assert.equal(block.sessionSwitchDirection(at(0, 4), at(3, 4)), 1);
+  assert.equal(block.sessionSwitchDirection(at(2, 3), at(2, 3)), 0);
+  assert.equal(block.sessionSwitchDirection(at(0, 2), at(0, 3)), 0);
+  assert.equal(block.sessionSwitchDirection(at(0, 1), at(0, 1)), 0);
+  assert.equal(block.sessionSwitchDirection([{}, {}], [{}, {}]), 0);
+  assert.equal(block.sessionSwitchDirection([{ current: true }, {}], [{}, {}]), 0);
+  for (const value of [undefined, null, 'ab', {}, 3]) {
+    assert.equal(block.sessionSwitchDirection(value, at(1, 2)), 0);
+    assert.equal(block.sessionSwitchDirection(at(0, 2), value), 0);
+  }
+});
+
+test('a pílula compacta tem teto na largura da expandida e os pontos ficam na ponta direita da barra', () => {
+  assert.equal(cssDeclarations('#pill')['max-width'], cssDeclarations('#pill.expanded').width);
+  for (const [, selector, body] of styleRules.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (selector.trim().startsWith('#pill.multi-session')) {
+      assert.equal(/(?<![-\w])width\s*:/.test(body), false, `a regra ${selector.trim()} não pode fixar a largura da pílula`);
+    }
+  }
+  const side = rendererLf.slice(rendererLf.indexOf('<span id="side">'), rendererLf.indexOf('\n    </span>\n    </div>'));
+  assert.ok(side.indexOf('id="open-compact"') > 0 && side.indexOf('id="sessions"') > side.indexOf('id="open-compact"'));
+  const lines = side.split('\n').filter((line) => line.trim() !== '');
+  assert.ok(lines[lines.length - 1].includes('id="sessions"'), '#sessions é o último filho de #side');
+  const render = functionBody('renderContent');
+  assert.ok(render.includes("pill.classList.toggle('multi-session', "));
+  assert.ok(render.includes('current.sessions.length >= 2'));
+});

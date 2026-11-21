@@ -10,7 +10,7 @@ const {
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES,
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
   anchorPosition, horizontalSlackFor, ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
-  islandDisplays, isIslandVisible, nextUserHidden, nextFullscreen,
+  islandDisplays, isIslandVisible, nextUserHidden, nextFullscreen, sessionList, nextSelection,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -609,4 +609,190 @@ test('nextFullscreen marca e solta o monitor coberto pelo primeiro plano', () =>
   assert.deepEqual([...nextFullscreen()], []);
   assert.deepEqual([...covered], [[1, 100]]);
   assert.notEqual(nextFullscreen({ previous: covered, probe: null, ownPid: 999, displays }), covered);
+});
+
+// --- Fase 5: várias sessões ---
+
+const PEDIDO_A = '11111111-1111-4111-8111-111111111111';
+const PEDIDO_B = '22222222-2222-4222-8222-222222222222';
+const pedidoValido = (id) => ({ id, tool: 'Bash', text: 'ls -la' });
+
+test('sessionList devolve as vivas na ordem de primeira aparição, com a forma exata', () => {
+  const now = 1_000_000_000;
+  const list = sessionList([
+    { key: 'b', firstSeenAt: 200, state: 'running', updatedAt: now, windowPid: 4242, project: 'x' },
+    { key: 'a', firstSeenAt: 100, state: 'done', updatedAt: now - 1_000 },
+    { key: 'c', firstSeenAt: 100, state: 'waiting', updatedAt: now - 60_000, permission: pedidoValido(PEDIDO_A) },
+  ], now);
+  // empate de primeira aparição: a chave desempata; a ordem nunca segue urgência nem recência
+  assert.deepEqual(list, [
+    { key: 'a', state: 'done', updatedAt: now - 1_000, permissionId: null },
+    { key: 'c', state: 'waiting', updatedAt: now - 60_000, permissionId: PEDIDO_A },
+    { key: 'b', state: 'running', updatedAt: now, permissionId: null },
+  ]);
+  // sem firstSeenAt válido a sessão vai para o fim
+  assert.deepEqual(sessionList([
+    { key: 'z', state: 'running', updatedAt: now },
+    { key: 'y', firstSeenAt: 5, state: 'running', updatedAt: now },
+  ], now).map((entry) => entry.key), ['y', 'z']);
+});
+
+test('sessionList filtra as expiradas e só dá permissionId a um pedido válido em waiting', () => {
+  const now = 1_000_000_000;
+  const alive = (extra) => ({ key: 'k', firstSeenAt: 1, updatedAt: now, ...extra });
+  assert.deepEqual(sessionList([
+    alive({ key: 'd', state: 'done', updatedAt: now - 10_000 }),
+    alive({ key: 'r', state: 'running', updatedAt: now - 3 * 60 * 60_000 }),
+    alive({ key: 'w', state: 'waiting', updatedAt: now - 13 * 60 * 60_000 }),
+    alive({ key: 'u', state: 'desconhecido' }),
+  ], now), []);
+  const invalid = [
+    { id: 'ABCDEF12-1111-4111-8111-111111111111', tool: 'Bash', text: 'ls' },
+    { id: PEDIDO_A, tool: 'Bash', text: 'ls‮' },
+    { id: PEDIDO_A, tool: 'Bash', text: '' },
+  ];
+  for (const permission of invalid) {
+    assert.equal(sessionList([alive({ state: 'waiting', permission })], now)[0].permissionId, null, JSON.stringify(permission));
+  }
+  assert.equal(sessionList([alive({ state: 'running', permission: pedidoValido(PEDIDO_A) })], now)[0].permissionId, null);
+  for (const notArray of [undefined, null, 'x', {}, 3]) assert.deepEqual(sessionList(notArray, now), []);
+});
+
+test('nextSelection select aceita só um índice inteiro dentro da lista', () => {
+  const list = [{ key: 'a', state: 'running', updatedAt: 1 }, { key: 'b', state: 'done', updatedAt: 1 }, { key: 'c', state: 'waiting', updatedAt: 1 }];
+  const selection = { key: 'a', requests: [{ id: PEDIDO_A, seenAt: 1, handled: false }] };
+  const chosen = nextSelection(selection, list, { type: 'select', index: 2 });
+  assert.equal(chosen.key, 'c');
+  assert.equal(chosen.snapped, false);
+  assert.deepEqual(chosen.requests, selection.requests);
+  assert.notEqual(chosen.requests, selection.requests);
+  assert.notEqual(chosen.requests[0], selection.requests[0]);
+  for (const index of [3, -1, 1.5, '1', NaN, undefined, null, Infinity]) {
+    assert.equal(nextSelection(selection, list, { type: 'select', index }).key, 'a', String(index));
+  }
+  // evento ausente ou desconhecido mantém tudo
+  for (const event of [undefined, null, {}, { type: 'outro' }, 'poll']) {
+    assert.equal(nextSelection(selection, list, event).key, 'a');
+  }
+  assert.equal(nextSelection(selection, [], { type: 'select', index: 0 }).key, 'a');
+});
+
+test('nextSelection poll mantém a sessão exibida e só vai à vizinha quando ela sai (SESS-06)', () => {
+  const entry = (key, state, updatedAt = 1) => ({ key, state, updatedAt });
+  const poll = (key, list, previousKeys) => nextSelection({ key, requests: [] }, list, { type: 'poll', previousKeys });
+  // a exibida fica mesmo com outra mais recente, concluída ou esperando
+  assert.equal(poll('a', [entry('a', 'running', 1), entry('b', 'running', 99)], ['a', 'b']).key, 'a');
+  assert.equal(poll('a', [entry('a', 'running'), entry('b', 'waiting')], ['a', 'b']).key, 'a');
+  assert.equal(poll('a', [entry('a', 'done'), entry('b', 'running')], ['a', 'b']).key, 'a');
+  // saiu de fato: a anterior na ordem estável, nunca a mais urgente
+  assert.equal(poll('a', [entry('x', 'running'), entry('b', 'waiting')], ['x', 'a', 'b']).key, 'x');
+  // era a primeira: a seguinte
+  assert.equal(poll('a', [entry('b', 'running'), entry('c', 'waiting')], ['a', 'b', 'c']).key, 'b');
+  // a anterior também saiu: a mais próxima que sobrou
+  assert.equal(poll('a', [entry('b', 'running')], ['x', 'a', 'b']).key, 'b');
+  // previousKeys sem a chave: a primeira da lista
+  assert.equal(poll('a', [entry('p', 'done'), entry('q', 'waiting')], ['p', 'q']).key, 'p');
+  assert.equal(poll('a', [entry('p', 'done'), entry('q', 'waiting')], undefined).key, 'p');
+  // lista vazia
+  assert.equal(poll('a', [], ['a']).key, null);
+  // sem sessão exibida: urgência, depois a mais recente
+  const list = [entry('a', 'done', 9), entry('b', 'running', 5), entry('c', 'running', 8), entry('d', 'waiting', 1)];
+  assert.equal(poll(null, list, []).key, 'd');
+  assert.equal(poll(null, list.slice(0, 3), []).key, 'c');
+  assert.equal(nextSelection(null, list, { type: 'poll', previousKeys: [] }).key, 'd');
+  assert.equal(nextSelection({ requests: [] }, list, { type: 'poll', previousKeys: [] }).key, 'd');
+  assert.deepEqual(nextSelection('lixo', [], { type: 'poll' }), { key: null, requests: [], snapped: false });
+  // nunca muta a entrada
+  const selection = { key: 'a', requests: [{ id: PEDIDO_A, seenAt: 1, handled: false }] };
+  const copy = JSON.parse(JSON.stringify(selection));
+  const listCopy = JSON.parse(JSON.stringify(list));
+  nextSelection(selection, list, { type: 'poll', previousKeys: ['a'] });
+  assert.deepEqual(selection, copy);
+  assert.deepEqual(list, listCopy);
+});
+
+test('pickState com seleção exibe a sessão escolhida e descreve os pontos', () => {
+  const now = 1_000_000_000;
+  const sessions = [
+    { key: 'a', firstSeenAt: 1, state: 'waiting', project: 'pa', updatedAt: now, permission: pedidoValido(PEDIDO_A) },
+    { key: 'b', firstSeenAt: 2, state: 'running', project: 'pb', updatedAt: now - 5_000 },
+    { key: 'c', firstSeenAt: 3, state: 'done', project: 'pc', updatedAt: now - 1_000 },
+  ];
+  const picked = pickState(sessions, now, { key: 'b', requests: [] });
+  assert.equal(picked.project, 'pb');
+  assert.equal(picked.state, 'running');
+  assert.equal(picked.count, 3);
+  assert.deepEqual(picked.sessions, [
+    { state: 'waiting', pending: true, current: false },
+    { state: 'running', pending: false, current: true },
+    { state: 'done', pending: false, current: false },
+  ]);
+  assert.equal(picked.queue, null);
+  // sem seleção ou com chave desconhecida: urgência, como antes
+  assert.equal(pickState(sessions, now).project, 'pa');
+  assert.equal(pickState(sessions, now, { key: 'nao-existe', requests: [] }).project, 'pa');
+  assert.equal(pickState(sessions, now, null).project, 'pa');
+  // a ordem dos pontos não segue a urgência: sessão sem firstSeenAt vai para o fim
+  assert.deepEqual(
+    pickState([{ state: 'done', updatedAt: now }, { key: 'k', firstSeenAt: 1, state: 'running', updatedAt: now }], now).sessions.map((s) => s.state),
+    ['running', 'done'],
+  );
+  // pedido pendente que não é válido não pulsa
+  const invalid = pickState([{ key: 'k', firstSeenAt: 1, state: 'waiting', updatedAt: now, permission: { id: 'x', tool: 'Bash', text: 'ls' } }], now);
+  assert.equal(invalid.sessions[0].pending, false);
+  // fila: pedido exibido entre os que a seleção conhece
+  const requests = [{ id: PEDIDO_B, seenAt: 2, handled: true }, { id: PEDIDO_A, seenAt: 1, handled: true }];
+  assert.deepEqual(pickState(sessions, now, { key: 'a', requests }).queue, { position: 1, total: 2 });
+  assert.deepEqual(pickState(
+    [{ ...sessions[0], permission: pedidoValido(PEDIDO_B) }], now, { key: 'a', requests },
+  ).queue, { position: 2, total: 2 });
+  assert.equal(pickState(sessions, now, { key: 'a', requests: [requests[1]] }).queue, null);
+  assert.equal(pickState(sessions, now, { key: 'b', requests }).queue, null);
+});
+
+test('o payload do estado não leva chave, PID nem texto de outra sessão (D-09)', () => {
+  const now = 1_000_000_000;
+  const sessions = [
+    { key: 'sessao-exibida', firstSeenAt: 1, state: 'running', project: 'p', windowPid: 111, updatedAt: now },
+    {
+      key: 'sessao-oculta', firstSeenAt: 2, state: 'waiting', project: 'q', windowPid: 4242, updatedAt: now,
+      permission: { id: PEDIDO_B, tool: 'Bash', text: 'segredo-da-outra' },
+    },
+  ];
+  const json = JSON.stringify(pickState(sessions, now, { key: 'sessao-exibida', requests: [] }));
+  for (const forbidden of ['sessao-oculta', 'sessao-exibida', '4242', 'segredo-da-outra', PEDIDO_B]) {
+    assert.ok(!json.includes(forbidden), forbidden);
+  }
+});
+
+test('a sessão exibida não troca sozinha, e quando sai a ilha vai à vizinha (SESS-06)', () => {
+  const now = 1_000_000_000;
+  const base = (key, firstSeenAt, state, updatedAt) => ({ key, firstSeenAt, state, updatedAt, project: key });
+  let selection = { key: null, requests: [] };
+  let previousKeys = [];
+  const step = (sessions) => {
+    const list = sessionList(sessions, now);
+    selection = nextSelection(selection, list, { type: 'poll', previousKeys });
+    previousKeys = list.map((entry) => entry.key);
+    return pickState(sessions, now, selection).project;
+  };
+  const a = base('A', 1, 'running', now - 3_000);
+  assert.equal(step([a]), 'A');
+  // B conclui: A continua
+  assert.equal(step([a, base('B', 2, 'done', now)]), 'A');
+  // B volta a trabalhar, mais recente
+  assert.equal(step([a, base('B', 2, 'running', now)]), 'A');
+  // C aparece em waiting, a mais urgente
+  assert.equal(step([a, base('B', 2, 'running', now), base('C', 3, 'waiting', now)]), 'A');
+  // A sai: a vizinha na ordem estável (A era a primeira, vai a B), não a C que é mais urgente
+  assert.equal(step([base('B', 2, 'running', now), base('C', 3, 'waiting', now)]), 'B');
+  // a exibida (B) sai de novo: a anterior que sobrou não existe, vai à seguinte
+  assert.equal(step([base('C', 3, 'waiting', now)]), 'C');
+});
+
+test('hook.js e permission-hook.js seguem gravando o projeto pela pasta da sessão (D-01)', () => {
+  const hook = fs.readFileSync(path.join(__dirname, 'hook.js'), 'utf8');
+  const permissionHook = fs.readFileSync(path.join(__dirname, 'permission-hook.js'), 'utf8');
+  assert.ok(hook.includes("path.basename(input.cwd || '') || 'Claude'"));
+  assert.ok(permissionHook.includes("previous.project || path.basename(input.cwd || '') || 'Claude'"));
 });
