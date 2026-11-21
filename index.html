@@ -949,9 +949,11 @@
     startSpringLoop();
   }
   permissionText.addEventListener('scroll', render);
-  // passive: false é obrigatório para o preventDefault valer. A roda sobre o texto nunca sai dele
-  // (a Fase 5 usa a roda na ilha para trocar de sessão) e, na janela depois de uma troca, não rola.
-  permissionText.addEventListener('wheel', (event) => {
+  // passive: false é obrigatório para o preventDefault valer. A roda sobre qualquer parte do pedido
+  // (ferramenta, texto e dica) é do texto e nunca chega à pílula, então rolar até o fim nunca encadeia uma
+  // troca de sessão (o overscroll-behavior: contain do texto segura a rolagem nativa). Na janela depois de
+  // uma troca de conteúdo ela não rola.
+  permissionBox.addEventListener('wheel', (event) => {
     event.stopPropagation();
     if (!isWheelSettled(contentChangedAt, performance.now())) event.preventDefault();
   }, { passive: false });
@@ -1234,8 +1236,11 @@
   // A roda sobre a pílula troca de sessão (SESS-02). Só o número bruto vai ao main, que acumula com as regras
   // do mod. O wheelDeltaY do Chromium vale ±120 por entalhe, como o WM_MOUSEWHEEL, e menos no touchpad; sem
   // ele (propriedade fora do padrão), o deltaY padrão vezes 1,2 leva os 100 px por entalhe do Chromium a 120.
-  // Sobre o bloco do pedido a roda é do texto: o #permission segura o evento e a conferência de baixo é a
-  // segunda trava. passive: true porque a pílula nunca segura a rolagem.
+  // A roda só chega com a captura do mouse ligada pelo hover (updateHover, setCapture e setIgnoreMouseEvents
+  // no main); no Linux a janela sempre captura. No Windows, como a janela nunca recebe o foco, ela depende de
+  // "Rolar janelas inativas ao passar o mouse sobre elas" (ligado por padrão); sem a roda, o clique no ponto
+  // continua trocando a sessão. Sobre o bloco do pedido a roda é do texto: o #permission segura o evento e a
+  // conferência de baixo é a segunda trava. passive: true porque a pílula nunca segura a rolagem.
   const WHEEL_PIXELS_TO_DELTA = 1.2;
   pill.addEventListener('wheel', (event) => {
     if (event.target.closest('#permission')) return;

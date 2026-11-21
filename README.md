@@ -95,6 +95,13 @@ deixa sempre à vista de qual projeto é a sessão na tela.
   pontos somem e volta o número.
 - **Clique num ponto para ver aquela sessão.** A ilha não troca sozinha quando outra sessão conclui
   ou volta a trabalhar; só troca se a sessão exibida terminar, e então vai à vizinha dela.
+- **A roda do mouse sobre a pílula troca de sessão.** Para cima vai à sessão anterior, para baixo à
+  próxima, sem dar a volta no fim da lista. Cada entalhe conta, e o touchpad, que manda passos
+  menores, é mais lento (as regras de gesto são as do mod Dynamic Island for Windows). Sobre o
+  texto de um pedido a roda só rola o texto e nunca troca de sessão. No Windows a roda chega à ilha
+  por "Rolar janelas inativas ao passar o mouse sobre elas" (Configurações > Bluetooth e
+  dispositivos > Mouse), ligado por padrão, porque a ilha nunca recebe o foco; sem isso, clique no
+  ponto.
 - **O projeto fica à vista.** O nome da pasta da sessão é o título da pílula compacta e abre o
   cabeçalho do pedido ("projeto · ferramenta"). Dois projetos com a mesma pasta final mostram o
   mesmo nome; a posição do ponto diz qual é qual.
