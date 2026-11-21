@@ -156,6 +156,17 @@ Fica de fora:
   - Não alterar a assinatura de `anchorPosition` nem de `horizontalSlackFor`.
   - Quem terminar por último faz `merge` da `main`, sem force-push.
 
+### Integração com a Fase 6 já na `main` (PR #9) e o CR-01 dela
+- **D-20:** A `origin/main` (6741b25, com a Fase 6) entra na `feat/fase-5-sessoes` por `merge`, sem force-push, antes de executar os planos. `coexistence.test.js` passa junto com a suíte.
+  - Decisão do CR-01 da revisão da Fase 6: com área útil abaixo de 1220 DIP, a âncora "ao lado" (`right-of-island`/`left-of-island`) é puxada pelo clamp para cima da pílula do mod. O `EnsureTopmost` do mod passa então a cobrir o começo das linhas do pedido.
+  - **O gate recusa nesse caso**, com o fail-safe que a revisão propôs:
+    - `BESIDE_MIN_WORK_AREA_WIDTH_PX = 2 × (BESIDE_GAP_PX + EXPANDED_PILL_WIDTH_PX)`, que dá 1220;
+    - uma função pura `besideFits(anchor, workArea)` em `state.js`, que vale `true` para as âncoras que não são "ao lado";
+    - o resultado entra junto de `isWithinWorkArea` nos dois fatos que o main já calcula: `fitsWorkArea` no `sendState` (o renderer desabilita os botões e mostra "Responda no terminal") e `withinVisibleArea` no `island:decide` (o gate recusa).
+  - A ordem de `acceptDecision` e o fixture antigo ficam intactos. Os vetores de 1093 e 1066 DIP recusam, e 1220 aceita.
+  - A função mora fora das funções de âncora da Fase 6 e não muda a assinatura de `anchorPosition` nem de `horizontalSlackFor`.
+  - Limite que continua registrado no PR: o gate não enxerga oclusão por outra janela topmost em nenhuma âncora (já aceito no `06-SECURITY.md`).
+
 ### Claude's Discretion
 - Desenho exato dos pontos: tamanho, espaçamento, anel e pulso. Segue o UI-SPEC, se o plano pedir um, ou a linguagem visual da Fase 3.
 - Onde fica o "1 de N" dentro do bloco de pedido, sem passar o pico do palco.
