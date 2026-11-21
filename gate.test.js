@@ -9,6 +9,7 @@ const {
   PERMISSION_TOOL_LIMIT, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX, besideFits, anchorPosition, clampIslandPosition,
   horizontalSlackFor, BESIDE_GAP_PX, BESIDE_MIN_WORK_AREA_WIDTH_PX,
   nextSelection, wheelStep, WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX,
+  SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS,
 } = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
@@ -1749,3 +1750,27 @@ for (const vector of vectors.sessionSwitch) {
     assert.deepEqual(decide(shownBefore.id, switchAt + 800), vector.expect.oldEcho);
   });
 }
+
+for (const vector of vectors.wheelStep) {
+  test(`wheelStep: ${vector.name}`, () => {
+    const { gesture, delta, now } = vector.input;
+    assert.deepEqual(wheelStep(gesture, delta, now), vector.expect);
+  });
+}
+
+for (const vector of vectors.nextSelection) {
+  test(`nextSelection: ${vector.name}`, () => {
+    const { selection, list, event } = vector.input;
+    assert.deepEqual(nextSelection(selection, list, event), vector.expect);
+  });
+}
+
+test('as constantes de gesto e de snap do state.js são as do fixture', () => {
+  assert.equal(SNAP_GESTURE_GAP_MS, vectors.snapGestureGapMs);
+  assert.equal(SNAP_WHEEL_LOCK_MS, vectors.snapWheelLockMs);
+  assert.equal(WHEEL_NOTCH_DELTA, vectors.wheelNotchDelta);
+  assert.equal(WHEEL_GESTURE_PAUSE_MS, vectors.wheelGesturePauseMs);
+  assert.equal(WHEEL_STEP_MS, vectors.wheelStepMs);
+  assert.equal(WHEEL_PRECISE_STEP_MS, vectors.wheelPreciseStepMs);
+  assert.equal(WHEEL_DELTA_MAX, vectors.wheelDeltaMax);
+});
