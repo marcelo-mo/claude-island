@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Entrada, preferências e comportamento no sistema
 current_plan: 6
-status: verifying
-stopped_at: Completed 04-06-PLAN.md
+status: human_needed
+stopped_at: "Fase 4 executada, revisada e auditada; PR aberto sem merge"
 last_updated: "2026-11-21T17:20:01.260Z"
 last_activity: 2026-11-21
-last_activity_desc: Phase 4 execution started
+last_activity_desc: "Fase 4 executada (6 planos), revisão com 4 correções, verificação gaps_found só por D-20 (TELA-01 parcial), segurança 26/26; PR aberto"
 state_head: f3549f7d07ffe368b80756d0f6d3824d528f8585
 progress:
   total_phases: 6
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 
 ## Current Position
 
-Phase: 4 (Entrada, preferências e comportamento no sistema) — EXECUTING
+Phase: 4 (Entrada, preferências e comportamento no sistema) — AGUARDANDO REVISÃO DO PR
 Current Plan: 6
 Total Plans in Phase: 6
-Status: Phase complete — ready for verification
-Last activity: 2026-11-21 — Phase 4 execution started
+Status: 6/6 planos executados; verificação gaps_found só pelo TELA-01 parcial (D-20, koffi não autorizado; sensor pendente da escolha do autor) e 15 itens de tela em 04-UAT.md; segurança threats_open 0
+Last activity: 2026-11-21 — Fase 4 entregue em PR, sem merge
 
 Progress: [███░░░░░░░] 33%
 

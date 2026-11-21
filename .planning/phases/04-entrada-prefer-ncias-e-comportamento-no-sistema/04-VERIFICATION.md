@@ -26,7 +26,7 @@ covered_files:
   - "preload.js"
   - "scripts/human-checks.js"
   - "state.js"
-covered_digest: "v4:sha256:1ed6127928d739cadc14d39f0ee21c94da1d1432f2390d14c8b4153abbbb1d48"
+covered_digest: "v4:sha256:f08b6d13dbf2d23f592aef5f18edd3d25976bb140fcc87baee7127a7e23fcc34"
 behavior_unverified: 3
 overrides_applied: 0
 gaps:
