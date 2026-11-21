@@ -115,7 +115,7 @@ Plans:
   3. O clique direito abre um menu com tema, forma, estilo e velocidade da animação, expandir no hover/clique, fixar aberta, transparência, âncora e esconder; as escolhas voltam iguais após reiniciar, e um arquivo de preferências corrompido ou antigo não impede a ilha de subir (cada valor inválido volta ao padrão)
   4. Um atalho global esconde e mostra a ilha (Ctrl+Alt+C se não conflitar com AltGr+C no ABNT2, senão outro padrão sem conflito; se não registrar, o menu avisa); esconder nunca aprova nada e reexibir rearma os botões; a âncora (topo central, cantos, base) e o arraste preso ao monitor da própria ilha funcionam; o modo "uma ilha só" é opcional e a transparência de 100/85/70/55% nunca vale com pedido na tela
   5. No Windows, quando um app ocupa o monitor inteiro a ilha daquele monitor some e volta quando ele sai (desktop e a própria ilha não contam); um pedido de permissão nessa hora só toca o som, a ilha não reaparece por cima e o terminal segue valendo
-**Plans**: 4/6 plans executed (sequenciais: de 01 a 05 todos editam `main.js` e `gate.test.js`; o 06 fecha com ferramenta e documentação)
+**Plans**: 5/6 plans executed (sequenciais: de 01 a 05 todos editam `main.js` e `gate.test.js`; o 06 fecha com ferramenta e documentação)
 
 Plans:
 **Wave 1**
@@ -131,7 +131,7 @@ Plans:
 - [x] 04-04-PLAN.md — Atalho global Ctrl+Alt+Shift+C esconde e mostra (reexibir rearma), aviso no menu; transparência 100/85/70/55% nunca com pedido na tela (PREF-03, PREF-06, TELA-02)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 04-05-PLAN.md — Sem dependência nova (D-20: autorização do koffi NÃO CONCEDIDA): visibilidade combinada por `applyVisibility`, fato `coveredByFullscreen` por monitor no gate, atalho por `nextUserHidden` e a regra pura `nextFullscreen` à espera do sensor (TELA-02; TELA-01 só em parte)
+- [x] 04-05-PLAN.md — Sem dependência nova (D-20: autorização do koffi NÃO CONCEDIDA): visibilidade combinada por `applyVisibility`, fato `coveredByFullscreen` por monitor no gate, atalho por `nextUserHidden` e a regra pura `nextFullscreen` à espera do sensor (TELA-02; TELA-01 só em parte)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 04-06-PLAN.md — `scripts/human-checks.js` com `--selftest` (ilha parada, atalho tomado distinto de sem disparo), README e a lista "Testar manualmente" do PR com TELA-01 pendente da escolha do sensor, D-21 e o respiro da pílula expandida (HOV-02, PREF-01, PREF-03)
@@ -175,6 +175,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 (condicional) → 4 → 5
 | 1. Spike de medição e decisão de base | 4/4 | Complete | 2026-11-21 |
 | 2. Fundação segura do gate de permissão | 4/4 | Complete | 2026-11-21 |
 | 3. Palco fixo, animação e visual | 3/3 | In Progress | - |
-| 4. Entrada, preferências e comportamento no sistema | 4/6 | In Progress | - |
+| 4. Entrada, preferências e comportamento no sistema | 5/6 | In Progress | - |
 | 5. Sessões | 0/TBD | Not started | - |
 | 6. Convivência com a ilha do sistema | 0/TBD | Not started | - |

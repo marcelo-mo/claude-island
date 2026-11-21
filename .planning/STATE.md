@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 current_phase: 4
 current_phase_name: Entrada, preferências e comportamento no sistema
-current_plan: 5
+current_plan: 6
 status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-11-21T17:10:05.398Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-11-21T17:15:06.923Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 4 execution started
-state_head: 3a239ff54f3e0e84613c587e7c6060e29c57bdc4
+state_head: c00b5874cfd4d47af325b068976864efd299eee7
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
   percent: 33
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 ## Current Position
 
 Phase: 4 (Entrada, preferências e comportamento no sistema) — EXECUTING
-Current Plan: 5
+Current Plan: 6
 Total Plans in Phase: 6
 Status: Ready to execute
 Last activity: 2026-11-21 — Phase 4 execution started
@@ -70,6 +70,7 @@ Progress: [███░░░░░░░] 33%
 | Phase 04 P02 | 30min | 2 tasks | 8 files |
 | Phase 04 P03 | 12min | 3 tasks | 8 files |
 | Phase 4 P04 | 4min | 2 tasks | 4 files |
+| Phase 04 P05 | 8min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,9 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Phase 04]: Modo cursor só troca a ilha de monitor com hasPermission === false; a prova do palco da âncora de baixo exige a sombra inteira nos casos que coexistem e a pílula inteira no pior caso combinado
 - [Phase 4]: 04-04: atalho registrado uma vez em start e liberado em will-quit; sem atalho registrado, 'Esconder' fica desabilitado
 - [Phase 4]: 04-04: um único setOpacity no main, em applyOpacity, no laço do refresh antes de sendState; pedido na tela sempre a 100%
+- [Phase 04]: applyVisibility é o único lugar que esconde e mostra a ilha; coveredByFullscreen vem do main por monitor (desconhecido = coberto)
+- [Phase 04]: Atalho passa por nextUserHidden e não inverte com toda ilha coberta por tela cheia
+- [Phase 04]: Sem sensor de tela cheia por D-20 (autorização NÃO CONCEDIDA): regra pura nextFullscreen pronta; TELA-01 parcial
 
 ### Pending Todos
 
@@ -129,6 +133,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T17:10:05.050Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-11-21T17:15:06.589Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None
