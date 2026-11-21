@@ -451,6 +451,19 @@ function nextSelection(selection, list, event) {
   }
 }
 
+/**
+ * A sessão é lixo de terminal fechado sem SessionEnd? Morta é a de `windowPid` válido (inteiro maior que 0)
+ * cujo processo não existe mais, o que `isPidAlive(windowPid)` decide: ele é injetado e só o valor exatamente
+ * false conta, então fato desconhecido (outro valor, ou `isPidAlive` que não é função) mantém a sessão, porque
+ * apagar a de um terminal aberto perderia o estado dela. Sem `windowPid` válido o PID nem é consultado.
+ * Nunca lança nem muta; sessão que não é objeto devolve false.
+ */
+function isSessionDead(session, now, isPidAlive) {
+  if (!session || typeof session !== 'object') return false;
+  const { windowPid } = session;
+  return Number.isInteger(windowPid) && windowPid > 0 && typeof isPidAlive === 'function' && isPidAlive(windowPid) === false;
+}
+
 // Regras de gesto da roda portadas do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90;
 // ver THIRD_PARTY_NOTICES.md): acumula até um entalhe, o gesto recomeça depois de 220 ms sem roda ou na
 // inversão de direção, o intervalo entre passos é de 85 ms com roda e 200 ms com touchpad (delta menor que
@@ -954,7 +967,7 @@ module.exports = {
   PERMISSION_TOOL_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
-  sessionList, nextSelection,
+  sessionList, nextSelection, isSessionDead,
   wheelStep, WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX,
   SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS,
   WINDOW_SIZE, HORIZONTAL_SLACK, positionFromSavedOffset,

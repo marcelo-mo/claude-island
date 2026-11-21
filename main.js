@@ -8,7 +8,7 @@ const {
   pickState, sessionList, nextSelection, wheelStep, WHEEL_DELTA_MAX, SNAP_WHEEL_LOCK_MS, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
-  effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem,
+  effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem, isSessionDead,
 } = require('./state');
 const { focusWindow } = require('./window');
 
@@ -334,7 +334,23 @@ function updateCursorTick() {
 // a ordem sobrevive a reiniciar a ilha; é um statSync por sessão nova, não por ciclo.
 const firstSeenAtByKey = new Map();
 
+// O sinal 0 não envia nada: só pergunta ao sistema se o processo existe. ESRCH quer dizer que não existe;
+// EPERM (existe, é de outro usuário) e qualquer outro erro contam como vivo, porque apagar a sessão de um
+// terminal aberto perderia o estado dela.
+// ponytail: o windowPid é o dono da janela do terminal. Fechar uma aba do Windows Terminal sem fechar a janela
+// não mata esse processo, e a sessão sai pela idade; um PID reaproveitado por outro programa mantém a sessão até
+// o prazo, que é o lado seguro. Identificar pelo PID do próprio Claude exigiria mudar o contrato do hook.
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code !== 'ESRCH';
+  }
+}
+
 function readSessions() {
+  const now = Date.now();
   let files;
   try {
     files = fs.readdirSync(STATE_DIR);
@@ -351,6 +367,17 @@ function readSessions() {
     try {
       const session = JSON.parse(fs.readFileSync(path.join(STATE_DIR, file), 'utf8'));
       if (!session || typeof session !== 'object') continue;
+      // A sessão morta sai da lista e o arquivo dela vai junto. O "concluído" recente de terminal vivo fica,
+      // porque o hook reaproveita o windowPid guardado nele. O nome vem do readdir da pasta e já passou por
+      // isSessionFile, então o rmSync não sai de STATE_DIR.
+      if (isSessionDead(session, now, isPidAlive)) {
+        try {
+          fs.rmSync(path.join(STATE_DIR, file), { force: true });
+        } catch {
+          // preso por outro processo agora: o próximo ciclo tenta de novo
+        }
+        continue;
+      }
       if (!firstSeenAtByKey.has(key)) {
         let firstSeenAt = Date.now();
         try {
