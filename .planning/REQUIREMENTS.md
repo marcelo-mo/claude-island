@@ -24,7 +24,7 @@ Escopo deste milestone: reformular a ilha com o comportamento e o visual do mod 
 - [x] **SEG-05**: Com um pedido na tela, a ilha fica 100% opaca, a rolagem sobre o texto do pedido só rola o texto, e o estado "lido até o fim" zera a cada pedido novo, ignorando a inércia da roda por ~300–400 ms após qualquer troca de conteúdo
 - [x] **SEG-06**: Ilha escondida, em tela cheia ou fora da área visível não aceita decisão; esconder nunca aprova, e reexibir rearma
 - [x] **SEG-07**: A regra de aceite da decisão é uma função pura testada (`node:test`), com vetores de teste compartilháveis caso a base mude; o caminho `island:decide` deixa de ser o único ponto sem teste
-- [ ] **SEG-08**: As janelas usam `webPreferences` explícitas e seguras (`contextIsolation`, `sandbox`, sem `nodeIntegration`), e as preferências só podem ser alteradas pelo menu nativo do processo principal, nunca por um canal do renderer
+- [x] **SEG-08**: As janelas usam `webPreferences` explícitas e seguras (`contextIsolation`, `sandbox`, sem `nodeIntegration`), e as preferências só podem ser alteradas pelo menu nativo do processo principal, nunca por um canal do renderer
 
 ### Animação (ANIM)
 
@@ -78,7 +78,7 @@ Escopo deste milestone: reformular a ilha com o comportamento e o visual do mod 
 - [ ] **CONV-01**: Com a ilha do Windhawk ativa, a nossa pode se encaixar como uma segunda bolha ao lado dela, por um deslocamento configurável, expandindo para fora sem cobri-la
 - [ ] **CONV-02**: A ilha nunca disputa o "sempre no topo" com outros overlays por timer
 - [ ] **CONV-03**: Uma proposta de API para conteúdo externo é enviada ao autor do mod (issue no repositório dele), e os demais caminhos de integração (toast do Windows, apps de notch no macOS) ficam registrados com o que foi verificado
-- [ ] **CONV-04**: `THIRD_PARTY_NOTICES.md` credita o mod com o texto MIT completo, versão e titular conferido, antes do primeiro commit com constantes portadas
+- [x] **CONV-04**: `THIRD_PARTY_NOTICES.md` credita o mod com o texto MIT completo, versão e titular conferido, antes do primeiro commit com constantes portadas
 
 ## v2 Requirements
 
@@ -126,8 +126,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEG-05 | Phase 2 | Complete |
 | SEG-06 | Phase 2 | Complete |
 | SEG-07 | Phase 2 | Complete |
-| SEG-08 | Phase 2 | Pending |
-| CONV-04 | Phase 2 | Pending |
+| SEG-08 | Phase 2 | Complete |
+| CONV-04 | Phase 2 | Complete |
 | ANIM-01 | Phase 3 | Pending |
 | ANIM-02 | Phase 3 | Pending |
 | ANIM-03 | Phase 3 | Pending |

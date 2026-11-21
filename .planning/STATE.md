@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 2
 current_phase_name: Fundação segura do gate de permissão
 current_plan: 4
-status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-11-21T05:04:35.972Z"
+status: verifying
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-11-21T05:08:28.065Z"
 last_activity: 2026-11-21
 last_activity_desc: Roadmap criado (6 fases, 46/46 requisitos mapeados)
-state_head: f778e080c459e1c16bbd7605dc30cc767a5ef1b1
+state_head: 0d920cd9fc790a13f12cb10d1751dbe80e44b6ae
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 Phase: 2 (Fundação segura do gate de permissão) — READY TO EXECUTE
 Current Plan: 4
 Total Plans in Phase: 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-21 — Roadmap criado (6 fases, 46/46 requisitos mapeados)
 
 Progress: [░░░░░░░░░░] 0%
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P01 | 3min | 2 tasks | 6 files |
 | Phase 02 P02 | 4min | 2 tasks | 4 files |
 | Phase 02 P03 | 14min | 2 tasks | 3 files |
+| Phase 02 P04 | 10min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Phase 02]: O pedido exibido (id, since, epoch) só é atribuído dentro de refresh(reason); retorno antecipado compara estado e época para não engolir o rearme
 - [Phase 02]: Plano 02-03: regras puras do renderer ficam inline entre marcadores regras-do-gate e são testadas por extração em node:vm vazio; a CSP não muda
 - [Phase 02]: Plano 02-03: isValidRelease exige a mesma geração de armamento (armToken) do pointerdown; armed sozinho não pega rearme que volta a armar no meio do gesto
+- [Phase 02]: 02-04: sem trava de process.sandboxed no preload (A7 não verificada, sem Electron); reavaliar na UAT-1
+- [Phase 02]: 02-04: aviso MIT validado comparando o corpo com o LICENSE do repositório, sem rede
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21T05:04:35.932Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-11-21T05:08:28.027Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None
