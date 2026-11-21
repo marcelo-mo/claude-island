@@ -1,2 +1,4 @@
 node_modules/
 .idea/
+.planning/research/.cache/
+.claude/settings.local.json
