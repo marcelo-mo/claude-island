@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 4
-current_phase_name: Entrada, preferências e comportamento no sistema
+current_phase: 5
+current_phase_name: Sessões
 current_plan: 6
 status: human_needed
 stopped_at: Phase 5 context gathered
-last_updated: "2026-11-21T17:46:41.335Z"
+last_updated: "2026-11-21T19:33:19.461Z"
 last_activity: 2026-11-21
 last_activity_desc: Fase 4 executada (6 planos), revisão com 4 correções, verificação gaps_found só por D-20 (TELA-01 parcial), segurança 26/26; PR aberto
-state_head: 650cf2470ffcdcf778769c07e7607c1033f05384
+state_head: 04161a69612ef402e43d37919c35960ba100fe6c
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 26
+  completed_plans: 19
   percent: 33
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 
 ## Current Position
 
-Phase: 4 (Entrada, preferências e comportamento no sistema) — AGUARDANDO REVISÃO DO PR
+Phase: 5 (Sessões) — READY TO EXECUTE
 Current Plan: 6
-Total Plans in Phase: 6
+Total Plans in Phase: 7
 Status: 6/6 planos executados; verificação gaps_found só pelo TELA-01 parcial (D-20, koffi não autorizado; sensor pendente da escolha do autor) e 15 itens de tela em 04-UAT.md; segurança threats_open 0
 Last activity: 2026-11-21 — Fase 4 entregue em PR, sem merge
 

@@ -150,12 +150,25 @@ Plans:
   4. Pedidos simultâneos entram numa fila na ordem de chegada ("1 de N"), um pedido novo não substitui o que está sendo lido e, ao responder, a ilha vai para o próximo pendente; toda troca (scroll, snap, fila) reinicia o armamento, e Permitir/Negar atinge só o pedido que está na tela
   5. Uma sessão morta (terminal fechado sem `SessionEnd`) sai da lista de pontos e seus arquivos antigos são removidos
 **Plans**: 7 plans
+**Wave 1**
 - [ ] 05-01-PLAN.md — merge da main com a Fase 6 e recusa do gate com a âncora ao lado abaixo de 1220 DIP (D-20)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 05-02-PLAN.md — um ponto por sessão, troca pelo clique no ponto e o projeto da sessão exibida sempre à vista
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 05-03-PLAN.md — troca pela roda com as regras do mod; roda sobre o pedido só rola o texto; "Rolar janelas inativas"
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 05-04-PLAN.md — snap uma vez por pedido, fila "1 de N" e avanço ao próximo pendente
+
+**Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 05-05-PLAN.md — sessão morta sai da lista e o arquivo é apagado; o "concluído" exibido não vence com outra sessão viva (D-21)
+
+**Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 05-06-PLAN.md — mola de troca de sessão do mod e transição do acento
+
+**Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 05-07-PLAN.md — vetores do gate para toda troca de sessão e checklist "Testar manualmente"
 **UI hint**: yes
 **Research flag**: não, mas exige um teste curto de que `wheel` chega à janela não focável ("Rolar janelas inativas") e um plano próprio de testes do gate. Conferir se o hook já grava `cwd`/nome do projeto: se não, é mudança de contrato no hook (única exceção prevista a "hooks inalterados").
