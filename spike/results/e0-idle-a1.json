@@ -1,0 +1,202 @@
+{
+    "label":  "e0",
+    "scenario":  "idle",
+    "attempt":  1,
+    "status":  "ok",
+    "error":  null,
+    "source":  "2530f30524ee6d9021627e1d542caa8076fbd4b9",
+    "exe":  "D:\\Desenvolvimentos\\Pessoal\\claude-island\\node_modules\\.pnpm\\electron@45.4.1\\node_modules\\electron\\dist\\electron.exe",
+    "arguments":  "\"C:\\Users\\marce\\AppData\\Local\\claude-island\\spike-variants\\e0\" --user-data-dir=\"{home}\\ud\"",
+    "env":  [
+
+            ],
+    "measuredAt":  "2026-11-21T06:01:27.1960716Z",
+    "versions":  {
+                     "exe":  "45.4.1",
+                     "os":  "10.0.26300",
+                     "powershell":  "5.1.26100.9818"
+                 },
+    "logicalProcessors":  20,
+    "warmupSeconds":  30,
+    "windowSeconds":  60,
+    "runs":  [
+                 {
+                     "processes":  27,
+                     "privateWsMb":  588.5,
+                     "cpuPercentTotal":  0.2413,
+                     "cpuPercentOfOneCore":  4.825,
+                     "seconds":  67.4,
+                     "rootAlive":  true,
+                     "windows":  [
+                                     {
+                                         "pid":  42060,
+                                         "x":  -1235,
+                                         "y":  36,
+                                         "width":  550,
+                                         "height":  410,
+                                         "dpi":  120,
+                                         "widthDip":  440,
+                                         "heightDip":  328,
+                                         "exStyle":  "0x8280028",
+                                         "topmost":  true,
+                                         "toolWindow":  false,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  -1920,
+                                                             "y":  37,
+                                                             "width":  1920,
+                                                             "height":  968
+                                                         }
+                                     },
+                                     {
+                                         "pid":  42060,
+                                         "x":  1060,
+                                         "y":  30,
+                                         "width":  440,
+                                         "height":  324,
+                                         "dpi":  96,
+                                         "widthDip":  440,
+                                         "heightDip":  324,
+                                         "exStyle":  "0x8280028",
+                                         "topmost":  true,
+                                         "toolWindow":  false,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  0,
+                                                             "y":  30,
+                                                             "width":  2560,
+                                                             "height":  990
+                                                         }
+                                     },
+                                     {
+                                         "pid":  2992,
+                                         "x":  -1911,
+                                         "y":  54,
+                                         "width":  1902,
+                                         "height":  942,
+                                         "dpi":  120,
+                                         "widthDip":  1522,
+                                         "heightDip":  754,
+                                         "exStyle":  "0x280100",
+                                         "topmost":  false,
+                                         "toolWindow":  false,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  -1920,
+                                                             "y":  37,
+                                                             "width":  1920,
+                                                             "height":  968
+                                                         }
+                                     }
+                                 ],
+                     "foregroundInTree":  true
+                 },
+                 {
+                     "processes":  5,
+                     "privateWsMb":  112.4,
+                     "cpuPercentTotal":  0.2168,
+                     "cpuPercentOfOneCore":  4.336,
+                     "seconds":  66.7,
+                     "rootAlive":  true,
+                     "windows":  [
+                                     {
+                                         "pid":  33532,
+                                         "x":  -1235,
+                                         "y":  36,
+                                         "width":  550,
+                                         "height":  410,
+                                         "dpi":  120,
+                                         "widthDip":  440,
+                                         "heightDip":  328,
+                                         "exStyle":  "0x8280028",
+                                         "topmost":  true,
+                                         "toolWindow":  false,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  -1920,
+                                                             "y":  37,
+                                                             "width":  1920,
+                                                             "height":  968
+                                                         }
+                                     },
+                                     {
+                                         "pid":  33532,
+                                         "x":  1060,
+                                         "y":  30,
+                                         "width":  440,
+                                         "height":  324,
+                                         "dpi":  96,
+                                         "widthDip":  440,
+                                         "heightDip":  324,
+                                         "exStyle":  "0x8280028",
+                                         "topmost":  true,
+                                         "toolWindow":  false,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  0,
+                                                             "y":  30,
+                                                             "width":  2560,
+                                                             "height":  990
+                                                         }
+                                     }
+                                 ],
+                     "foregroundInTree":  false
+                 },
+                 {
+                     "processes":  5,
+                     "privateWsMb":  114.8,
+                     "cpuPercentTotal":  0.2203,
+                     "cpuPercentOfOneCore":  4.406,
+                     "seconds":  66.7,
+                     "rootAlive":  true,
+                     "windows":  [
+                                     {
+                                         "pid":  15708,
+                                         "x":  -1235,
+                                         "y":  36,
+                                         "width":  550,
+                                         "height":  410,
+                                         "dpi":  120,
+                                         "widthDip":  440,
+                                         "heightDip":  328,
+                                         "exStyle":  "0x8280028",
+                                         "topmost":  true,
+                                         "toolWindow":  false,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  -1920,
+                                                             "y":  37,
+                                                             "width":  1920,
+                                                             "height":  968
+                                                         }
+                                     },
+                                     {
+                                         "pid":  15708,
+                                         "x":  1060,
+                                         "y":  30,
+                                         "width":  440,
+                                         "height":  324,
+                                         "dpi":  96,
+                                         "widthDip":  440,
+                                         "heightDip":  324,
+                                         "exStyle":  "0x8280028",
+                                         "topmost":  true,
+                                         "toolWindow":  false,
+                                         "appWindow":  false,
+                                         "monitorWork":  {
+                                                             "x":  0,
+                                                             "y":  30,
+                                                             "width":  2560,
+                                                             "height":  990
+                                                         }
+                                     }
+                                 ],
+                     "foregroundInTree":  false
+                 }
+             ],
+    "median":  {
+                   "privateWsMb":  114.8,
+                   "cpuPercentTotal":  0.2203,
+                   "processes":  5
+               }
+}

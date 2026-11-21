@@ -9,11 +9,11 @@ Escopo deste milestone: reformular a ilha com o comportamento e o visual do mod 
 
 ### Base tecnológica (BASE)
 
-- [ ] **BASE-01**: O autor consegue reproduzir a medição de consumo com um script versionado (`scripts/measure-footprint.ps1`) que soma o *private working set* e a CPU de toda a árvore de processos da ilha (incluindo `msedgewebview2.exe`), em cenários fixos (ociosa, trabalhando com animação, precisa de você), 3 execuções com mediana
-- [ ] **BASE-02**: A regra de decisão Electron × Tauri está escrita e versionada **antes** da medição: Tauri só vence se passar os gates funcionais no Windows com os 2 monitores (transparência sem borda/flash, hover sem perder clique, clicar na pílula não tira o foco do terminal, acima de vídeo em tela cheia, posição certa nos dois monitores) **e** usar ≤60% do *private working set* do melhor Electron otimizado **e** CPU ociosa ≤ a do Electron otimizado
-- [ ] **BASE-03**: A comparação mede pelo menos o Electron atual, o Electron otimizado (sem animação contínua de `box-shadow`; uma janela só) e uma casca Tauri carregando a mesma interface; o caminho de permissão ponta a ponta só é portado para o Tauri se ele passar a primeira etapa
-- [ ] **BASE-04**: A decisão e os números ficam registrados em `PROJECT.md` (Key Decisions); se o Tauri vencer, o roadmap ganha uma fase de port antes das fases que mexem no processo principal
-- [ ] **BASE-05**: A ilha parada deixa de gastar CPU com animação contínua: o brilho do contorno anima só `opacity`/`transform` e nenhuma animação roda com a ilha ociosa ou escondida
+- [x] **BASE-01**: O autor consegue reproduzir a medição de consumo com um script versionado (`scripts/measure-footprint.ps1`) que soma o *private working set* e a CPU de toda a árvore de processos da ilha (incluindo `msedgewebview2.exe`), em cenários fixos (ociosa, trabalhando com animação, precisa de você), 3 execuções com mediana
+- [x] **BASE-02**: A regra de decisão Electron × Tauri está escrita e versionada **antes** da medição: Tauri só vence se passar os gates funcionais no Windows com os 2 monitores (transparência sem borda/flash, hover sem perder clique, clicar na pílula não tira o foco do terminal, acima de vídeo em tela cheia, posição certa nos dois monitores) **e** usar ≤60% do *private working set* do melhor Electron otimizado **e** CPU ociosa ≤ a do Electron otimizado
+- [x] **BASE-03**: A comparação mede pelo menos o Electron atual, o Electron otimizado (sem animação contínua de `box-shadow`; uma janela só) e uma casca Tauri carregando a mesma interface; o caminho de permissão ponta a ponta só é portado para o Tauri se ele passar a primeira etapa
+- [x] **BASE-04**: A decisão e os números ficam registrados em `PROJECT.md` (Key Decisions); se o Tauri vencer, o roadmap ganha uma fase de port antes das fases que mexem no processo principal
+- [x] **BASE-05**: A ilha parada deixa de gastar CPU com animação contínua: o brilho do contorno anima só `opacity`/`transform` e nenhuma animação roda com a ilha ociosa ou escondida
 
 ### Segurança da permissão (SEG)
 
@@ -114,11 +114,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BASE-01 | Phase 1 | Pending |
-| BASE-02 | Phase 1 | Pending |
-| BASE-03 | Phase 1 | Pending |
-| BASE-04 | Phase 1 | Pending |
-| BASE-05 | Phase 1 | Pending |
+| BASE-01 | Phase 1 | Complete |
+| BASE-02 | Phase 1 | Complete |
+| BASE-03 | Phase 1 | Complete |
+| BASE-04 | Phase 1 | Complete |
+| BASE-05 | Phase 1 | Complete |
 | SEG-01 | Phase 2 | Pending |
 | SEG-02 | Phase 2 | Pending |
 | SEG-03 | Phase 2 | Pending |

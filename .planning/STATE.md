@@ -1,11 +1,18 @@
 ---
-gsd_state_version: '1.0'
-status: planning
+gsd_state_version: "1.0"
+current_phase: 1
+current_phase_name: Spike de medição e decisão de base
+status: verifying
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-11-21T07:17:02.298Z"
+last_activity: 2026-11-21
+last_activity_desc: Phase 1 execution started
+state_head: b8e2b72a93b531b5ca7a50f1d3f48e22c51002e9
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 4
   percent: 0
 ---
 
@@ -20,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-11-21)
 
 ## Current Position
 
-Phase: 1 of 6 (Spike de medição e decisão de base)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-11-21 — Roadmap criado (6 fases, 46/46 requisitos mapeados)
+Phase: 1 (Spike de medição e decisão de base) — EXECUTING
+Plan: 4 of 4
+Status: Phase complete — ready for verification
+Last activity: 2026-11-21 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -45,6 +52,14 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 1 P01 | 25min | 3 tasks | 6 files |
+| Phase 1 P02 | 30min | 3 tasks | 12 files |
+| Phase 1 P03 | 85min | 3 tasks | 18 files |
+| Phase 1 P04 | 5min | 3 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -57,6 +72,12 @@ Decisões ficam na tabela Key Decisions do PROJECT.md. Decisões recentes que af
 - [Roadmap]: CONV-04 (aviso MIT do mod) mora na Fase 2 para existir antes das primeiras constantes portadas (molas, Fase 3)
 - [Roadmap]: Fase "Port para Tauri" não é numerada; vira Fase 3.1 só se o spike escolher Tauri
 - [Roadmap]: Convivência com o Windhawk (Fase 6) é a única cortável; plano B é âncora e deslocamento manuais da Fase 4
+- [Phase 1]: Validade de janela (D-10) com tolerância de 2% no tamanho: o Electron abre a janela a 125% com 550x410, não 550x405; errata commitada antes de qualquer medição
+- [Phase 1]: Regra Electron x Tauri commitada em spike/REGRA-DE-DECISAO.md antes de existir spike/results; o medidor recusa gravar lá sem ela
+- [Phase 1]: Medidor ignora a janela interna do Tao ('Tao Thread Event Target', 16x16) e aceita -Exe sem argumentos; sem isso o T0 sairia inválido pela D-10
+- [Phase 1]: Etapa 1 reprovada: T0 de 117,6% a 136,7% do WS de E3 e CPU ociosa acima; base continua Electron, sem Etapa 2 nem fase 3.1 (só Windows)
+- [Phase 1]: E2 inelegível (capturas PrintWindow pretas com --in-process-gpu); E_ref = E3
+- [Phase 1]: Plano 01-04: Etapa 2 pulada (Etapa 1 reprovada, D-04/BASE-03); Task 3 pending-human, halo D-03 a conferir pelo autor no PR
 
 ### Pending Todos
 
@@ -81,6 +102,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-11-21
-Stopped at: Roadmap e STATE criados; requisitos mapeados (46/46)
+Last session: 2026-11-21T07:17:02.265Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
