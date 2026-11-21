@@ -524,6 +524,9 @@ function registerIpcHandlers() {
   ipcMain.on('island:capture', (event, capture) => {
     const island = islandOf(event);
     if (!island || typeof capture !== 'boolean') return;
+    // Ociosa, a pílula é invisível e o main já soltou a captura: um pedido de captura agora só pode vir
+    // de um renderer fora do contrato e engoliria cliques das janelas de baixo até a próxima sessão.
+    if (capture && lastPickedState.state === 'idle') return;
     captureRequests.set(island, capture);
     applyCapture(island);
   });

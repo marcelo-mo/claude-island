@@ -307,6 +307,7 @@ test('o main escuta só com ipcMain.on, nos sete canais do renderer', () => {
 test('a captura vem só de um booleano, sem a opção forward, e o arraste e o menu a seguram', () => {
   assert.ok(mainSource.includes("ipcMain.on('island:capture', (event, capture) => {"));
   assert.ok(mainSource.includes("typeof capture !== 'boolean'"));
+  assert.ok(mainSource.includes("if (capture && lastPickedState.state === 'idle') return;"), 'captura pedida com a ilha ociosa');
   assert.equal(/forward\s*:/.test(mainSource), false, 'main.js com a opção forward de setIgnoreMouseEvents');
   const bodyOf = (opening, closing = '\n}') => {
     assert.equal(mainSource.split(opening).length - 1, 1, `ausente ou repetido no main.js: ${opening}`);
