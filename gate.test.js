@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS } = require('./state');
+const {
+  acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
+} = require('./state');
 // Os vetores são JSON puro para um gate futuro em outra linguagem reaproveitá-los sem adaptação.
 const vectors = require('./fixtures/permission-vectors.json');
 
@@ -147,4 +149,40 @@ test('o aviso de terceiros credita o mod com o texto MIT completo', () => {
   ]) {
     assert.ok(notices.includes(expected), `aviso sem: ${expected}`);
   }
+});
+
+test('SECURE_WEB_PREFERENCES é exatamente o trio seguro e está congelado', () => {
+  assert.deepEqual({ ...SECURE_WEB_PREFERENCES }, { contextIsolation: true, sandbox: true, nodeIntegration: false });
+  assert.ok(Object.isFrozen(SECURE_WEB_PREFERENCES));
+});
+
+// Trava de regressão por regex (frágil por natureza, barata): não prova comportamento. Ligar
+// nodeIntegration desligaria o sandbox em silêncio, então o spread seguro fica por último.
+test('webPreferences de main.js termina no spread seguro e não tem valor inseguro', () => {
+  assert.match(mainSource, /webPreferences:\s*\{[^}]*\.\.\.SECURE_WEB_PREFERENCES,?\s*\}/);
+  assert.equal(/nodeIntegration:\s*true|sandbox:\s*false|contextIsolation:\s*false/.test(mainSource), false);
+});
+
+// Trava do invariante I9 para as Fases 4 e 5: canal novo, inclusive um futuro canal de preferência,
+// exige editar este teste de propósito. Os canais de posição (drag-end, reset-position) gravam
+// valores calculados no main a partir de getBounds(), não uma preferência vinda do renderer.
+function collectChannels(source, objectName) {
+  const calls = [...source.matchAll(new RegExp(`${objectName}\\.(\\w+)\\(\\s*'([^']+)'`, 'g'))];
+  return { methods: new Set(calls.map((call) => call[1])), channels: new Set(calls.map((call) => call[2])) };
+}
+
+const RENDERER_CHANNELS = [
+  'island:state', 'island:hover', 'island:focus', 'island:decide', 'island:drag', 'island:drag-end', 'island:reset-position',
+];
+
+test('o preload usa só send e on, nos sete canais conhecidos', () => {
+  const { methods, channels } = collectChannels(fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8'), 'ipcRenderer');
+  assert.deepEqual([...methods].sort(), ['on', 'send']);
+  assert.deepEqual([...channels].sort(), [...RENDERER_CHANNELS].sort());
+});
+
+test('o main escuta só com ipcMain.on, nos seis canais do renderer', () => {
+  const { methods, channels } = collectChannels(mainSource, 'ipcMain');
+  assert.deepEqual([...methods], ['on']);
+  assert.deepEqual([...channels].sort(), RENDERER_CHANNELS.filter((channel) => channel !== 'island:state').sort());
 });
