@@ -579,6 +579,22 @@
     return point.x >= rect.left - margin && point.x <= rect.right + margin
       && point.y >= rect.top - margin && point.y <= rect.bottom + margin;
   }
+
+  /**
+   * Se a pílula fica expandida. 'waiting' (Precisa de você) abre sozinha: é o único estado que exige
+   * ação. Fora de 'running' nunca expande: ociosa some, e Concluído fica compacto para o botão Abrir
+   * ficar parado sob o mouse, mesmo fixada. Em 'running': pinExpanded exatamente true mantém aberta;
+   * senão, expandOn 'click' expande só depois do clique (clickExpanded exatamente true) e qualquer outro
+   * valor segue a regra do hover (hovering exatamente true). Expandir nunca arma nem desarma o gate
+   * (D-04). Entrada ausente devolve false.
+   */
+  function shouldExpand(input) {
+    const { state, hovering, clickExpanded, expandOn, pinExpanded } = input || {};
+    if (state === 'waiting') return true;
+    if (state !== 'running') return false;
+    if (pinExpanded === true) return true;
+    return expandOn === 'click' ? clickExpanded === true : hovering === true;
+  }
   // hover:fim
 
   // A CSS pausa as animações com a janela escondida; o Electron só reporta hidden com hide() ou minimizada.
@@ -604,6 +620,8 @@
   let hovering = false;
   // Último ponto do cursor vindo do main, em coordenadas da janela; null com o cursor longe.
   let lastCursorPoint = null;
+  // No modo clique (expandOn 'click'), a pílula fica aberta depois do clique até o cursor sair.
+  let clickExpanded = false;
   let answeredPermissionId = null;
   let readPermissionId = null;
   // Armamento dos botões. armToken é a geração: toda volta ao desarmado a muda, o que invalida
@@ -747,10 +765,9 @@
 
   function renderContent() {
     pill.dataset.state = current.state;
-    // "Precisa de você" abre sozinho: é o único estado que exige ação.
-    // Em "concluído" a pílula não expande no hover: o botão "Abrir" tem de ficar parado sob o mouse.
-    const expandsOnHover = hovering && current.state !== 'done';
-    pill.classList.toggle('expanded', current.state !== 'idle' && (expandsOnHover || current.state === 'waiting'));
+    // "Precisa de você" abre sozinho; "Concluído" não expande (o botão "Abrir" tem de ficar parado sob o
+    // mouse); o resto segue a preferência (hover ou clique, e fixar aberta).
+    pill.classList.toggle('expanded', shouldExpand({ state: current.state, hovering, clickExpanded, expandOn: current.preferences?.expandOn, pinExpanded: current.preferences?.pinExpanded }));
     if (current.state === 'idle') return; // mantém o texto durante o fade de saída
     pill.classList.toggle('has-window', Boolean(current.windowPid));
     title.textContent = TITLES[current.state];
@@ -1019,6 +1036,8 @@
     });
     if (next === hovering) return;
     hovering = next;
+    // Sair do hover recolhe a pílula aberta por clique.
+    if (!hovering) clickExpanded = false;
     window.island.setCapture(hovering);
     render();
   }
@@ -1059,6 +1078,12 @@
     if (moved) window.island.endDrag();
     // O hover ficou congelado durante o arraste: reavalia pelo último ponto do cursor.
     updateHover();
+    // É um clique sem arraste: o pointerdown ignora botões e o bloco do pedido, então clicar em
+    // Permitir, Negar ou Abrir nunca passa por aqui.
+    if (!moved && hovering && current.preferences?.expandOn === 'click') {
+      clickExpanded = true;
+      render();
+    }
   });
 
   // O renderer só pede para abrir o menu: quem monta, marca e grava é o main (SEG-08).

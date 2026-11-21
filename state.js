@@ -421,12 +421,13 @@ const PREFERENCE_LABELS = Object.freeze({
   shape: Object.freeze({ pill: 'Pílula', notch: 'Notch', win11: 'Windows 11' }),
   animationStyle: Object.freeze({ smooth: 'Suave', default: 'Padrão', bouncy: 'Elástico', snappy: 'Rápido' }),
   animationSpeed: Object.freeze({ 0.5: '0,5×', 0.75: '0,75×', 1: '1×', 1.5: '1,5×', 2: '2×' }),
+  expandOn: Object.freeze({ hover: 'Ao passar o mouse', click: 'Ao clicar' }),
 });
 
 /**
  * Modelo do menu de preferências para o main montar com Menu.buildFromTemplate. Devolve um array novo
- * de submenus `{ label, submenu: [...] }` (Tema, Forma, Estilo da animação, Velocidade da animação),
- * cada filho um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
+ * de submenus `{ label, submenu: [...] }` (Tema, Forma, Estilo da animação, Velocidade da animação,
+ * Expandir) mais a caixa 'Fixar aberta', cada filho de submenu um rádio `{ type: 'radio', label, checked, key, value }` marcado quando `value` é o
  * atual. `key` e `value` são para o main traduzir o clique em applyPreference; as chaves que ainda
  * não têm item entram com o efeito delas. A entrada passa por normalizePreferences (lixo vira
  * padrão). Nunca lança e nunca muta a entrada.
@@ -445,6 +446,11 @@ function menuTemplate(preferences) {
     { label: 'Forma', submenu: radios('shape', SHAPES) },
     { label: 'Estilo da animação', submenu: radios('animationStyle', ANIMATION_STYLES) },
     { label: 'Velocidade da animação', submenu: radios('animationSpeed', ANIMATION_SPEED_STEPS) },
+    { label: 'Expandir', submenu: radios('expandOn', EXPAND_ON) },
+    // O clique grava o oposto do valor atual; o main não muda: todo item com key vira applyPreference.
+    {
+      type: 'checkbox', label: 'Fixar aberta', checked: current.pinExpanded, key: 'pinExpanded', value: !current.pinExpanded,
+    },
   ];
 }
 
