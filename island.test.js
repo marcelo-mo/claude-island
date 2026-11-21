@@ -10,7 +10,7 @@ const {
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES,
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
   anchorPosition, horizontalSlackFor, ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
-  islandDisplays, isIslandVisible, nextUserHidden,
+  islandDisplays, isIslandVisible, nextUserHidden, nextFullscreen,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -552,4 +552,61 @@ test('nextUserHidden inverte, exceto quando toda ilha está coberta por tela che
   const covered = [1];
   next(false, ids, covered);
   assert.deepEqual([ids, covered], [[1, 2], [1]]);
+});
+
+// D-18: a regra do primeiro plano em tela cheia, pura; o sensor que a alimentaria ainda não existe (D-20).
+test('nextFullscreen marca e solta o monitor coberto pelo primeiro plano', () => {
+  const A = { id: 1, rect: { left: 0, top: 0, right: 2560, bottom: 1080 } };
+  const B = { id: 2, rect: { left: -1920, top: 0, right: 0, bottom: 1080 } };
+  const displays = [A, B];
+  const base = {
+    hwnd: 100, className: 'Chrome_WidgetWin_1', pid: 4321, exStyle: 0,
+    visible: true, minimized: false, cloaked: false, clientRect: A.rect, monitorRect: A.rect,
+  };
+  const run = (foreground, previous = new Map(), gone = [], shown = displays) => (
+    [...nextFullscreen({ previous, probe: { foreground, gone }, ownPid: 999, displays: shown })]
+  );
+  const covered = new Map([[1, 100]]);
+  const inset = (px) => ({
+    left: px, top: px, right: A.rect.right - px, bottom: A.rect.bottom - px,
+  });
+
+  assert.deepEqual(run(base), [[1, 100]]);
+  assert.deepEqual(run({ ...base, clientRect: inset(1) }), [[1, 100]]);
+  assert.deepEqual(run({ ...base, clientRect: inset(2) }), []);
+  const maximized = { left: 18, top: 97, right: 2542, bottom: 1002 };
+  assert.deepEqual(run({ ...base, clientRect: maximized }), []);
+  assert.deepEqual(run({ ...base, clientRect: maximized }, covered), []);
+  // o próprio pid não marca nem solta
+  assert.deepEqual(run({ ...base, pid: 999 }), []);
+  assert.deepEqual(run({ ...base, pid: 999 }, covered), [[1, 100]]);
+  // área de trabalho e barras de tarefas cobrem o monitor sem ser app em tela cheia
+  for (const className of ['Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd']) {
+    assert.deepEqual(run({ ...base, className }), [], className);
+    assert.deepEqual(run({ ...base, className }, covered), [], className);
+  }
+  // janela que não conta como primeiro plano: o mapa não muda
+  for (const odd of [{ visible: false }, { minimized: true }, { cloaked: true }, { cloaked: null }, { exStyle: 0x20 }, { exStyle: 0x80020 }]) {
+    assert.deepEqual(run({ ...base, ...odd }, covered), [[1, 100]], JSON.stringify(odd));
+    assert.deepEqual(run({ ...base, ...odd }), [], JSON.stringify(odd));
+  }
+  // primeiro plano comum em outro monitor: A continua lembrado
+  const onB = { ...base, hwnd: 200, clientRect: maximized, monitorRect: B.rect };
+  assert.deepEqual(run(onB, covered), [[1, 100]]);
+  // tela cheia em B soma-se a A
+  assert.deepEqual(run({ ...base, hwnd: 200, clientRect: B.rect, monitorRect: B.rect }, covered), [[1, 100], [2, 200]]);
+  // o HWND sumiu
+  assert.deepEqual(run(null, covered, [100]), []);
+  assert.deepEqual(run(null, covered, [999]), [[1, 100]]);
+  // monitorRect que não bate com nenhum monitor; monitor que saiu
+  assert.deepEqual(run({ ...base, monitorRect: { left: 5, top: 0, right: 2565, bottom: 1080 } }, covered), [[1, 100]]);
+  assert.deepEqual(run(null, covered, [], [B]), []);
+  // entradas fora do contrato: nunca lança nem muta
+  assert.deepEqual([...nextFullscreen({ previous: covered, probe: null, ownPid: 999, displays })], [[1, 100]]);
+  assert.deepEqual([...nextFullscreen({ previous: 'x', probe: { foreground: base, gone: [] }, ownPid: 999, displays })], [[1, 100]]);
+  assert.deepEqual(run({ ...base, hwnd: '100' }, covered), [[1, 100]]);
+  assert.deepEqual([...nextFullscreen(null)], []);
+  assert.deepEqual([...nextFullscreen()], []);
+  assert.deepEqual([...covered], [[1, 100]]);
+  assert.notEqual(nextFullscreen({ previous: covered, probe: null, ownPid: 999, displays }), covered);
 });
