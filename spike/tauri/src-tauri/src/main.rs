@@ -33,10 +33,10 @@ fn make_tool_window(window: &tauri::WebviewWindow) {
 const SHIM: &str = include_str!("shim.js");
 const EMPTY: &str = r#"{"count":0}"#;
 
-// Mesma regra do state.js: USERPROFILE/.claude/island
-fn state_dir() -> PathBuf {
-    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default();
-    PathBuf::from(home).join(".claude").join("island")
+// Mesma regra do state.js: USERPROFILE/.claude/island. Sem USERPROFILE nem HOME devolve None (nada de pasta relativa).
+fn state_dir() -> Option<PathBuf> {
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok()?;
+    Some(PathBuf::from(home).join(".claude").join("island"))
 }
 
 // Mesma carga do main.js: lista a pasta e lê os .json
@@ -64,6 +64,13 @@ fn read_state(dir: &PathBuf) -> String {
 }
 
 fn main() {
+    // Esta casca grava o batimento em USERPROFILE/.claude/island a cada 2 s e nunca responde a permissão. Fora do
+    // medidor (que define esta variável junto com um USERPROFILE descartável), isso faria o permission-hook real
+    // esperar até PERMISSION_WAIT_MS por uma decisão que não vem. Por isso só roda com a variável do medidor.
+    if std::env::var_os("ISLAND_SPIKE_ISOLATED").is_none() {
+        eprintln!("spike: recusa rodar sem ISLAND_SPIKE_ISOLATED (use scripts/measure-footprint.ps1, que isola o USERPROFILE)");
+        std::process::exit(1);
+    }
     let last = Arc::new(Mutex::new(EMPTY.to_string()));
     let for_pages = last.clone();
     tauri::Builder::default()
@@ -119,7 +126,7 @@ fn main() {
             let handle = app.handle().clone();
             let shared = last.clone();
             thread::spawn(move || {
-                let dir = state_dir();
+                let Some(dir) = state_dir() else { return };
                 let _ = fs::create_dir_all(&dir);
                 let mut tick = 0u64;
                 loop {

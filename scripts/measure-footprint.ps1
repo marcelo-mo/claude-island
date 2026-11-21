@@ -300,9 +300,11 @@ foreach ($scenario in $Scenarios) {
     foreach ($dir in $CleanDirs) { if (Test-Path $dir) { Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue } }
     $home1 = Join-Path $env:TEMP ("island-measure-{0}" -f [guid]::NewGuid().ToString('N'))
     Write-FakeSession $home1 $scenario
-    $names = @('USERPROFILE') + ($ExtraEnv | ForEach-Object { $_.Split('=')[0] })
+    $names = @('USERPROFILE', 'ISLAND_SPIKE_ISOLATED') + ($ExtraEnv | ForEach-Object { $_.Split('=')[0] })
     $saved = @{}; foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
     $env:USERPROFILE = $home1
+    # Opt-in que a casca Tauri exige para rodar: só o medidor, com USERPROFILE descartável, a libera.
+    $env:ISLAND_SPIKE_ISOLATED = '1'
     foreach ($pair in $ExtraEnv) { $k, $v = $pair.Split('=', 2); [Environment]::SetEnvironmentVariable($k, $v, 'Process') }
     # Start-Process rejeita -ArgumentList vazio (o Tauri sobe sem argumentos): só passa quando há algo.
     $launchArgs = @{}
