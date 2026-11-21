@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {
   menuTemplate, PREFERENCE_LABELS, ANIMATION_SPEED_STEPS, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES,
   ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, normalizePreferences, quarantinePath, isSessionFile, EXPAND_ON, OPACITY_LEVELS,
-  ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, PREFERENCES_VERSION, PREFERENCES_MAX_BYTES, PREFERENCE_VALIDATORS,
+  ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, PREFERENCES_VERSION, PREFERENCES_MAX_BYTES, PREFERENCE_VALIDATORS, registerShortcut,
 } = require('./state');
 
 // Lista de valores que cada chave do menu deve oferecer. Os planos seguintes acrescentam linhas aqui.
@@ -21,10 +21,44 @@ const checkedValue = (submenu) => submenu.submenu.filter((item) => item.checked)
 const submenuOf = (template, label) => template.find((item) => item.label === label);
 
 test('o menu padrão tem os itens, na ordem', () => {
+  const template = menuTemplate(DEFAULT_PREFERENCES, 'ok');
   assert.deepEqual(
-    menuTemplate(DEFAULT_PREFERENCES).map((item) => item.label),
+    template.slice(0, -3).map((item) => item.label),
     ['Tema', 'Forma', 'Estilo da animação', 'Velocidade da animação', 'Expandir', 'Fixar aberta', 'Âncora', 'Ilhas'],
   );
+  assert.equal(template.at(-3).type, 'separator');
+});
+
+test('registerShortcut chama register uma única vez e devolve ok, unavailable ou invalid', () => {
+  const run = (register) => {
+    const calls = [];
+    const onPress = () => {};
+    const status = registerShortcut((...args) => { calls.push(args); return register(); }, DEFAULT_SHORTCUT, onPress);
+    assert.equal(calls.length, 1, 'register chamado mais de uma vez');
+    assert.deepEqual(calls[0], [DEFAULT_SHORTCUT, onPress]);
+    return status;
+  };
+  assert.equal(run(() => true), 'ok');
+  assert.equal(run(() => false), 'unavailable');
+  assert.equal(run(() => 'yes'), 'unavailable');
+  assert.equal(run(() => { throw new Error('conversion failure'); }), 'invalid');
+});
+
+test('o menu termina em separador, informação do atalho desabilitada e Esconder, que só vale com o atalho registrado', () => {
+  for (const status of ['ok', 'unavailable', 'invalid', undefined]) {
+    const [separator, info, hide] = menuTemplate(DEFAULT_PREFERENCES, status).slice(-3);
+    assert.deepEqual(separator, { type: 'separator' });
+    assert.equal(info.enabled, false);
+    assert.equal(info.action, undefined);
+    assert.ok(info.label.includes(DEFAULT_SHORTCUT), `${status}: ${info.label}`);
+    assert.equal(hide.action, 'hide');
+    assert.equal(hide.enabled, status === 'ok');
+    assert.equal(hide.label, status === 'ok' ? 'Esconder' : 'Esconder (sem atalho para mostrar de novo)');
+  }
+  const infoOf = (status) => menuTemplate(DEFAULT_PREFERENCES, status).at(-2).label;
+  assert.match(infoOf('ok'), /^Atalho para mostrar e esconder: /);
+  assert.match(infoOf('unavailable'), /indisponível: outro programa já o usa$/);
+  assert.match(infoOf('invalid'), /inválido no preferences\.json$/);
 });
 
 test("'Ilhas' oferece uma por monitor (padrão), só no principal e no monitor do cursor", () => {

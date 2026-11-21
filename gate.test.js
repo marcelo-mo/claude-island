@@ -1087,3 +1087,36 @@ test('a ilha é posicionada só por setBounds, inclusive logo depois de criada',
   const code = mainSource.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
   assert.equal(/\.setPosition\(/.test(code), false, 'main.js posiciona por setPosition');
 });
+
+// Trava de regressão (texto): o atalho e o menu escondem e mostram a ilha, e nenhum dos dois decide nada.
+// O gate recusa com a janela escondida (windowVisible), então esconder só precisa nunca aprovar; reexibir
+// tem de passar pelo evento 'show', que rearma (T-04-14, T-04-15, TELA-02).
+test('esconder nunca decide, reexibir passa pelo rearme e o atalho é registrado uma vez', () => {
+  const bodyOf = (opening, closing = '\n}') => {
+    assert.equal(mainSource.split(opening).length - 1, 1, `ausente ou repetido no main.js: ${opening}`);
+    const rest = mainSource.slice(mainSource.indexOf(opening));
+    return rest.slice(0, rest.indexOf(closing));
+  };
+  const code = mainSource.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  const occurrences = (needle) => code.split(needle).length - 1;
+  assert.equal(occurrences('globalShortcut.register('), 1, 'o atalho é registrado uma vez');
+  assert.ok(
+    /registerShortcut\(\s*\(accelerator, onPress\) => globalShortcut\.register\(accelerator, onPress\)/.test(code),
+    'o registro passa por registerShortcut',
+  );
+  assert.ok(bodyOf("app.on('will-quit'", '\n  });').includes('globalShortcut.unregisterAll();'), 'o atalho é liberado em will-quit');
+  const hide = bodyOf('function setUserHidden(');
+  assert.equal(occurrences('showInactive('), 1, 'showInactive só em setUserHidden');
+  assert.ok(hide.includes('showInactive('));
+  assert.equal(/\.show\(\)/.test(code), false, 'main.js mostra a ilha por show()');
+  for (const forbidden of ['writeDecision', 'acceptDecision', 'decidedPermissionId']) {
+    assert.equal(hide.includes(forbidden), false, `setUserHidden toca em ${forbidden}`);
+  }
+  assert.ok(bodyOf('function createIsland(').includes('show: !userHidden,'), 'a ilha nova nasce escondida se o usuário a escondeu');
+  const hideListener = bodyOf("island.on('hide', () => {", '\n  });');
+  assert.ok(hideListener.includes('releaseCapture(island);') && hideListener.includes('updateCursorTick();'), 'esconder solta a captura e reavalia o timer');
+  assert.ok(mainSource.includes("island.on('show', () => refresh('rearm'))"));
+  assert.ok(bodyOf('function openMenu(').includes('menuTemplate(preferences, shortcutStatus)'));
+  const menuItem = bodyOf('function toMenuItem(');
+  assert.ok(/if \(item\.action === 'hide'\)/.test(menuItem) && menuItem.includes('setUserHidden(true)'));
+});
