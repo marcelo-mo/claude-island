@@ -103,6 +103,15 @@ function loadRendererRules() {
   return vm.runInNewContext(`${block}\n({ ${exported.join(', ')} })`, Object.create(null));
 }
 
+// O bloco das regras roda isolado acima; isto compila o script inteiro. Erro de sintaxe na cola ou
+// const repetida fora do bloco derrubariam o renderer sem botões, e o main seguiria com o batimento
+// no ar: o permission-hook esperaria um clique que não pode acontecer.
+test('o script inline do index.html compila inteiro', () => {
+  const scripts = [...rendererSource.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+  assert.equal(scripts.length, 1);
+  assert.doesNotThrow(() => new vm.Script(scripts[0], { filename: 'index.html' }));
+});
+
 test('as constantes do bloco do renderer são as do fixture', () => {
   const rules = loadRendererRules();
   assert.equal(rules.PERMISSION_ARM_MS, PERMISSION_ARM_MS);
