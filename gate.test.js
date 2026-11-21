@@ -333,6 +333,27 @@ test('a captura vem só de um booleano, sem a opção forward, e o arraste e o m
   assert.ok(bodyOf('function refresh(reason)').includes('updateCursorTick();'), 'o refresh religa e desliga o timer');
 });
 
+// Trava de regressão (texto): a âncora escolhe a posição padrão, a folga lateral (a mesma no clamp, no
+// fitsWorkArea e no gate) e invalida os deslocamentos salvos, que eram relativos à âncora antiga (T-04-11, T-04-13).
+test('a âncora escolhe a posição, a folga e zera os deslocamentos', () => {
+  const bodyOf = (opening, closing = '\n}') => {
+    assert.equal(mainSource.split(opening).length - 1, 1, `ausente ou repetido no main.js: ${opening}`);
+    const rest = mainSource.slice(mainSource.indexOf(opening));
+    return rest.slice(0, rest.indexOf(closing));
+  };
+  const anchored = 'anchorPosition(preferences.anchor, display.workArea, WINDOW_SIZE)';
+  assert.ok(bodyOf("ipcMain.on('island:drag-end'", '\n  });').includes(`const standard = ${anchored};`), 'o arraste mede o deslocamento a partir da âncora');
+  assert.ok(bodyOf("ipcMain.on('island:reset-position'", '\n  });').includes(`moveIsland(island, ${anchored}, display.workArea);`), 'o duplo clique volta à âncora');
+  assert.ok(bodyOf('function moveIsland(').includes('horizontalSlackFor(preferences.anchor)'), 'o clamp usa a folga da âncora');
+  assert.ok(bodyOf('function savedPosition(').includes('positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id], preferences.anchor)'));
+  const apply = bodyOf('function applyPreference(');
+  assert.ok(apply.includes('next.anchor !== preferences.anchor'), 'só trocar a âncora zera');
+  assert.ok(apply.includes('savedOffsets = {};') && apply.includes('persistSavedOffsets();'), 'zera e grava os deslocamentos');
+  assert.ok(apply.indexOf('savedOffsets = {};') < apply.indexOf('preferences = next;'), 'zera antes de valer a âncora nova');
+  const sync = apply.indexOf('syncIslands();');
+  assert.ok(sync > apply.indexOf('writePreferences();') && sync < apply.indexOf("refresh('rearm');"), 'reposiciona antes de rearmar');
+});
+
 // Trava de nomes (execução do texto): a casca Tauri do spike não pode ficar com um nome velho quando o
 // preload muda. Roda os dois arquivos com um electron e um window de mentira e compara as chaves.
 test('o shim da casca Tauri expõe os mesmos nomes do preload', () => {

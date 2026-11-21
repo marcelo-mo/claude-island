@@ -9,6 +9,7 @@ const {
   normalizePreferences, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES, isSessionFile,
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES,
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
+  anchorPosition, horizontalSlackFor, ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
 } = require('./state');
 const { applyHooks, updateSettingsFile, COMMAND, PERMISSION_COMMAND, PERMISSION_TIMEOUT_SECONDS } = require('./install');
 
@@ -361,4 +362,101 @@ test('só arquivo de sessão entra na leitura da pasta: o preferences.json nunca
   assert.equal(isSessionFile('preferences.json.tmp'), false);
   assert.equal(isSessionFile('preferences.json.1732200000000.bad'), false);
   assert.equal(isSessionFile(undefined), false);
+});
+
+// ---- Âncoras (D-13) ----
+
+// Segundo monitor a 125%, à esquerda do principal, medido na pesquisa da Fase 4.
+const SECONDARY_125_WORK_AREA = { x: -1536, y: 0, width: 1536, height: 824 };
+const BOTH_WORK_AREAS = [MONITOR_WORK_AREA, SECONDARY_125_WORK_AREA];
+
+test('anchorPosition: topo centro é a posição padrão nos dois monitores e âncora inválida vale topo centro', () => {
+  for (const workArea of BOTH_WORK_AREAS) {
+    const standard = defaultIslandPosition(workArea, WINDOW_SIZE);
+    assert.deepEqual(anchorPosition('top-center', workArea, WINDOW_SIZE), standard);
+    for (const anchor of ['meio', undefined, null, 'constructor', '__proto__', 7]) {
+      assert.deepEqual(anchorPosition(anchor, workArea, WINDOW_SIZE), standard, String(anchor));
+    }
+  }
+});
+
+test('anchorPosition: a pílula fica a 16 px da lateral e a 40 px da base, com a margem da sombra no palco', () => {
+  for (const workArea of BOTH_WORK_AREAS) {
+    for (const anchor of ANCHORS) {
+      const { x, y } = anchorPosition(anchor, workArea, WINDOW_SIZE);
+      if (anchor.endsWith('-left')) assert.equal(x + STAGE_SHADOW_PX, workArea.x + ANCHOR_SIDE_GAP_PX, anchor);
+      if (anchor.endsWith('-right')) {
+        assert.equal(x + WINDOW_SIZE.width - STAGE_SHADOW_PX, workArea.x + workArea.width - ANCHOR_SIDE_GAP_PX, anchor);
+      }
+      if (anchor.startsWith('top-')) assert.equal(y, workArea.y, anchor);
+      if (anchor.startsWith('bottom-')) {
+        assert.equal(y + WINDOW_SIZE.height - STAGE_SHADOW_PX, workArea.y + workArea.height - ANCHOR_BOTTOM_GAP_PX, anchor);
+      }
+    }
+  }
+});
+
+test('horizontalSlackFor: centro e inválida 60/60, esquerda 20/100, direita 100/20, e a soma com a expandida é o palco', () => {
+  for (const anchor of ['top-center', 'bottom-center', 'meio', undefined, null, 'constructor']) {
+    assert.deepEqual({ ...horizontalSlackFor(anchor) }, { left: 60, right: 60 }, String(anchor));
+  }
+  for (const anchor of ['top-left', 'bottom-left']) assert.deepEqual({ ...horizontalSlackFor(anchor) }, { left: 20, right: 100 });
+  for (const anchor of ['top-right', 'bottom-right']) assert.deepEqual({ ...horizontalSlackFor(anchor) }, { left: 100, right: 20 });
+  for (const anchor of ANCHORS) {
+    const { left, right } = horizontalSlackFor(anchor);
+    assert.equal(left + EXPANDED_PILL_WIDTH_PX + right, WINDOW_SIZE.width, anchor);
+  }
+  assert.notEqual(horizontalSlackFor('top-left'), horizontalSlackFor('top-left'), 'sempre um objeto novo');
+});
+
+test('a posição de cada âncora está dentro da área útil e o clamp a devolve intacta, nos dois monitores', () => {
+  for (const workArea of BOTH_WORK_AREAS) {
+    for (const anchor of ANCHORS) {
+      const position = anchorPosition(anchor, workArea, WINDOW_SIZE);
+      const slack = horizontalSlackFor(anchor);
+      assert.equal(isWithinWorkArea({ ...position, ...WINDOW_SIZE }, workArea, slack), true, anchor);
+      assert.deepEqual(clampIslandPosition(position, workArea, WINDOW_SIZE, slack), position, anchor);
+    }
+  }
+});
+
+test('a pílula de canto nunca sai da tela: o clamp a prende e o gate recusa a janela além da folga', () => {
+  const workArea = MONITOR_WORK_AREA;
+  const right = workArea.x + workArea.width;
+  const clampFor = (anchor, x) => clampIslandPosition({ x, y: 0 }, workArea, WINDOW_SIZE, horizontalSlackFor(anchor));
+  // A pílula expandida é a janela menos a margem da sombra do lado ancorado.
+  assert.equal(clampFor('top-left', -5000).x + STAGE_SHADOW_PX, workArea.x);
+  assert.equal(clampFor('top-left', 5000).x + STAGE_SHADOW_PX + EXPANDED_PILL_WIDTH_PX, right);
+  assert.equal(clampFor('top-right', -5000).x + WINDOW_SIZE.width - STAGE_SHADOW_PX - EXPANDED_PILL_WIDTH_PX, workArea.x);
+  assert.equal(clampFor('top-right', 5000).x + WINDOW_SIZE.width - STAGE_SHADOW_PX, right);
+
+  const left = horizontalSlackFor('top-left');
+  assert.equal(isWithinWorkArea({ x: workArea.x - left.left, y: 0, ...WINDOW_SIZE }, workArea, left), true);
+  assert.equal(isWithinWorkArea({ x: workArea.x - left.left - 3, y: 0, ...WINDOW_SIZE }, workArea, left), false);
+  const mirror = horizontalSlackFor('top-right');
+  const edgeX = right - WINDOW_SIZE.width + mirror.right;
+  assert.equal(isWithinWorkArea({ x: edgeX, y: 0, ...WINDOW_SIZE }, workArea, mirror), true);
+  assert.equal(isWithinWorkArea({ x: edgeX + 3, y: 0, ...WINDOW_SIZE }, workArea, mirror), false);
+});
+
+test('positionFromSavedOffset com âncora soma o deslocamento à posição dela; sem âncora segue o topo centro', () => {
+  const offset = { x: 30, y: 12 };
+  for (const anchor of ANCHORS) {
+    const base = anchorPosition(anchor, MONITOR_WORK_AREA, WINDOW_SIZE);
+    assert.deepEqual(positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset, anchor), { x: base.x + 30, y: base.y + 12 }, anchor);
+    assert.deepEqual(positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, undefined, anchor), base, `${anchor} sem deslocamento`);
+  }
+  assert.deepEqual(
+    positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset),
+    positionFromSavedOffset(MONITOR_WORK_AREA, WINDOW_SIZE, offset, 'top-center'),
+  );
+});
+
+test('isWithinWorkArea com folga em objeto: lado ausente, NaN ou texto devolve false; número vale nos dois lados', () => {
+  const bounds = { ...anchorPosition('top-left', MONITOR_WORK_AREA, WINDOW_SIZE), ...WINDOW_SIZE };
+  assert.equal(isWithinWorkArea(bounds, MONITOR_WORK_AREA, { left: 20, right: 100 }), true);
+  for (const slack of [{ left: 20 }, { right: 100 }, { left: NaN, right: 100 }, { left: '20', right: 100 }, '20', null, {}]) {
+    assert.equal(isWithinWorkArea(bounds, MONITOR_WORK_AREA, slack), false, JSON.stringify(slack));
+  }
+  assert.equal(isWithinWorkArea({ ...bounds, x: -60 }, MONITOR_WORK_AREA, 60), true, 'número vale para os dois lados, como hoje');
 });

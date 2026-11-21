@@ -13,6 +13,7 @@ const VALUES_BY_KEY = {
   animationStyle: ANIMATION_STYLES,
   animationSpeed: ANIMATION_SPEED_STEPS,
   expandOn: EXPAND_ON,
+  anchor: ANCHORS,
 };
 
 const checkedValue = (submenu) => submenu.submenu.filter((item) => item.checked).map((item) => item.value);
@@ -21,8 +22,17 @@ const submenuOf = (template, label) => template.find((item) => item.label === la
 test('o menu padrão tem os itens, na ordem', () => {
   assert.deepEqual(
     menuTemplate(DEFAULT_PREFERENCES).map((item) => item.label),
-    ['Tema', 'Forma', 'Estilo da animação', 'Velocidade da animação', 'Expandir', 'Fixar aberta'],
+    ['Tema', 'Forma', 'Estilo da animação', 'Velocidade da animação', 'Expandir', 'Fixar aberta', 'Âncora'],
   );
+});
+
+test("'Âncora' oferece as seis posições, com o rótulo de cada uma, e marca a atual", () => {
+  const anchor = submenuOf(menuTemplate(DEFAULT_PREFERENCES), 'Âncora');
+  assert.deepEqual(anchor.submenu.map((item) => item.label), [
+    'Topo, centro', 'Topo, esquerda', 'Topo, direita', 'Base, centro', 'Base, esquerda', 'Base, direita',
+  ]);
+  assert.deepEqual(checkedValue(anchor), ['top-center']);
+  assert.deepEqual(checkedValue(submenuOf(menuTemplate({ anchor: 'bottom-right' }), 'Âncora')), ['bottom-right']);
 });
 
 test("'Expandir' oferece hover e clique, e 'Fixar aberta' grava o oposto do valor atual", () => {
