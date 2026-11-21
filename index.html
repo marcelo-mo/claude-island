@@ -68,6 +68,10 @@
       --perm-label: var(--text);
     }
   }
+  /* Registrar o acento como cor deixa a troca de estado interpolar a cor em tudo que deriva dele (lavagem,
+     contorno, brilho e ponto), como o lerp do mod Dynamic Island for Windows (τ = 0,18 s; MIT, Copyright (c)
+     2026 devcode90; ver THIRD_PARTY_NOTICES.md). O bloco do pedido não usa o acento: tem tokens próprios e opacos. */
+  @property --accent { syntax: '<color>'; inherits: true; initial-value: transparent; }
   /* Temas escuros: só fundo, superfície, texto, secundário e borda mudam (as cores de estado são fixas).
      Valores do mod Dynamic Island for Windows (MIT, Copyright (c) 2026 devcode90; ver THIRD_PARTY_NOTICES.md);
      o Nord usa também a paleta Nord (MIT, Copyright (c) 2016-present Sven Greb), creditada no mesmo arquivo. */
@@ -120,7 +124,7 @@
     display: grid; grid-template-columns: var(--content-width, 1fr); justify-content: center; grid-template-rows: 46px auto auto;
     align-items: center; overflow: hidden; text-align: center;
     transition: opacity .25s, box-shadow .3s, border-radius .3s ease,
-                scale .25s ease, translate .25s ease;
+                scale .25s ease, translate .25s ease, --accent .18s ease-out;
     box-shadow: 0 0 0 1px var(--contour), var(--shadow);
     cursor: grab;
     /* Amplia a partir do centro do topo: o topo não anda e a pílula não sobe no palco. */
