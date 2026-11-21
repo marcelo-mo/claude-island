@@ -1,0 +1,1 @@
+No external API integration: a fase mexe só em entrada do mouse, menu e atalho do Electron, preferências locais e lógica pura de tela cheia; o sensor Win32 (chamada local ao SO, não serviço) ficou fora por D-20.

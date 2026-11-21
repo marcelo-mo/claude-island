@@ -61,8 +61,8 @@ Requisitos: HOV-01..04, PREF-01..06, TELA-01..02. Fora: troca de sessão por rod
   (imune a `__proto__` e chave extra), devolve sempre o objeto completo, valor inválido volta ao
   padrão da chave, nunca lança. Leitura com teto de tamanho (64 KB).
 - **D-07:** Só o main grava, por `.tmp` + `renameSync` (padrão de `writeDecision`). JSON inválido na
-  subida: o arquivo é renomeado para `preferences.json.bad` (fora do filtro `*.json` de sessões) e
-  valem os padrões. `positions.json` passa a gravar do mesmo jeito.
+  subida: o arquivo é renomeado para `preferences.json.<carimbo>.bad` (`quarantinePath`; o carimbo
+  impede sobrescrever uma cópia anterior; fica fora do filtro `*.json` de sessões) e valem os padrões. `positions.json` passa a gravar do mesmo jeito.
 - **D-08:** Menu nativo (`Menu.buildFromTemplate` + `menu.popup({ window })`, sem x/y), aberto por
   `contextmenu` no renderer → `island:menu` **sem argumentos**. Itens e valores vêm de constantes do
   main, com o valor atual marcado (radio/checkbox). Rótulos em pt-BR. Um menu por vez (`menuOpen`;
@@ -77,7 +77,9 @@ Requisitos: HOV-01..04, PREF-01..06, TELA-01..02. Fora: troca de sessão por rod
 - **D-10:** Padrão `Control+Alt+Shift+C`. Ctrl+Alt+C foi medido na pesquisa: produz `¢` com AltGr+C
   no ABNT2 do autor, logo conflita, e `register()` não enxerga esse conflito. Nenhuma letra produz
   caractere com Ctrl+Alt+Shift no ABNT2 nem no US.
-- **D-11:** O acelerador é editável só no JSON (`shortcut`), sem UI de captura de tecla.
+- **D-11:** O acelerador é editável só no JSON (`shortcut`), sem UI de captura de tecla; o valor só é
+  aceito no formato de acelerador do Electron com letras, dígitos e `+` (`SHORTCUT_PATTERN`), senão
+  volta ao padrão.
   `register` dentro de `try/catch`, sem retry em laço; status `ok` / `unavailable` (tomado por outro
   processo) / `invalid` (string que lança). O menu mostra o atalho atual e, se o status não for `ok`,
   um item desabilitado avisando que o atalho não pôde ser registrado. `unregisterAll()` em
@@ -128,6 +130,15 @@ Requisitos: HOV-01..04, PREF-01..06, TELA-01..02. Fora: troca de sessão por rod
   evidência no SUMMARY, e o PR lista isso como item a confirmar pelo autor antes do merge. Se a
   conferência falhar, TELA-01 fica fora e o restante da fase segue. — **Reversibility:** costly —
   sair do `koffi` depois exige trocar o sensor por um helper PowerShell residente (28 MB medidos).
+  - **Autorização do autor:** NÃO CONCEDIDA (2026-11-21). O orquestrador confirmou que o Marcelo aprovou
+    o requisito TELA-01, mas nunca o pacote `koffi`. Vale o ramo "reprovado": nada de chamada de rede
+    nem de `pnpm add`; o sensor de tela cheia fica fora desta entrega; o fato `coveredByFullscreen`
+    segue por monitor no gate (sem sensor, nenhum monitor é marcado coberto); TELA-01 vai no PR como
+    pendente de escolha do autor entre (1) `koffi@3.3.8` com `allowBuilds: { koffi: false }`
+    (+5,0 a +5,1 MB de private working set, 7,8 µs por sondagem, medidos na pesquisa) e (2) sem
+    dependência nova: um processo PowerShell filho único e persistente com P/Invoke em `user32`, no
+    padrão do `window.js`, consultado por stdin (28,3 MB numa amostra; CPU a 2 Hz não medida; um
+    spawn por sondagem custaria ~0,45 s e está descartado).
 
 ### Achado herdado da Fase 3: sombra cortada no topo
 - **D-21:** `--stage-top` (8 px) é menor que o alcance da sombra para cima (9 px: desfoque 14 −

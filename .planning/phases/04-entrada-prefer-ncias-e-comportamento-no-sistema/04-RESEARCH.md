@@ -363,18 +363,27 @@ coveredByFullscreen: display ? fullscreenByDisplay.has(display.id) : true,
 | A11 | Regra "lembrar HWND coberto" é o comportamento desejado quando o foco vai para o outro monitor | Pattern 5 | Ilha reaparece sobre o vídeo (se for só foreground) ou fica escondida demais; decisão de produto (Open Question 3) |
 | A12 | Menu aberto não deve ficar acessível por teclado (a ilha é só de mouse) | Pattern 3 | Acessibilidade limitada, igual à ilha de hoje |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> Todas resolvidas no `04-CONTEXT.md` (discuss `--auto`, 2026-11-21); a decisão de cada uma está no fim do item.
 
 1. **Local do `preferences.json` (conflito com a D-16 da Fase 3)**
    - What we know: D-16 manda ler `~/.claude/island/preferences.json`; `readSessions` varre `*.json` dessa pasta; a pesquisa de arquitetura do projeto previa `userData` (ao lado de `positions.json`).
    - What's unclear: se o autor quer o arquivo no mesmo lugar do barramento.
    - Recommendation: **honrar a D-16** (decisão travada de fase anterior, evita migração) e, no mesmo plano, fazer `readSessions` ignorar `preferences.json` com teste e deixar a regra registrada para o SESS-07 (Fase 5). Alternativa aceitável: `userData`, lendo o caminho antigo uma vez. Decidir no início do plan-phase.
+   - **RESOLVED: D-01, D-06, D-07 — fica em `~/.claude/island/`; a Fase 3 já o exclui de `readSessions` por `isSessionFile`.**
 2. **Padrão do atalho:** `Control+Alt+Shift+C` (recomendado) ou `Control+Shift+Alt+F12` (nenhuma tecla de função gera caractere; mais difícil de digitar). Só a pessoa escolhe; nos dois casos `shortcut` é editável no JSON (sem UI de captura de tecla).
+   - **RESOLVED: D-10, D-11 — `Control+Alt+Shift+C`.**
 3. **Regra de tela cheia:** só primeiro plano (simples, como o mod) ou primeiro plano + HWND lembrado (recomendado, Pattern 5). E: o atalho de mostrar deve vencer a tela cheia? Recomendação: não.
+   - **RESOLVED: D-18, D-12 — primeiro plano + HWND lembrado; o atalho não vence a tela cheia.**
 4. **Modo "monitor do cursor":** recomendado mover a ilha só sem pedido na tela. Confirmar.
+   - **RESOLVED: D-15 — troca de monitor só sem pedido na tela.**
 5. **Transparência:** janela inteira (`setOpacity`, medido, texto também translúcido) ou só o preenchimento. O mod lista "Preenchimento: cor de fundo × opacidade (35–100%)" na descrição do material e "Transparency (100/85/70/55%)" no menu; não confirmei se o item do menu age no preenchimento ou na janela. Recomendação: `setOpacity` (menor diff, dono único do fato de pedido); trocar se o autor achar o texto fraco a 55%.
+   - **RESOLVED: D-16 — `setOpacity` da janela inteira.**
 6. **"Fixar aberta" em `done`:** hoje `done` não expande no hover porque o botão "Abrir" precisa ficar parado (`index.html:365-366`). Recomendação: o pin segue a mesma regra (não expande `done`). Confirmar.
+   - **RESOLVED: D-05 — o pin não expande `done`.**
 7. **Itens que exigem uma pessoa na tela:** CHK-01 a CHK-08 abaixo.
+   - **RESOLVED: viram a lista "Testar manualmente" do PR (`04-VALIDATION.md`, Manual-Only).**
 
 ## Environment Availability
 

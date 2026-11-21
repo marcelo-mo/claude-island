@@ -115,7 +115,26 @@ Plans:
   3. O clique direito abre um menu com tema, forma, estilo e velocidade da animação, expandir no hover/clique, fixar aberta, transparência, âncora e esconder; as escolhas voltam iguais após reiniciar, e um arquivo de preferências corrompido ou antigo não impede a ilha de subir (cada valor inválido volta ao padrão)
   4. Um atalho global esconde e mostra a ilha (Ctrl+Alt+C se não conflitar com AltGr+C no ABNT2, senão outro padrão sem conflito; se não registrar, o menu avisa); esconder nunca aprova nada e reexibir rearma os botões; a âncora (topo central, cantos, base) e o arraste preso ao monitor da própria ilha funcionam; o modo "uma ilha só" é opcional e a transparência de 100/85/70/55% nunca vale com pedido na tela
   5. No Windows, quando um app ocupa o monitor inteiro a ilha daquele monitor some e volta quando ele sai (desktop e a própria ilha não contam); um pedido de permissão nessa hora só toca o som, a ilha não reaparece por cima e o terminal segue valendo
-**Plans**: TBD
+**Plans**: 6 plans (sequenciais: de 01 a 05 todos editam `main.js` e `gate.test.js`; o 06 fecha com ferramenta e documentação)
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — Traçador: menu nativo do clique direito grava a escolha por .tmp + rename e rearma ao abrir e fechar; esquema completo das preferências com quarentena `.bad` (PREF-01, PREF-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md — Hover pela posição do cursor (main entrega o ponto, renderer decide com histerese 2/8 px, captura sem forward); expandir no hover ou no clique e fixar aberta (HOV-01..04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-03-PLAN.md — Seis âncoras com folga por âncora no clamp e no gate, setBounds depois de criar (125%), uma ilha só no principal ou no monitor do cursor (PREF-04, PREF-05)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 04-04-PLAN.md — Atalho global Ctrl+Alt+Shift+C esconde e mostra (reexibir rearma), aviso no menu; transparência 100/85/70/55% nunca com pedido na tela (PREF-03, PREF-06, TELA-02)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 04-05-PLAN.md — Sem dependência nova (D-20: autorização do koffi NÃO CONCEDIDA): visibilidade combinada por `applyVisibility`, fato `coveredByFullscreen` por monitor no gate, atalho por `nextUserHidden` e a regra pura `nextFullscreen` à espera do sensor (TELA-02; TELA-01 só em parte)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 04-06-PLAN.md — `scripts/human-checks.js` com `--selftest` (ilha parada, atalho tomado distinto de sem disparo), README e a lista "Testar manualmente" do PR com TELA-01 pendente da escolha do sensor, D-21 e o respiro da pílula expandida (HOV-02, PREF-01, PREF-03)
 **UI hint**: yes
 **Research flag**: sim. DPI a 125% e arredondamento de `getBounds()`; hover com terminal elevado (UIPI); `Menu.popup` em janela `focusable:false` (fallback: menu em HTML dentro do palco); AltGr+C no ABNT2 e `register()==false`; `koffi` no Electron 45 e com `allowBuilds` do pnpm 11 (ou a crate `windows` se o Tauri vencer).
 
