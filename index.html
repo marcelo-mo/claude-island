@@ -237,15 +237,15 @@
      cima = sessão anterior = ponto de cima). Só aparece expandida, a pedido do autor; na compacta o título com
      o projeto já diz que há várias sessões. Fica fora do grid e dos 400 px da expandida, então a conta do palco
      e a folga das bordas não mudam: o conteúdo cede 16 px à direita (40 = 12 da borda + 16 do botão + 12 de
-     folga) e o ponto fica a 20 px da borda, dentro do recorte do raio de 36 px. A coluna tem altura fixa, a da
-     expandida mais baixa (104) menos 8 px em cima e embaixo: a pílula crescer (janela, pedido, mola) não move os
-     pontos. Com pedido na tela a faixa fica reservada mesmo sem pontos, para outra sessão aparecer ou sair
+     folga) e o ponto fica a 20 px da borda, dentro do recorte do raio de 36 px. A coluna vai de 8 px do topo a
+     8 px do pé e centra os pontos na altura da pílula, a pedido do autor: com pedido ou detalhe na tela a pílula
+     cresce e os pontos acompanham o meio dela (eles não aprovam nada; Permitir e Negar não se movem por isso). Com pedido na tela a faixa fica reservada mesmo sem pontos, para outra sessão aparecer ou sair
      (1 ↔ 2, 8 ↔ 9) nunca mover Permitir e Negar. Cor = estado (fixa nos temas, nunca o acento); o ponto da
      sessão exibida é maior. O botão tem 16 px para ser fácil de acertar.
-     ponytail: na coluna de 88 px cabem 5 botões de 16 px; com 6 a 8 sessões eles encolhem até 10 px. Se
+     ponytail: na expandida mais baixa a coluna tem 88 px e cabem 5 botões de 16 px; com 6 a 8 sessões eles encolhem até 10 px. Se
      incomodar, crescer a coluna nas expandidas mais altas. */
   #sessions {
-    position: absolute; right: 12px; top: 8px; height: 88px;
+    position: absolute; right: 12px; top: 8px; bottom: 8px;
     display: flex; flex-direction: column; justify-content: center; align-items: center;
   }
   #pill:not(.expanded) #sessions, #sessions[hidden] { display: none; }

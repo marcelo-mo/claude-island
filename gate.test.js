@@ -1520,12 +1520,13 @@ test('a pílula compacta tem teto na largura da expandida e os pontos são uma c
   // Entre o conteúdo e a coluna sobra pelo menos a distância da coluna à borda, e o ponto fica a 20 px da borda.
   assert.ok(cssPixels(gutter['padding-right'], 'padding-right') - right - buttonWidth >= right, 'folga entre o conteúdo e a coluna');
   assert.equal(right + buttonWidth / 2, 20);
-  // A coluna tem altura fixa (a pílula crescer não move os pontos), cabe na expandida mais baixa com a mesma
-  // margem em cima e embaixo, e 8 pontos no tamanho mínimo cabem nela.
-  assert.equal(column.bottom, undefined);
+  // A coluna centra os pontos na altura da pílula (pedido do autor): mesma margem em cima e embaixo, sem altura
+  // fixa, e 8 pontos no tamanho mínimo cabem nela já na expandida mais baixa.
+  assert.equal(column.height, undefined);
+  assert.equal(column['justify-content'], 'center');
   const top = cssPixels(column.top, 'top de #sessions');
-  const height = cssPixels(column.height, 'altura de #sessions');
-  assert.equal(top + height + top, cssPixels(cssDeclarations('#pill.expanded').height, 'altura da expandida'));
+  assert.equal(cssPixels(column.bottom, 'bottom de #sessions'), top);
+  const height = cssPixels(cssDeclarations('#pill.expanded').height, 'altura da expandida') - 2 * top;
   assert.ok(8 * cssPixels(button['min-height'], 'min-height') <= height);
   const render = functionBody('renderContent');
   assert.ok(render.includes("pill.classList.toggle('multi-session', "));
