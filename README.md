@@ -156,9 +156,11 @@ ociosa, a pílula fica invisível e sem `pointer-events`, e os cliques passam pa
   [`docs/INTEGRACOES.md`](docs/INTEGRACOES.md); `scripts/measure-coexistence.ps1` mede as duas ilhas juntas
   por 5 minutos, só lendo as janelas.
 - **Tela cheia (só no Windows).** A ilha do monitor ocupado por um app em tela cheia (vídeo em F11, jogo,
-  apresentação) some e volta quando ele sai, minimiza ou some na troca de área de trabalho virtual, com até
-  0,5 s de atraso. Janela maximizada, área de trabalho e barra de tarefas não contam, e focar outro monitor não
-  a traz de volta. Com a ilha coberta, um pedido de permissão só toca o som: responda no terminal ou na ilha
+  apresentação) some e volta quando ele fecha, minimiza ou some na troca de área de trabalho virtual, ou quando
+  sai da tela cheia com o foco naquele monitor, com até 0,5 s de atraso. Focar outro monitor não a traz de volta.
+  Área de trabalho e barra de tarefas não contam, nem janela maximizada com a barra de tarefas visível; com a
+  barra em "ocultar automaticamente", uma janela maximizada que ocupa o monitor inteiro pode contar como tela
+  cheia. Com a ilha coberta, um pedido de permissão só toca o som: responda no terminal ou na ilha
   de um monitor descoberto. O atalho não mostra a ilha por cima da tela cheia. Custa uma dependência nativa
   (koffi, cerca de +5 MB de memória, carregada só no Windows). No macOS e no Linux a ilha continua por cima e
   o atalho a tira do caminho.
