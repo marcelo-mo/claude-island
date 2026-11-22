@@ -139,6 +139,9 @@ Requisitos: HOV-01..04, PREF-01..06, TELA-01..02. Fora: troca de sessão por rod
     dependência nova: um processo PowerShell filho único e persistente com P/Invoke em `user32`, no
     padrão do `window.js`, consultado por stdin (28,3 MB numa amostra; CPU a 2 Hz não medida; um
     spawn por sondagem custaria ~0,45 s e está descartado).
+  - **Autorização do autor:** CONCEDIDA (2026-11-22, koffi@3.3.8). O Marcelo aceitou a recomendação
+    (repassada pelo orquestrador); o sensor entrou pela tarefa rápida 261122-03w, com a conferência de
+    cadeia de suprimentos no SUMMARY dela.
 
 ### Achado herdado da Fase 3: sombra cortada no topo
 - **D-21:** `--stage-top` (8 px) é menor que o alcance da sombra para cima (9 px: desfoque 14 −
