@@ -748,6 +748,48 @@ function clampIslandPosition(position, workArea, windowSize, horizontalSlack) {
   };
 }
 
+// Respiro de cima do palco e altura da pílula compacta no CSS (--stage-top e #pill): o arraste os usa para manter
+// a pílula sob o cursor quando o palco troca de lado.
+const STAGE_TOP_PX = 8;
+const COMPACT_PILL_HEIGHT_PX = 46;
+// Lado do palco em que a pílula fica: em cima ela cresce para baixo, embaixo ela cresce para cima.
+const STAGE_EDGES = Object.freeze(['top', 'bottom']);
+
+/**
+ * Lado do palco da ilha, 'top' ou 'bottom'. Vale o `edge` do deslocamento salvo, se for um dos dois (o arquivo é
+ * editável à mão); senão o da âncora: as de baixo ficam embaixo e as demais em cima. Nunca lança.
+ */
+function stageEdgeOf(offset, anchor) {
+  if (STAGE_EDGES.includes(offset?.edge)) return offset.edge;
+  return ANCHORS.includes(anchor) && anchor.startsWith('bottom-') ? 'bottom' : 'top';
+}
+
+// Distância do topo da janela ao topo da pílula compacta em cada lado do palco.
+function pillTopOffset(edge, windowSize) {
+  return edge === 'bottom' ? windowSize.height - STAGE_SHADOW_PX - COMPACT_PILL_HEIGHT_PX : STAGE_TOP_PX;
+}
+
+/**
+ * Posição da janela e lado do palco durante o arraste, `{ position, edge }`. `start` é a posição da janela no
+ * começo do arraste, `startEdge` o lado do palco nesse momento e `delta` o deslocamento total do cursor. O arraste
+ * anda com a pílula, não com a janela: com a pílula no topo de uma janela de 410 px presa à área útil, ela parava
+ * no meio da tela. Com o centro da pílula compacta abaixo do meio da área útil, o palco passa para baixo e cresce
+ * para cima, como nas âncoras de baixo, e a janela salta para a pílula ficar sob o cursor. A janela continua
+ * inteira na área útil (clampIslandPosition), então o gate (isWithinWorkArea) vale nos dois lados: um pedido nunca
+ * fica fora da área visível. `startEdge` desconhecido vale 'top'.
+ * ponytail: na forma Notch o respiro de cima é 0, e a pílula pula 8 px na troca de lado; numa área útil abaixo de
+ * ~734 px de altura a janela do lado de baixo encosta no topo e a pílula também pula. Passar a forma e a altura
+ * real da pílula se isso incomodar.
+ */
+function dragPosition(input) {
+  const { start, startEdge, delta, workArea, windowSize, horizontalSlack } = input;
+  const fromEdge = STAGE_EDGES.includes(startEdge) ? startEdge : 'top';
+  const pillTop = start.y + pillTopOffset(fromEdge, windowSize) + delta.y;
+  const edge = pillTop + COMPACT_PILL_HEIGHT_PX / 2 > workArea.y + workArea.height / 2 ? 'bottom' : 'top';
+  const wanted = { x: start.x + delta.x, y: pillTop - pillTopOffset(edge, windowSize) };
+  return { position: clampIslandPosition(wanted, workArea, windowSize, horizontalSlack), edge };
+}
+
 /**
  * Ids de monitor que têm ilha, num array novo, a partir de `{ mode, displayIds, primaryId,
  * cursorDisplayId, currentIds, hasPermission }`. 'perDisplay' (o padrão, e também o que vale para modo
@@ -1020,6 +1062,7 @@ module.exports = {
   PERMISSION_TOOL_LIMIT,
   eventToState, keepsPermission, permissionRequest, validPermission, decisionOutput, acceptDecision, isHeartbeatFresh,
   pickState, contextUsage, defaultIslandPosition, clampIslandPosition, isWithinWorkArea,
+  STAGE_TOP_PX, COMPACT_PILL_HEIGHT_PX, STAGE_EDGES, stageEdgeOf, dragPosition,
   sessionList, nextSelection, isSessionDead,
   wheelStep, WHEEL_NOTCH_DELTA, WHEEL_GESTURE_PAUSE_MS, WHEEL_STEP_MS, WHEEL_PRECISE_STEP_MS, WHEEL_DELTA_MAX,
   SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS,

@@ -6,6 +6,7 @@ const { pathToFileURL } = require('node:url');
 const {
   STATE_DIR, DECISIONS_DIR, HEARTBEAT_FILE, HEARTBEAT_INTERVAL_MS, PERMISSION_WAIT_MS,
   pickState, sessionList, nextSelection, wheelStep, WHEEL_DELTA_MAX, SNAP_WHEEL_LOCK_MS, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
+  stageEdgeOf, dragPosition,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
   effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem, isSessionDead, nextFullscreen,
@@ -32,8 +33,8 @@ const CAN_CLICK_THROUGH = process.platform !== 'linux';
 
 // Uma janela por monitor, indexada por display.id.
 const islands = new Map();
-// Posição da janela no início do arraste em curso, por janela. Também é o que diz
-// "esta janela está sendo arrastada".
+// Posição da janela no início do arraste em curso, por janela, com o lado do palco no início (startEdge) e o
+// atual (edge). Também é o que diz "esta janela está sendo arrastada".
 const dragStartPositions = new Map();
 // Deslocamento escolhido pelo usuário em relação à posição padrão, por display.id.
 // ponytail: o display.id do Electron no Windows deriva do monitor/porta e pode mudar entre
@@ -215,10 +216,11 @@ function writePreferences() {
 // mover botões sob o cursor, então termina em rearme (SEG-02, D-09).
 function applyPreference(key, value) {
   const next = normalizePreferences({ ...preferences, [key]: value });
-  if (JSON.stringify(next) === JSON.stringify(preferences)) return;
-  if (next.anchor !== preferences.anchor) {
-    // Os deslocamentos salvos eram relativos à âncora antiga: aplicá-los à nova jogaria a ilha num lugar
-    // sem sentido.
+  // Escolher de novo a âncora já marcada é o jeito do menu de voltar à posição padrão: segue mesmo sem mudança.
+  if (JSON.stringify(next) === JSON.stringify(preferences) && key !== 'anchor') return;
+  if (key === 'anchor') {
+    // Trocar de âncora: os deslocamentos salvos eram relativos à antiga e jogariam a ilha num lugar sem sentido.
+    // Reescolher a mesma: toda ilha volta à posição padrão dela, como no duplo clique (a âncora vale para todas).
     savedOffsets = {};
     persistSavedOffsets();
   }
@@ -485,9 +487,12 @@ function sendState(island, userSwitched = false) {
   // Só pode desabilitar: o gate continua sendo quem decide.
   const display = displayOf(island);
   const fitsWorkArea = fitsVisibleArea(island, display);
+  // Lado do palco em que a pílula fica nesta ilha: o do arraste em curso, senão o salvo (ou o da âncora).
+  const drag = dragStartPositions.get(island);
+  const stageEdge = drag ? drag.edge : stageEdgeOf(display && savedOffsets[display.id], preferences.anchor);
   island.webContents.send(
     'island:state',
-    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea },
+    { ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea, stageEdge },
     shouldChime,
   );
 }
@@ -690,20 +695,35 @@ function registerIpcHandlers() {
     const island = islandOf(event);
     const display = island && displayOf(island);
     if (!display || !Number.isFinite(deltaX) || !Number.isFinite(deltaY)) return;
-    if (!dragStartPositions.has(island)) dragStartPositions.set(island, island.getBounds());
-    const start = dragStartPositions.get(island);
-    moveIsland(island, { x: start.x + deltaX, y: start.y + deltaY }, display.workArea);
+    if (!dragStartPositions.has(island)) {
+      const edge = stageEdgeOf(savedOffsets[display.id], preferences.anchor);
+      dragStartPositions.set(island, { bounds: island.getBounds(), startEdge: edge, edge });
+    }
+    const drag = dragStartPositions.get(island);
+    const { position, edge } = dragPosition({
+      start: drag.bounds, startEdge: drag.startEdge, delta: { x: deltaX, y: deltaY },
+      workArea: display.workArea, windowSize: WINDOW_SIZE, horizontalSlack: horizontalSlackFor(preferences.anchor),
+    });
+    moveIsland(island, position, display.workArea);
+    // O palco trocou de lado no meio do arraste: o renderer realinha a pílula já, para ela seguir sob o cursor.
+    // Os botões que mudam de lugar rearmam no fim do arraste (island:drag-end).
+    if (edge !== drag.edge) {
+      drag.edge = edge;
+      sendState(island);
+    }
   });
 
   ipcMain.on('island:drag-end', (event) => {
     const island = islandOf(event);
     const display = island && displayOf(island);
-    if (!display || !dragStartPositions.delete(island)) return;
+    const drag = island && dragStartPositions.get(island);
+    if (!display || !drag) return;
+    dragStartPositions.delete(island);
     // O arraste segurava a captura; terminado, volta o último pedido do renderer.
     applyCapture(island);
     const standard = anchorPosition(preferences.anchor, display.workArea, WINDOW_SIZE);
     const bounds = island.getBounds();
-    savedOffsets[display.id] = { x: bounds.x - standard.x, y: bounds.y - standard.y };
+    savedOffsets[display.id] = { x: bounds.x - standard.x, y: bounds.y - standard.y, edge: drag.edge };
     persistSavedOffsets();
     // Soltar a ilha pode deixar um botão sob o cursor parado, e o renderer não percebe o movimento da
     // janela: sem rearmar, o armamento antigo valeria (SEG-02).

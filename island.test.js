@@ -9,6 +9,7 @@ const {
   normalizePreferences, DEFAULT_PREFERENCES, THEMES, SHAPES, ANIMATION_STYLES, isSessionFile,
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES,
   WINDOW_SIZE, HORIZONTAL_SLACK, isWithinWorkArea, positionFromSavedOffset,
+  STAGE_TOP_PX, COMPACT_PILL_HEIGHT_PX, stageEdgeOf, dragPosition,
   anchorPosition, horizontalSlackFor, ANCHOR_SIDE_GAP_PX, ANCHOR_BOTTOM_GAP_PX, STAGE_SHADOW_PX, EXPANDED_PILL_WIDTH_PX,
   islandDisplays, isIslandVisible, nextUserHidden, nextFullscreen, sessionList, nextSelection,
   SNAP_GESTURE_GAP_MS, SNAP_WHEEL_LOCK_MS, isSessionDead,
@@ -356,6 +357,93 @@ test('ilha salva na borda de baixo sobe o necessário para a janela caber na ár
   assert.equal(clamped.y, MONITOR_WORK_AREA.height - WINDOW_SIZE.height);
   assert.equal(saved.y - clamped.y, WINDOW_SIZE.height - OLD_WINDOW_SIZE.height, 'subiu mais ou menos que o palco cresceu');
   assert.equal(isWithinWorkArea({ ...clamped, ...WINDOW_SIZE }, MONITOR_WORK_AREA, HORIZONTAL_SLACK), true);
+});
+
+// Pedido do autor: a ilha só descia até mais ou menos o meio da tela, porque a janela de 410 px fica presa à área
+// útil e a pílula mora no topo dela. O arraste anda com a pílula e, na metade de baixo, o palco cresce para cima.
+const LAPTOP_125_WORK_AREA = { x: 0, y: 0, width: 1536, height: 816 };
+const pillTopOf = ({ position, edge }) => position.y + (edge === 'bottom'
+  ? WINDOW_SIZE.height - STAGE_SHADOW_PX - COMPACT_PILL_HEIGHT_PX
+  : STAGE_TOP_PX);
+const drag = (workArea, anchor, deltaY, startEdge = stageEdgeOf(undefined, anchor), start = anchorPosition(anchor, workArea, WINDOW_SIZE)) => dragPosition({
+  start, startEdge, delta: { x: 0, y: deltaY }, workArea, windowSize: WINDOW_SIZE, horizontalSlack: horizontalSlackFor(anchor),
+});
+
+test('arrastar a ilha leva a pílula até o pé da tela, a 100% e num notebook a 125%', () => {
+  for (const workArea of [MONITOR_WORK_AREA, LAPTOP_125_WORK_AREA]) {
+    const bottom = drag(workArea, 'top-center', 5000);
+    assert.equal(bottom.edge, 'bottom', 'na metade de baixo o palco cresce para cima');
+    assert.equal(pillTopOf(bottom) + COMPACT_PILL_HEIGHT_PX, workArea.y + workArea.height - STAGE_SHADOW_PX, 'a pílula não chegou ao pé');
+    // a janela inteira segue na área útil, então o gate continua valendo com a ilha embaixo
+    assert.equal(isWithinWorkArea({ ...bottom.position, ...WINDOW_SIZE }, workArea, horizontalSlackFor('top-center')), true);
+    // o x não muda e o clamp lateral é o de sempre
+    assert.equal(bottom.position.x, anchorPosition('top-center', workArea, WINDOW_SIZE).x);
+  }
+});
+
+test('a pílula compacta segue o cursor sem pular quando o palco troca de lado', () => {
+  for (const workArea of [MONITOR_WORK_AREA, LAPTOP_125_WORK_AREA]) {
+    const start = anchorPosition('top-center', workArea, WINDOW_SIZE);
+    let previous = null;
+    for (let deltaY = 0; deltaY <= workArea.height; deltaY += 1) {
+      const result = drag(workArea, 'top-center', deltaY);
+      const pillTop = pillTopOf(result);
+      // até encostar no pé, a pílula fica exatamente sob o cursor (o topo dela anda junto com o delta)
+      if (pillTop + COMPACT_PILL_HEIGHT_PX < workArea.y + workArea.height - STAGE_SHADOW_PX) {
+        assert.equal(pillTop, start.y + STAGE_TOP_PX + deltaY, `pulo em deltaY=${deltaY}`);
+      }
+      if (previous) assert.ok(pillTop - previous >= 0 && pillTop - previous <= 1, `pulo em deltaY=${deltaY}`);
+      previous = pillTop;
+    }
+  }
+});
+
+test('arrastar de volta para cima devolve o palco ao topo, e as âncoras de baixo sobem do mesmo jeito', () => {
+  const down = drag(MONITOR_WORK_AREA, 'top-center', 5000);
+  const up = dragPosition({
+    start: down.position, startEdge: down.edge, delta: { x: 0, y: -5000 },
+    workArea: MONITOR_WORK_AREA, windowSize: WINDOW_SIZE, horizontalSlack: HORIZONTAL_SLACK,
+  });
+  assert.deepEqual(up, { position: { x: down.position.x, y: MONITOR_WORK_AREA.y }, edge: 'top' });
+  // âncora de baixo: começa embaixo, sem arraste fica onde está, e arrastada até o topo troca de lado
+  assert.equal(stageEdgeOf(undefined, 'bottom-right'), 'bottom');
+  const still = drag(MONITOR_WORK_AREA, 'bottom-right', 0);
+  assert.deepEqual(still, { position: anchorPosition('bottom-right', MONITOR_WORK_AREA, WINDOW_SIZE), edge: 'bottom' });
+  const top = drag(MONITOR_WORK_AREA, 'bottom-right', -5000);
+  assert.equal(top.edge, 'top');
+  assert.equal(pillTopOf(top), MONITOR_WORK_AREA.y + STAGE_TOP_PX);
+});
+
+test('o lado do palco vem do deslocamento salvo e, sem ele, da âncora; dado ruim no arquivo não vale', () => {
+  for (const anchor of ANCHORS) {
+    assert.equal(stageEdgeOf(undefined, anchor), anchor.startsWith('bottom-') ? 'bottom' : 'top', anchor);
+  }
+  assert.equal(stageEdgeOf({ x: 0, y: 0, edge: 'bottom' }, 'top-center'), 'bottom');
+  assert.equal(stageEdgeOf({ x: 0, y: 0, edge: 'top' }, 'bottom-center'), 'top');
+  for (const bad of [null, 'x', 42, {}, { edge: 'left' }, { edge: ['bottom'] }]) {
+    assert.equal(stageEdgeOf(bad, 'top-center'), 'top', JSON.stringify(bad));
+  }
+  assert.equal(stageEdgeOf(undefined, 'âncora-que-não-existe'), 'top');
+  assert.equal(stageEdgeOf(undefined, undefined), 'top');
+  // lado inicial desconhecido vale o de cima
+  assert.deepEqual(drag(MONITOR_WORK_AREA, 'top-center', 0, 'meio'), drag(MONITOR_WORK_AREA, 'top-center', 0, 'top'));
+});
+
+test('em qualquer ponto do arraste, com qualquer âncora, a janela inteira fica na área útil (o gate vale)', () => {
+  for (const workArea of [MONITOR_WORK_AREA, LAPTOP_125_WORK_AREA]) {
+    for (const anchor of ANCHORS) {
+      for (let deltaY = -workArea.height; deltaY <= workArea.height; deltaY += 37) {
+        for (const deltaX of [-5000, 0, 5000]) {
+          const slack = horizontalSlackFor(anchor);
+          const { position } = dragPosition({
+            start: anchorPosition(anchor, workArea, WINDOW_SIZE), startEdge: stageEdgeOf(undefined, anchor),
+            delta: { x: deltaX, y: deltaY }, workArea, windowSize: WINDOW_SIZE, horizontalSlack: slack,
+          });
+          assert.equal(isWithinWorkArea({ ...position, ...WINDOW_SIZE }, workArea, slack), true, `${anchor} ${deltaX} ${deltaY}`);
+        }
+      }
+    }
+  }
 });
 
 test('na posição padrão a janela do palco novo está dentro da área útil e a decisão segue aceita', () => {
