@@ -58,8 +58,8 @@ created: "2026-11-21"
 | T-05-26 | Elev. of Privilege | IPC ou CSP crescendo | medium | mitigate | `RENDERER_CHANNELS` exata (11), 9 handlers com `islandOf`, CSP literal | closed |
 | T-05-27 | Spoofing | Permitir/Negar após mudança de layout | high | mitigate | rearme por retângulo, `ResizeObserver`, época nova na troca de id | closed |
 | T-05-28 | Spoofing | botões que não aprovam mudando de lugar | low | accept | ver AR-05-02 | closed |
-| T-05-30 | DoS | "concluído" exibido preso para sempre | low | mitigate | só segura com outra sessão viva e enquanto exibido; 12 h removem o arquivo | closed |
-| T-05-31 | Spoofing | saída da sessão exibida puxando pedido já deixado | medium | mitigate | só pedido nunca exibido e fora do gesto; vizinha pula pedido deixado | closed |
+| T-05-30 | DoS | "concluído" exibido preso para sempre | low | mitigate | só segura com outra sessão viva e enquanto exibido; 12 h removem o arquivo. Desde a D-22 (2026-11-22) só segura com o cursor sobre a pílula: sair com o cursor solta no ciclo seguinte | closed |
+| T-05-31 | Spoofing | saída da sessão exibida puxando pedido já deixado | medium | mitigate | só pedido nunca exibido e fora do gesto; vizinha pula pedido deixado. Desde a D-22 a saída acontece também quando o "concluído" exibido vence (bem mais frequente); a exceção (todas as restantes com pedido deixado) ficaria sob o cursor de quem ia clicar em "Abrir", então o vencimento espera o cursor sair da pílula; o armamento de 0,8 s, o dwell de 200 ms e o rearme por retângulo seguem valendo | closed |
 | T-05-SC | Tampering | instalação de pacotes | low | accept | ver AR-05-03 | closed |
 
 T-05-29 foi retirado na revisão dos planos (fundido em T-05-28).

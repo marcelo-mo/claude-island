@@ -33,7 +33,7 @@ Veja o [CONTRIBUTING.md](CONTRIBUTING.md). Licença [MIT](LICENSE).
 
 Os hooks do Claude Code chamam `hook.js`, que grava o estado de cada sessão em
 `~/.claude/island/<session_id>.json`. A ilha (`main.js`) lê essa pasta e mostra a sessão mais
-urgente; com mais de uma sessão ativa aparece um contador.
+urgente; com mais de uma sessão ativa, a pílula expandida mostra um ponto por sessão (veja "Várias sessões").
 
 | Estado | Quando | Aparência |
 |---|---|---|
@@ -86,15 +86,18 @@ em `~/.claude/island/.heartbeat` a cada 2 s); senão, sai na hora e nada muda no
 
 ### Várias sessões
 
-Com duas ou mais sessões do Claude Code abertas, a ilha troca o contador por um ponto por sessão e
-deixa sempre à vista de qual projeto é a sessão na tela.
+Com duas ou mais sessões do Claude Code abertas, a ilha mostra uma por vez, com o projeto da sessão na
+tela sempre à vista. Com a pílula expandida (hover ou clique), uma coluna de pontos na lateral direita
+mostra as sessões; na compacta o título com o nome do projeto já indica que há mais de uma. O
+"concluído" não expande no hover; nele, troque de sessão pela roda.
 
-- **Um ponto por sessão.** A cor é a do estado, o ponto da sessão exibida é maior e o de quem pede
+- **Um ponto por sessão, só na pílula expandida.** A cor é a do estado, o ponto da sessão exibida é maior e o de quem pede
   permissão pulsa (parado, com um anel, se o sistema pedir para reduzir movimento).
-- **Ordem estável.** Da sessão mais antiga, à esquerda, para a mais nova. Acima de 8 sessões os
-  pontos somem e volta o número.
+- **Ordem estável.** Da sessão mais antiga, no alto, para a mais nova, embaixo: a mesma direção da
+  roda. Acima de 8 sessões os pontos somem e volta o número, também só na expandida.
 - **Clique num ponto para ver aquela sessão.** A ilha não troca sozinha quando outra sessão conclui
-  ou volta a trabalhar; só troca se a sessão exibida terminar, e então vai à vizinha dela.
+  ou volta a trabalhar; só troca se a sessão exibida sair da lista (encerrada, terminal fechado ou o
+  "concluído" que passou dos 10 s), e então vai a um pedido que você ainda não viu ou à vizinha dela.
 - **A roda do mouse sobre a pílula troca de sessão.** Para cima vai à sessão anterior, para baixo à
   próxima, sem dar a volta no fim da lista. Cada entalhe conta, e o touchpad, que manda passos
   menores, é mais lento (as regras de gesto são as do mod Dynamic Island for Windows). Sobre o
@@ -117,11 +120,12 @@ deixa sempre à vista de qual projeto é a sessão na tela.
   mesmo nome; a posição do ponto diz qual é qual. Nomes longos são cortados no fim (140 px), então
   dois projetos que começam igual podem parecer iguais; o nome inteiro está no tooltip do título e do
   cabeçalho do pedido.
-- **O "concluído" na tela fica até você trocar.** Com outra sessão aberta, o "concluído" da sessão na
-  tela fica até você trocar (roda ou ponto) ou chegar um pedido novo; sozinho, ele some em 10 s como
-  antes. Se a sessão na tela é encerrada ou o terminal fecha, a ilha vai a um pedido que você ainda
-  não viu, se houver, e senão à sessão vizinha (a da esquerda; se a encerrada era a primeira, a da
-  direita), pulando a que tem um pedido que você já viu e deixou.
+- **O "concluído" na tela some em 10 s e não prende a ilha.** Com outras sessões abertas, depois dos
+  10 s a ilha segue para a próxima: um pedido que você ainda não viu, se houver, e senão a sessão
+  vizinha (a de cima; se a que saiu era a primeira, a de baixo), pulando a que tem um pedido que você
+  já viu e deixou. Com o cursor sobre a pílula, a troca espera ele sair, para a ilha não mudar sob a
+  mão de quem ia clicar. O mesmo vale quando a sessão na tela é encerrada ou o terminal fecha. Sozinho,
+  o "concluído" some em 10 s e a ilha fica ociosa.
 - **Sessão morta sai da lista.** Se o terminal de uma sessão foi fechado sem encerrar o Claude Code,
   o ponto dela some e o arquivo de estado é apagado. Fechar só uma aba do Windows Terminal não fecha
   a janela, e aí a sessão sai pelo prazo (2 h trabalhando, 12 h esperando). Arquivos de sessão com

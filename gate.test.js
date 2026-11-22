@@ -956,16 +956,21 @@ function horizontalPadding(value, what) {
 // Suposição: 0,6 cobre nome misto com sublinhados; um nome de 100 'W' passaria disso e teria uma linha a mais.
 const TOOL_CHAR_WIDTH_EM = 0.6;
 
+// Regra que reserva a faixa da coluna de sessões na expandida: com pontos visíveis ou com pedido na tela.
+const SESSIONS_GUTTER_RULE = '#pill.expanded:is(.has-permission, :has(> #sessions:not([hidden])))';
+
 // Linhas que o rótulo da ferramenta ocupa no pior caso: PERMISSION_TOOL_LIMIT caracteres. O modelo
 // só vale porque o rótulo quebra em qualquer ponto (overflow-wrap: anywhere): sem isso um nome sem
 // espaço, como mcp__servidor__ferramenta, passaria da caixa e seria cortado.
 function toolLabelLines() {
   assert.equal(cssDeclarations('#permission-tool')['overflow-wrap'], 'anywhere', 'o rótulo da ferramenta precisa quebrar em qualquer ponto');
   const expanded = cssDeclarations('#pill.expanded');
-  // A expandida pode ter respiro lateral próprio (padding-inline), maior que o da compacta.
-  const pillPadding = expanded['padding-inline']
-    ? 2 * cssPixels(expanded['padding-inline'], 'padding-inline da expandida')
-    : horizontalPadding(cssDeclarations('#pill').padding, 'padding de #pill');
+  // A expandida pode ter respiro lateral próprio (padding-inline), maior que o da compacta. Com pedido na tela
+  // o lado direito é sempre a faixa da coluna de sessões (SESSIONS_GUTTER_RULE).
+  const pillPadding = (expanded['padding-inline']
+    ? cssPixels(expanded['padding-inline'], 'padding-inline da expandida')
+    : horizontalPadding(cssDeclarations('#pill').padding, 'padding de #pill') / 2)
+    + cssPixels(cssDeclarations(SESSIONS_GUTTER_RULE)['padding-right'], 'faixa da coluna de sessões');
   const labelWidth = cssPixels(expanded.width, 'largura da expandida') - pillPadding
     - horizontalPadding(cssDeclarations('#permission').padding, 'padding de #permission');
   const fontSize = cssPixels(cssDeclarations('#permission-tool')['font-size'], 'font-size de #permission-tool');
@@ -1318,16 +1323,20 @@ test('o canal island:select só leva um índice, conferido no main, e passa por 
 test('a seleção só muda por nextSelection e o refresh a calcula antes de escolher a sessão', () => {
   const body = mainFunctionBody('refresh');
   const order = [
-    'sessionList(sessions, now, selection.key)',
+    'const heldKey = isCursorOverIsland() ? selection.key : null;',
+    'sessionList(sessions, now, heldKey)',
     "nextSelection(selection, list, {\n    type: 'poll'",
-    'lastSessionList = sessionList(sessions, now, selection.key);',
-    'pickState(sessions, now, selection)',
+    'lastSessionList = list;',
+    'pickState(sessions, now, selection, heldKey)',
   ].map((piece) => {
     const at = body.indexOf(piece);
     assert.ok(at >= 0, `refresh sem: ${piece}`);
     return at;
   });
   assert.deepEqual(order, [...order].sort((a, b) => a - b), 'ordem do refresh');
+  // D-22: o concluído só é segurado com o cursor sobre a pílula, e esse fato vem só do pedido de captura (hover).
+  assert.ok(mainLf.includes('const isCursorOverIsland = () => [...captureRequests.values()].some((capture) => capture === true);'));
+  assert.equal(mainLf.split('isCursorOverIsland()').length - 1, 1, 'só o refresh pergunta pelo cursor');
   assert.match(mainLf, /^let selection = \{ key: null, requests: \[\] \};/m);
   const code = mainLf.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
   const assignments = [...code.matchAll(/(?<![\w.])(let\s+)?selection\s*=(?!=)([^;]*);/g)].filter((match) => !match[1]);
@@ -1375,7 +1384,7 @@ test('sessionSwitchDirection dá a direção da troca e MAX_SESSION_DOTS é 8', 
   }
 });
 
-test('a pílula compacta tem teto na largura da expandida e os pontos ficam na ponta direita da barra', () => {
+test('a pílula compacta tem teto na largura da expandida e os pontos são uma coluna na lateral da expandida', () => {
   assert.equal(cssDeclarations('#pill:not(.expanded)')['max-width'], cssDeclarations('#pill.expanded').width);
   // Na expandida não há teto: ele cortaria a passagem da mola ao crescer (ANIM-01).
   assert.equal(cssDeclarations('#pill')['max-width'], undefined);
@@ -1385,9 +1394,37 @@ test('a pílula compacta tem teto na largura da expandida e os pontos ficam na p
     }
   }
   const side = rendererLf.slice(rendererLf.indexOf('<span id="side">'), rendererLf.indexOf('\n    </span>\n    </div>'));
-  assert.ok(side.indexOf('id="open-compact"') > 0 && side.indexOf('id="sessions"') > side.indexOf('id="open-compact"'));
-  const lines = side.split('\n').filter((line) => line.trim() !== '');
-  assert.ok(lines[lines.length - 1].includes('id="sessions"'), '#sessions é o último filho de #side');
+  // Fora da barra: último filho da pílula, depois de #actions, posto na lateral sem entrar no grid.
+  assert.ok(side.includes('id="open-compact"'));
+  assert.equal(side.includes('id="sessions"'), false, 'os pontos não moram mais na barra');
+  const afterActions = rendererLf.slice(rendererLf.indexOf('<div id="actions">'), rendererLf.indexOf('<script>'));
+  const lines = afterActions.split('\n').map((line) => line.trim()).filter(Boolean);
+  assert.deepEqual(lines.slice(-3), ['</div>', '<span id="sessions" role="group" aria-label="Sessões" hidden></span>', '</div>']);
+  const column = cssDeclarations('#sessions');
+  assert.equal(column.position, 'absolute');
+  assert.equal(column['flex-direction'], 'column');
+  // Só na expandida (pedido do autor), e o contador de mais de 8 sessões segue a mesma regra.
+  assert.equal(cssDeclarations('#pill:not(.expanded) #sessions, #sessions[hidden]').display, 'none');
+  assert.equal(cssDeclarations('#pill:not(.expanded) #count').display, 'none');
+  // O conteúdo cede a faixa da coluna e a largura da expandida não muda: a conta do palco segue valendo. Com
+  // pedido na tela a faixa vale mesmo sem pontos, para mudar o número de sessões nunca mover Permitir e Negar.
+  const gutter = cssDeclarations(SESSIONS_GUTTER_RULE);
+  assert.deepEqual(Object.keys(gutter), ['padding-right']);
+  const right = cssPixels(column.right, 'right de #sessions');
+  const button = cssDeclarations('#sessions button');
+  const buttonWidth = cssPixels(button.width, 'largura do ponto');
+  assert.ok(buttonWidth >= 16, 'alvo de pelo menos 16 px (D-12)');
+  assert.equal(button.flex, `0 1 ${button.width}`);
+  // Entre o conteúdo e a coluna sobra pelo menos a distância da coluna à borda, e o ponto fica a 20 px da borda.
+  assert.ok(cssPixels(gutter['padding-right'], 'padding-right') - right - buttonWidth >= right, 'folga entre o conteúdo e a coluna');
+  assert.equal(right + buttonWidth / 2, 20);
+  // A coluna tem altura fixa (a pílula crescer não move os pontos), cabe na expandida mais baixa com a mesma
+  // margem em cima e embaixo, e 8 pontos no tamanho mínimo cabem nela.
+  assert.equal(column.bottom, undefined);
+  const top = cssPixels(column.top, 'top de #sessions');
+  const height = cssPixels(column.height, 'altura de #sessions');
+  assert.equal(top + height + top, cssPixels(cssDeclarations('#pill.expanded').height, 'altura da expandida'));
+  assert.ok(8 * cssPixels(button['min-height'], 'min-height') <= height);
   const render = functionBody('renderContent');
   assert.ok(render.includes("pill.classList.toggle('multi-session', "));
   assert.ok(render.includes('current.sessions.length >= 2'));

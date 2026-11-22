@@ -252,16 +252,18 @@ function isAliveSession(session, now) {
   return false;
 }
 
-// As sessões vivas pelo filtro de hoje e, com `keptKey`, também o "concluído" que está na tela depois do prazo,
-// se houver outra sessão viva: ele não vence enquanto exibido, para a ilha nunca trocar de sessão sozinha por
-// causa dele (SESS-06). Sozinho ele vence aos 10 s como antes e a ilha fica ociosa, o que não é troca; quando
-// deixa de ser exibido, a chave exibida é outra e ele vence na hora.
-function aliveSessions(sessions, now, keptKey) {
+// As sessões vivas pelo filtro de hoje. O "concluído" exibido vence aos 10 s mesmo com outra sessão viva (D-22,
+// revoga a D-21 a pedido do autor): segurá-lo escondia as sessões que seguiam trabalhando. Ao vencer, a sessão
+// exibida sai da lista e a ilha segue a regra de saída de nextSelection (pedido nunca exibido ou vizinha).
+// Exceção: com `heldKey` (o main passa a chave exibida só com o cursor sobre a pílula) o "concluído" exibido fica
+// além do prazo, se houver outra sessão viva, para a pílula não virar outra sessão, ou um pedido, sob o cursor.
+// Sozinho ele vence mesmo assim e a ilha fica ociosa, o que não é troca.
+function aliveSessions(sessions, now, heldKey) {
   const alive = sessions.filter((session) => isAliveSession(session, now));
-  if (typeof keptKey !== 'string' || alive.length === 0) return alive;
-  const kept = sessions.find((session) => session && typeof session === 'object' && session.key === keptKey
+  if (typeof heldKey !== 'string' || alive.length === 0) return alive;
+  const held = sessions.find((session) => session && typeof session === 'object' && session.key === heldKey
     && session.state === 'done' && Number.isFinite(session.updatedAt) && !isAliveSession(session, now));
-  return kept ? [...alive, kept] : alive;
+  return held ? [...alive, held] : alive;
 }
 
 const byUrgency = (a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt;
@@ -297,12 +299,12 @@ function queuePosition(permissionId, requests) {
  * estável de primeira aparição: `{ state, pending, current }`, com `pending` para quem tem pedido
  * válido e `current` só na exibida; nenhuma chave, PID ou texto de outra sessão sai daqui. `queue`
  * é `{ position, total }` quando o pedido exibido está entre dois ou mais de `selection.requests`,
- * senão null. Sem sessão viva devolve `{ state: 'idle', count: 0 }`. O "concluído" exibido (`selection.key`)
- * continua vivo depois dos 10 s enquanto houver outra sessão viva; sozinho vence no prazo de sempre.
+ * senão null. Sem sessão viva devolve `{ state: 'idle', count: 0 }`. `heldKey` (opcional) segura o "concluído"
+ * vencido dessa chave enquanto houver outra sessão viva, como em sessionList.
  */
-function pickState(sessions, now, selection) {
+function pickState(sessions, now, selection, heldKey) {
   const selectedKey = selection && typeof selection.key === 'string' ? selection.key : null;
-  const alive = aliveSessions(sessions, now, selectedKey);
+  const alive = aliveSessions(sessions, now, heldKey);
   if (alive.length === 0) return { state: 'idle', count: 0 };
   const shownSession = (selectedKey !== null && alive.find((session) => session.key === selectedKey))
     || [...alive].sort(byUrgency)[0];
@@ -330,12 +332,12 @@ function pickState(sessions, now, selection) {
  * crescente e, no empate, a chave. A ordem nunca segue urgência nem recência, para um ponto não mudar
  * de lugar no meio de um gesto. Cada item é `{ key, state, updatedAt, permissionId }`, com o id do
  * pedido válido só em `waiting` (senão null). Leva chaves de sessão: só o main usa. Entrada que não
- * é array dá []. `selectedKey` (opcional, a chave exibida) segura o "concluído" exibido depois dos 10 s
- * enquanto houver outra sessão viva, como pickState; sem ele, ou com outra chave, o vencido fica fora.
+ * é array dá []. `heldKey` (opcional) segura o "concluído" vencido dessa chave enquanto houver outra sessão
+ * viva; o main só a passa com o cursor sobre a pílula (D-22).
  */
-function sessionList(sessions, now, selectedKey) {
+function sessionList(sessions, now, heldKey) {
   if (!Array.isArray(sessions)) return [];
-  return aliveSessions(sessions, now, selectedKey)
+  return aliveSessions(sessions, now, heldKey)
     .sort(byFirstSeen)
     .map((session) => ({
       key: session.key,
@@ -446,8 +448,9 @@ function pollSelection(key, previous, entries, event) {
  * (clique num ponto: só um índice inteiro dentro da lista vale) ou `{ type: 'scroll', step }` (roda: `step`
  * exatamente -1 ou 1 vai ao vizinho; no começo ou no fim da lista, ou com a chave fora dela, mantém).
  * A sessão exibida só muda por um evento do usuário, por um pedido de permissão ou quando sai da lista, e
- * então a ilha vai à vizinha dela, nunca à mais urgente: por isso "concluído" e "voltou a trabalhar" não
- * trocam a sessão (SESS-06). A urgência só decide sem sessão exibida.
+ * então a ilha vai à vizinha dela, nunca à mais urgente: por isso concluir ou voltar a trabalhar não troca
+ * a sessão na hora (SESS-06); o "concluído" exibido sai da lista no prazo de 10 s (D-22). A urgência só
+ * decide sem sessão exibida.
  * No poll, `requests` é reconstruída a cada ciclo, um `{ id, seenAt, handled, shown }` por pedido pendente
  * da lista, por ordem de chegada (empate pelo id). `handled` diz que a decisão de puxar ou enfileirar o
  * pedido já foi tomada; `shown` diz que ele já esteve na tela e nunca volta a false. Um pedido novo leva a
@@ -457,7 +460,7 @@ function pollSelection(key, previous, entries, event) {
  * usuário estava numa sessão sem pedido, nada se move. O poll que roda logo depois de um gesto do usuário (roda
  * ou clique no ponto) leva `userSwitched: true`: nele nem a fila avança nem o pedido novo faz snap, para a escolha
  * do usuário não ser desfeita pelo pedido que saiu no mesmo instante; o ciclo seguinte decide.
- * Sair de fato da lista (SessionEnd, terminal fechado, prazo de "trabalhando" ou "precisa de você") não é troca
+ * Sair de fato da lista (SessionEnd, terminal fechado, prazo de "concluído", "trabalhando" ou "precisa de você") não é troca
  * por estado: a ilha vai à sessão do pedido nunca exibido (`shown: false`) mais antigo, se o gesto da roda
  * acabou, e senão à vizinha na ordem estável, nunca à mais urgente. A vizinha pula as sessões com pedido já
  * exibido e deixado; só se todas as restantes o tiverem, pousa na mais próxima (exceção registrada, o refresh
