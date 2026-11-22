@@ -252,17 +252,10 @@ function isAliveSession(session, now) {
   return false;
 }
 
-// As sessões vivas pelo filtro de hoje e, com `keptKey`, também o "concluído" que está na tela depois do prazo,
-// se houver outra sessão viva: ele não vence enquanto exibido, para a ilha nunca trocar de sessão sozinha por
-// causa dele (SESS-06). Sozinho ele vence aos 10 s como antes e a ilha fica ociosa, o que não é troca; quando
-// deixa de ser exibido, a chave exibida é outra e ele vence na hora.
-function aliveSessions(sessions, now, keptKey) {
-  const alive = sessions.filter((session) => isAliveSession(session, now));
-  if (typeof keptKey !== 'string' || alive.length === 0) return alive;
-  const kept = sessions.find((session) => session && typeof session === 'object' && session.key === keptKey
-    && session.state === 'done' && Number.isFinite(session.updatedAt) && !isAliveSession(session, now));
-  return kept ? [...alive, kept] : alive;
-}
+// As sessões vivas pelo filtro de hoje. O "concluído" exibido vence aos 10 s mesmo com outra sessão viva (D-22,
+// revoga a D-21 a pedido do autor): segurá-lo escondia as sessões que seguiam trabalhando. Ao vencer, a sessão
+// exibida sai da lista e a ilha segue a regra de saída de nextSelection (pedido nunca exibido ou vizinha).
+const aliveSessions = (sessions, now) => sessions.filter((session) => isAliveSession(session, now));
 
 const byUrgency = (a, b) => PRIORITY[b.state] - PRIORITY[a.state] || b.updatedAt - a.updatedAt;
 
@@ -297,12 +290,11 @@ function queuePosition(permissionId, requests) {
  * estável de primeira aparição: `{ state, pending, current }`, com `pending` para quem tem pedido
  * válido e `current` só na exibida; nenhuma chave, PID ou texto de outra sessão sai daqui. `queue`
  * é `{ position, total }` quando o pedido exibido está entre dois ou mais de `selection.requests`,
- * senão null. Sem sessão viva devolve `{ state: 'idle', count: 0 }`. O "concluído" exibido (`selection.key`)
- * continua vivo depois dos 10 s enquanto houver outra sessão viva; sozinho vence no prazo de sempre.
+ * senão null. Sem sessão viva devolve `{ state: 'idle', count: 0 }`.
  */
 function pickState(sessions, now, selection) {
   const selectedKey = selection && typeof selection.key === 'string' ? selection.key : null;
-  const alive = aliveSessions(sessions, now, selectedKey);
+  const alive = aliveSessions(sessions, now);
   if (alive.length === 0) return { state: 'idle', count: 0 };
   const shownSession = (selectedKey !== null && alive.find((session) => session.key === selectedKey))
     || [...alive].sort(byUrgency)[0];
@@ -330,12 +322,11 @@ function pickState(sessions, now, selection) {
  * crescente e, no empate, a chave. A ordem nunca segue urgência nem recência, para um ponto não mudar
  * de lugar no meio de um gesto. Cada item é `{ key, state, updatedAt, permissionId }`, com o id do
  * pedido válido só em `waiting` (senão null). Leva chaves de sessão: só o main usa. Entrada que não
- * é array dá []. `selectedKey` (opcional, a chave exibida) segura o "concluído" exibido depois dos 10 s
- * enquanto houver outra sessão viva, como pickState; sem ele, ou com outra chave, o vencido fica fora.
+ * é array dá [].
  */
-function sessionList(sessions, now, selectedKey) {
+function sessionList(sessions, now) {
   if (!Array.isArray(sessions)) return [];
-  return aliveSessions(sessions, now, selectedKey)
+  return aliveSessions(sessions, now)
     .sort(byFirstSeen)
     .map((session) => ({
       key: session.key,

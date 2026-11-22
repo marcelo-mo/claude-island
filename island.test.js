@@ -1085,69 +1085,63 @@ test('isSessionDead: o concluído recente de terminal vivo fica, e o de terminal
   assert.equal(isSessionDead(done, now, () => false), true);
 });
 
-// --- Fase 5: o "concluído" exibido não vence com outra sessão viva; a sessão exibida que sai de fato
-// leva ao pedido nunca exibido ou à vizinha ---
+// --- Fase 5 (D-22, revoga a D-21): o "concluído" exibido vence aos 10 s mesmo com outra sessão viva, e a sessão
+// exibida que sai da lista leva ao pedido nunca exibido ou à vizinha ---
 
 const heldSession = (key, firstSeenAt, state, updatedAt) => ({ key, firstSeenAt, state, project: key, updatedAt });
 const dotsOf = (picked) => picked.sessions.map((dot) => `${dot.state}${dot.current ? '*' : ''}`);
 
-test('o concluído exibido fica na lista e na tela com outra sessão viva, inclusive uma hora depois (SESS-06)',() => {
+test('o concluído exibido vence aos 10 s com outra sessão viva e a ilha vai à vizinha (D-22)', () => {
   const now = 1_000_000_000;
-  const expiredDone = heldSession('a', 1, 'done', now - 10_001);
   const working = heldSession('b', 2, 'running', now);
-  const selection = { key: 'a', requests: [] };
-  const list = sessionList([expiredDone, working], now, 'a');
-  assert.deepEqual(list.map((entry) => entry.key), ['a', 'b']);
-  assert.equal(nextSelection(selection, list, pollEvent(1000, { previousKeys: ['a', 'b'] })).key, 'a');
-  const picked = pickState([expiredDone, working], now, selection);
-  assert.equal(picked.state, 'done');
-  assert.equal(picked.count, 2);
-  assert.deepEqual(dotsOf(picked), ['done*', 'running']);
-  // uma hora depois, com B ainda atualizado, nada mudou
-  const later = now + 3_600_000;
-  const stillWorking = heldSession('b', 2, 'running', later);
-  assert.deepEqual(sessionList([expiredDone, stillWorking], later, 'a').map((entry) => entry.key), ['a', 'b']);
-  assert.deepEqual(dotsOf(pickState([expiredDone, stillWorking], later, selection)), ['done*', 'running']);
-  // sem a chave exibida tudo segue como antes: o vencido está fora
-  assert.deepEqual(sessionList([expiredDone, working], now).map((entry) => entry.key), ['b']);
-  assert.equal(pickState([expiredDone, working], now).state, 'running');
-  assert.equal(pickState([expiredDone, working], now, { key: null, requests: [] }).count, 1);
+  // dentro do prazo o concluído fica na tela: concluir não troca a sessão (SESS-06)
+  const recentDone = heldSession('a', 1, 'done', now - 9_000);
+  const shown = { key: 'a', requests: [] };
+  const before = sessionList([recentDone, working], now);
+  assert.deepEqual(before.map((entry) => entry.key), ['a', 'b']);
+  assert.equal(nextSelection(shown, before, pollEvent(1000, { previousKeys: ['a', 'b'] })).key, 'a');
+  assert.deepEqual(dotsOf(pickState([recentDone, working], now, shown)), ['done*', 'running']);
+  // vencido, sai da lista mesmo sendo o exibido, e a seleção anda para a vizinha
+  const expiredDone = heldSession('a', 1, 'done', now - 10_001);
+  const after = sessionList([expiredDone, working], now);
+  assert.deepEqual(after.map((entry) => entry.key), ['b']);
+  const moved = nextSelection(shown, after, pollEvent(1000, { previousKeys: ['a', 'b'] }));
+  assert.equal(moved.key, 'b');
+  const picked = pickState([expiredDone, working], now, moved);
+  assert.equal(picked.state, 'running');
+  assert.equal(picked.count, 1);
+  // a chave antiga, se ainda chegasse, não ressuscita o vencido
+  assert.equal(pickState([expiredDone, working], now, shown).state, 'running');
 });
 
-test('o concluído sozinho vence aos 10 s e a ilha fica ociosa, sem trocar para nada (SESS-06)',() => {
+test('o concluído sozinho vence aos 10 s e a ilha fica ociosa, sem trocar para nada (SESS-06)', () => {
   const now = 1_000_000_000;
   const alone = heldSession('a', 1, 'done', now - 10_001);
-  assert.deepEqual(sessionList([alone], now, 'a'), []);
+  assert.deepEqual(sessionList([alone], now), []);
   assert.deepEqual(pickState([alone], now, { key: 'a', requests: [] }), { state: 'idle', count: 0 });
   assert.equal(nextSelection({ key: 'a', requests: [] }, [], pollEvent(1000, { previousKeys: ['a'] })).key, null);
-  // dentro do prazo ele aparece como sempre
   assert.equal(pickState([heldSession('a', 1, 'done', now - 9_000)], now, { key: 'a', requests: [] }).state, 'done');
 });
 
-test('deixando de ser exibido o concluído vencido sai na hora, e o vencido que não é o exibido nunca entra (SESS-06)',() => {
+test('o concluído exibido que vence leva ao pedido nunca exibido antes da vizinha, e nunca a um pedido já deixado (D-22)', () => {
   const now = 1_000_000_000;
   const expiredDone = heldSession('a', 1, 'done', now - 10_001);
   const working = heldSession('b', 2, 'running', now);
-  const both = [expiredDone, working];
-  // o usuário escolhe B: a lista seguinte não tem A e há um ponto só
-  const chosen = nextSelection({ key: 'a', requests: [] }, sessionList(both, now, 'a'), { type: 'select', index: 1 });
-  assert.equal(chosen.key, 'b');
-  assert.deepEqual(sessionList(both, now, chosen.key).map((entry) => entry.key), ['b']);
-  assert.deepEqual(dotsOf(pickState(both, now, chosen)), ['running*']);
-  // vencido, mas a chave exibida é outra: fora
-  assert.deepEqual(sessionList(both, now, 'b').map((entry) => entry.key), ['b']);
-  // chave exibida que é texto mas não existe, ou não é texto: nada é segurado
-  for (const key of ['zzz', null, 5, undefined]) {
-    assert.deepEqual(sessionList(both, now, key).map((entry) => entry.key), ['b'], String(key));
-  }
-  // um "em andamento" vencido e exibido não é segurado: só o concluído o é
-  const staleRunning = heldSession('r', 3, 'running', now - 2 * 60 * 60_000 - 1);
-  assert.deepEqual(sessionList([staleRunning, working], now, 'r').map((entry) => entry.key), ['b']);
-  // A (exibida, vencida) e B em concluído recente: A fica enquanto B estiver no prazo; depois as duas saem
-  const recentDone = heldSession('b', 2, 'done', now - 1_000);
-  assert.deepEqual(sessionList([expiredDone, recentDone], now + 8_000, 'a').map((entry) => entry.key), ['a', 'b']);
-  assert.deepEqual(sessionList([expiredDone, recentDone], now + 9_000, 'a'), []);
-  assert.deepEqual(pickState([expiredDone, recentDone], now + 9_000, { key: 'a', requests: [] }), { state: 'idle', count: 0 });
+  const asking = { ...heldSession('c', 3, 'waiting', now), permission: pedidoValido(PEDIDO_C) };
+  const list = sessionList([expiredDone, working, asking], now);
+  assert.deepEqual(list.map((entry) => entry.key), ['b', 'c']);
+  // pedido de C nunca exibido: a ilha vai a ele, e é um snap (rearma)
+  const toRequest = nextSelection({ key: 'a', requests: [] }, list, pollEvent(9000, { previousKeys: ['a', 'b', 'c'] }));
+  assert.equal(toRequest.key, 'c');
+  assert.equal(toRequest.snapped, true);
+  // com o pedido de C já exibido e deixado, a ilha vai à vizinha B, não volta a C
+  const left = [{ id: PEDIDO_C, seenAt: 100, handled: true, shown: true }];
+  const toNeighbor = nextSelection({ key: 'a', requests: left }, list, pollEvent(9000, { previousKeys: ['a', 'b', 'c'] }));
+  assert.equal(toNeighbor.key, 'b');
+  assert.equal(toNeighbor.snapped, false);
+  // no meio de um gesto de roda o pedido nunca exibido espera e a ilha pousa na vizinha
+  const inGesture = nextSelection({ key: 'a', requests: [] }, list, pollEvent(9000, { previousKeys: ['a', 'b', 'c'], lastWheelAt: 8800 }));
+  assert.equal(inGesture.key, 'b');
 });
 
 const exitList = (...entries) => entries.map(([key, permissionId]) => waitingEntry(key, permissionId));

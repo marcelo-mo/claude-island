@@ -1318,9 +1318,9 @@ test('o canal island:select só leva um índice, conferido no main, e passa por 
 test('a seleção só muda por nextSelection e o refresh a calcula antes de escolher a sessão', () => {
   const body = mainFunctionBody('refresh');
   const order = [
-    'sessionList(sessions, now, selection.key)',
+    'sessionList(sessions, now)',
     "nextSelection(selection, list, {\n    type: 'poll'",
-    'lastSessionList = sessionList(sessions, now, selection.key);',
+    'lastSessionList = list;',
     'pickState(sessions, now, selection)',
   ].map((piece) => {
     const at = body.indexOf(piece);

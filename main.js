@@ -478,7 +478,7 @@ function refresh(reason) {
   const now = Date.now();
   const monotonicNow = performance.now();
   const sessions = readSessions();
-  const list = sessionList(sessions, now, selection.key);
+  const list = sessionList(sessions, now);
   // A lista do refresh anterior serve para achar a vizinha da sessão que saiu. O pedido na tela (shown.id,
   // ainda o de antes deste refresh) diz se um pedido novo entra na fila ou leva a ilha até ele. Um snap só
   // muda a seleção: a ilha escondida ou em tela cheia não reaparece.
@@ -492,9 +492,8 @@ function refresh(reason) {
     userSwitched,
   });
   if (selection.snapped) wheelLockedUntil = monotonicNow + SNAP_WHEEL_LOCK_MS;
-  // Recalculada com a chave nova: depois de uma troca o "concluído" que ficou para trás vence na hora, e a lista
-  // guardada tem de ser a mesma que os pontos mostram, porque o clique e a roda andam nela.
-  lastSessionList = sessionList(sessions, now, selection.key);
+  // A lista guardada é a mesma que os pontos mostram, porque o clique e a roda andam nela.
+  lastSessionList = list;
   const picked = pickState(sessions, now, selection);
   const serialized = JSON.stringify(picked);
   const permissionId = picked.permission ? picked.permission.id : null;
