@@ -610,6 +610,12 @@ test('nextFullscreen marca e solta o monitor coberto pelo primeiro plano', () =>
   assert.deepEqual(run(null, covered, [999]), [[1, 100]]);
   // monitorRect que não bate com nenhum monitor; monitor que saiu
   assert.deepEqual(run({ ...base, monitorRect: { left: 5, top: 0, right: 2565, bottom: 1080 } }, covered), [[1, 100]]);
+  // monitor do Windows a até 2 px do display convertido (escala fracionária): casa, e a cobertura se mede
+  // contra o monitor do Windows
+  const offByTwo = { left: 0, top: 0, right: 2562, bottom: 1082 };
+  assert.deepEqual(run({ ...base, clientRect: offByTwo, monitorRect: offByTwo }), [[1, 100]]);
+  assert.deepEqual(run({ ...base, clientRect: A.rect, monitorRect: offByTwo }), []);
+  assert.deepEqual(run({ ...base, clientRect: offByTwo, monitorRect: { ...offByTwo, right: 2563 } }), []);
   assert.deepEqual(run(null, covered, [], [B]), []);
   // entradas fora do contrato: nunca lança nem muta
   assert.deepEqual([...nextFullscreen({ previous: covered, probe: null, ownPid: 999, displays })], [[1, 100]]);
