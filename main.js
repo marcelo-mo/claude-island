@@ -8,11 +8,14 @@ const {
   pickState, sessionList, nextSelection, wheelStep, WHEEL_DELTA_MAX, SNAP_WHEEL_LOCK_MS, acceptDecision, anchorPosition, horizontalSlackFor, besideFits, islandDisplays, clampIslandPosition, isWithinWorkArea, nextShownPermission,
   SECURE_WEB_PREFERENCES, isIslandSender, PREFERENCES_FILE, DEFAULT_PREFERENCES, normalizePreferences, isSessionFile,
   WINDOW_SIZE, positionFromSavedOffset, menuTemplate, PREFERENCES_MAX_BYTES, quarantinePath, registerShortcut,
-  effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem, isSessionDead,
+  effectiveOpacity, isIslandVisible, nextUserHidden, toMenuItem, isSessionDead, nextFullscreen,
 } = require('./state');
 const { focusWindow } = require('./window');
+const { probeForeground } = require('./fullscreen');
 
 const POLL_MS = 400;
+// 2 Hz (D-17): a amostra do primeiro plano custa 7,8 µs (medido na pesquisa da Fase 4).
+const FULLSCREEN_PROBE_MS = 500;
 // ponytail: taxa fixa de cerca de 30 Hz; getCursorScreenPoint custa 0,69 µs por chamada (medido na
 // pesquisa da Fase 4). Adaptar a taxa só se o custo aparecer.
 const CURSOR_TICK_MS = 33;
@@ -82,14 +85,10 @@ let cursorTimer = null;
 // Escondida pelo usuário, pelo atalho ou pelo menu. Não é persistida: a ilha sempre sobe visível (D-12).
 let userHidden = false;
 // Monitor coberto por app em tela cheia -> HWND que o cobre. Só o main calcula, nunca o renderer (D-19).
-// Vazio enquanto não houver sensor: nenhum monitor conhecido conta como coberto.
-// ponytail: não há sensor de tela cheia porque o autor não autorizou o pacote nativo (D-20). Ele entraria
-// aqui: a 2 Hz, uma amostra do primeiro plano do Windows vai para nextFullscreen (state.js) com este mapa,
-// process.pid e os monitores em pixels físicos (screen.dipToScreenRect(null, display.bounds)); o mapa novo
-// troca este e, se mudou, chama applyVisibility(). Duas opções, medidas na pesquisa da Fase 4: (1)
-// koffi@3.3.8 com allowBuilds: { koffi: false } (+5,0 a 5,1 MB, 7,8 µs por sondagem); (2) sem dependência
-// nova, um processo PowerShell filho único e persistente com P/Invoke em user32, no padrão do window.js,
-// consultado por stdin (28,3 MB numa amostra; um spawn por sondagem custa cerca de 0,45 s e está descartado).
+// Preenchido por probeFullscreen a 2 Hz, só no Windows (D-17, D-18); fora dele fica vazio e nenhum monitor
+// conta como coberto.
+// ponytail: sondagem em vez de evento do Windows (SetWinEventHook de primeiro plano e de movimento), então a
+// ilha leva até 0,5 s para sumir ou voltar. Trocar por evento se esse atraso incomodar.
 const fullscreenByDisplay = new Map();
 // Resultado do registro do atalho em start ('ok', 'unavailable' ou 'invalid'); o menu o mostra.
 let shortcutStatus = 'unavailable';
@@ -248,6 +247,27 @@ function applyVisibility() {
     if (visible && !island.isVisible()) island.showInactive();
     else if (!visible && island.isVisible()) island.hide();
   }
+}
+
+// Sonda o primeiro plano do Windows e atualiza fullscreenByDisplay (D-17, D-18). Os monitores vão em pixels
+// físicos, a unidade do rcMonitor do sensor, então a igualdade dos retângulos dispensa conta de escala. O
+// mesmo Map é lido pelo island:decide, pelo createIsland e pelo atalho, por isso o conteúdo é trocado no
+// lugar. Sem amostra (null), o redutor mantém o mapa e nada muda.
+function probeFullscreen() {
+  const displays = screen.getAllDisplays().map((display) => {
+    const rect = screen.dipToScreenRect(null, display.bounds);
+    return { id: display.id, rect: { left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height } };
+  });
+  const next = nextFullscreen({
+    previous: fullscreenByDisplay,
+    probe: probeForeground([...fullscreenByDisplay.values()]),
+    ownPid: process.pid,
+    displays,
+  });
+  if (next.size === fullscreenByDisplay.size && [...next].every(([id, hwnd]) => fullscreenByDisplay.get(id) === hwnd)) return;
+  fullscreenByDisplay.clear();
+  for (const [id, hwnd] of next) fullscreenByDisplay.set(id, hwnd);
+  applyVisibility();
 }
 
 // O menu abre sobre a pílula e pode cobrir Permitir e Negar, e o clique que o fecha pode cair num
@@ -553,7 +573,7 @@ function createIsland(display) {
   // os 0,8 s. O atalho e o menu escondem por hide() (setUserHidden) e reexibem por showInactive().
   island.on('show', () => refresh('rearm'));
   island.on('restore', () => refresh('rearm'));
-  // Todo caminho que esconde a ilha (atalho e menu na Fase 4, tela cheia quando houver sensor) passa
+  // Todo caminho que esconde a ilha (atalho, menu e tela cheia) passa
   // por este evento: a ilha escondida solta a captura e, se era a última visível, o timer do cursor
   // para. Reexibir emite 'show', que chama refresh('rearm'), e o refresh religa o timer.
   island.on('hide', () => {
@@ -790,6 +810,11 @@ function start() {
     () => setUserHidden(nextUserHidden({ userHidden, displayIds: [...islands.keys()], coveredDisplayIds: [...fullscreenByDisplay.keys()] })),
   );
   if (shortcutStatus !== 'ok') console.error(`Não foi possível registrar o atalho ${preferences.shortcut}: ${shortcutStatus}`);
+  // A ilha já nasce escondida sobre uma tela cheia, e a sondagem acompanha as trocas depois (só no Windows).
+  if (process.platform === 'win32') {
+    probeFullscreen();
+    setInterval(probeFullscreen, FULLSCREEN_PROBE_MS);
+  }
   syncIslands();
   screen.on('display-added', syncIslands);
   screen.on('display-removed', syncIslands);

@@ -125,6 +125,12 @@ None yet.
 - [Fase 6]: Classe da janela do Windhawk e se o Electron reafirma o topo sozinho não foram confirmados
 - [Geral]: macOS e Linux nunca foram testados; qualquer decisão de base declara que vale para o Windows
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261122-03w | Sensor de tela cheia por monitor no Windows com koffi@3.3.8 (fecha TELA-01 e TELA-02; autorização do autor em 2026-11-22) | 2026-11-22 | aea2537 | [261122-03w-sensor-tela-cheia](./quick/261122-03w-sensor-tela-cheia/) |
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:

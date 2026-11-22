@@ -179,17 +179,22 @@ function nextUserHidden(input) {
 // A área cliente de um vídeo em tela cheia bate com o monitor a 100% e a 125% (medido); 1 px absorve
 // arredondamento de escala.
 const FULLSCREEN_TOLERANCE_PX = 1;
+// O retângulo do monitor vem do Windows e o do display sai da conversão de DIP do Electron: a 100% e a 125%
+// batem exatamente (medido), mas numa escala fracionária como 175% o arredondamento de cada borda pode errar
+// por 1 px. Sem folga nenhum display casaria, e a ilha ficaria por cima da tela cheia.
+const MONITOR_MATCH_TOLERANCE_PX = 2;
 // Área de trabalho e barras de tarefas cobrem o monitor sem serem app em tela cheia (TELA-01).
 const SHELL_WINDOW_CLASSES = Object.freeze(['Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd']);
 // Estilo estendido de janela que deixa o mouse passar (overlay): não conta como primeiro plano.
 const WS_EX_TRANSPARENT = 0x20;
 
 /**
- * Regra de D-18, o contrato do sensor de tela cheia, que ainda não existe (pendente da escolha do autor,
- * D-20). Devolve um Map novo de id de monitor para o HWND que o cobre; nunca lança nem muta `previous`.
+ * Regra de D-18, o contrato do sensor de tela cheia, alimentado a 2 Hz pelo fullscreen.js no Windows (D-17).
+ * Devolve um Map novo de id de monitor para o HWND que o cobre; nunca lança nem muta `previous`.
  * `probe` é null ou { foreground, gone }: `foreground` é null ou { hwnd, className, pid, exStyle, visible,
  * minimized, cloaked, clientRect, monitorRect } (retângulos { left, top, right, bottom } em pixels físicos)
- * e `gone` lista os HWND lembrados que sumiram. `displays` é [{ id, rect }] em pixels físicos. Começa do
+ * e `gone` lista os HWND lembrados que sumiram (fechados, minimizados, invisíveis ou cloaked, como na troca de
+ * área de trabalho virtual). `displays` é [{ id, rect }] em pixels físicos. Começa do
  * mapa anterior, solta o que sumiu ou saiu de `displays` e então olha o primeiro plano: o próprio pid e
  * janela invisível, minimizada, cloaked ou transparente não mudam nada; no monitor do primeiro plano, a
  * janela que cobre a área inteira (com a tolerância) fica lembrada e qualquer outra solta o monitor.
@@ -208,13 +213,13 @@ function nextFullscreen(input) {
   if (!foreground || !Number.isInteger(foreground.hwnd) || foreground.pid === ownPid) return result;
   if (foreground.visible !== true || foreground.minimized !== false || foreground.cloaked !== false) return result;
   if (!Number.isInteger(foreground.exStyle) || (foreground.exStyle & WS_EX_TRANSPARENT) !== 0) return result;
-  const sameRect = (a, b) => ['left', 'top', 'right', 'bottom'].every((side) => a?.[side] === b?.[side]);
-  const display = knownDisplays.find((candidate) => sameRect(candidate?.rect, foreground.monitorRect));
-  if (!display) return result;
-  const client = foreground.clientRect;
-  const coversMonitor = ['left', 'top', 'right', 'bottom'].every((side) => (
-    Number.isFinite(client?.[side]) && Math.abs(client[side] - display.rect[side]) <= FULLSCREEN_TOLERANCE_PX
+  const near = (a, b, tolerance) => ['left', 'top', 'right', 'bottom'].every((side) => (
+    Number.isFinite(a?.[side]) && Number.isFinite(b?.[side]) && Math.abs(a[side] - b[side]) <= tolerance
   ));
+  const display = knownDisplays.find((candidate) => near(candidate?.rect, foreground.monitorRect, MONITOR_MATCH_TOLERANCE_PX));
+  if (!display) return result;
+  // A área cliente se mede contra o monitor do próprio Windows (mesma unidade), não contra o display convertido.
+  const coversMonitor = near(foreground.clientRect, foreground.monitorRect, FULLSCREEN_TOLERANCE_PX);
   if (SHELL_WINDOW_CLASSES.includes(foreground.className) || !coversMonitor) result.delete(display.id);
   else result.set(display.id, foreground.hwnd);
   return result;
@@ -1023,7 +1028,7 @@ module.exports = {
   BESIDE_GAP_PX, BESIDE_TOP_OFFSET_PX,
   BESIDE_MIN_WORK_AREA_WIDTH_PX, besideFits,
   islandDisplays, nextShownPermission, isIslandVisible, nextUserHidden,
-  FULLSCREEN_TOLERANCE_PX, SHELL_WINDOW_CLASSES, WS_EX_TRANSPARENT, nextFullscreen,
+  FULLSCREEN_TOLERANCE_PX, MONITOR_MATCH_TOLERANCE_PX, SHELL_WINDOW_CLASSES, WS_EX_TRANSPARENT, nextFullscreen,
   PREFERENCES_FILE, THEMES, SHAPES, ANIMATION_STYLES, ANIMATION_SPEED_MIN, ANIMATION_SPEED_MAX, DEFAULT_PREFERENCES,
   normalizePreferences, isSessionFile, ANIMATION_SPEED_STEPS, PREFERENCE_LABELS, menuTemplate, registerShortcut, toMenuItem,
   EXPAND_ON, OPACITY_LEVELS, ANCHORS, ISLAND_MODES, DEFAULT_SHORTCUT, SHORTCUT_PATTERN, SHORTCUT_MAX_LENGTH,

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { execFileSync } = require('node:child_process');
 const {
   acceptDecision, isWithinWorkArea, nextShownPermission, PERMISSION_ARM_MS, SECURE_WEB_PREFERENCES,
   effectiveOpacity, isIslandSender, ANIMATION_STYLES, DEFAULT_PREFERENCES, WINDOW_SIZE, HORIZONTAL_SLACK,
@@ -1217,31 +1218,96 @@ test('esconder combina o usuário e a tela cheia, só no main, e o atalho respei
   assert.ok(mainSource.includes("island.on('hide', () => {"), 'o ouvinte de hide continua');
 });
 
-// Trava de regressão (texto): D-20, o autor não autorizou o pacote nativo. Sem sensor, a regra pura fica
-// pronta e o ponto de entrada marcado; os hooks, que rodam dentro da sessão do Claude Code, seguem leves
-// (T-04-19, T-04-20).
-test('sem sensor nem dependência nativa, e os hooks continuam leves', () => {
+// Trava de regressão (texto): D-17 e D-20, com a autorização do autor de 2026-11-22 para o pacote nativo.
+// Só o fullscreen.js o carrega, de forma preguiçosa, dentro da guarda win32 e de um try; os hooks, que rodam
+// dentro da sessão do Claude Code, nunca o citam nem o carregam (T-04-19, T-04-20, T-03w-01, T-03w-SC).
+test('só o fullscreen.js carrega o pacote nativo, e a sondagem a 2 Hz liga o sensor ao mapa', () => {
   const native = 'koffi';
   const read = (file) => fs.readFileSync(path.join(__dirname, file), 'utf8');
-  for (const file of ['hook.js', 'permission-hook.js', 'window.js', 'state.js', 'install.js']) {
+  for (const file of ['hook.js', 'permission-hook.js', 'window.js', 'state.js', 'install.js', 'preload.js']) {
     assert.equal(read(file).includes(native), false, `${file} cita o pacote nativo`);
+    assert.equal(read(file).includes('./fullscreen'), false, `${file} carrega o sensor`);
   }
-  for (const file of ['hook.js', 'permission-hook.js', 'window.js', 'state.js', 'install.js', 'main.js', 'preload.js']) {
-    assert.equal(read(file).includes(`require('${native}`), false, `${file} carrega o pacote nativo`);
+  assert.equal(mainSource.includes(`require('${native}`), false, 'main.js carrega o pacote nativo');
+  assert.ok(mainSource.includes("require('./fullscreen')"), 'main.js carrega o sensor');
+
+  const sensor = read('fullscreen.js');
+  const requires = sensor.split(/\r?\n/).filter((line) => line.includes(`require('${native}')`));
+  assert.equal(requires.length, 1, 'fullscreen.js faz exatamente um require do pacote nativo');
+  assert.match(requires[0], /^\s+\S/, 'o require do pacote nativo fica indentado (dentro de função)');
+  const requireAt = sensor.indexOf(`require('${native}')`);
+  const guarded = sensor.slice(sensor.lastIndexOf('function ', requireAt), requireAt);
+  assert.ok(guarded.includes("'win32'"), 'o require do pacote nativo vem depois da guarda win32');
+  assert.ok(/\btry\s*\{/.test(guarded), 'o require do pacote nativo fica dentro de um try');
+
+  const bodyOf = (opening, closing = '\n}') => {
+    const start = mainSource.indexOf(opening);
+    assert.ok(start >= 0, `${opening} ausente no main.js`);
+    return mainSource.slice(start, mainSource.indexOf(closing, start));
+  };
+  const probe = bodyOf('function probeFullscreen(');
+  // O mapa anterior entra como previous, os HWND lembrados vão ao sensor (para soltar o que sumiu) e o
+  // resultado troca o conteúdo do mesmo Map, que o gate e o atalho leem.
+  for (const needle of [
+    'process.pid', 'screen.dipToScreenRect(null, display.bounds)', 'nextFullscreen(', 'applyVisibility(',
+    'previous: fullscreenByDisplay,', 'probeForeground([...fullscreenByDisplay.values()])',
+    'fullscreenByDisplay.clear();', 'fullscreenByDisplay.set(id, hwnd)',
+  ]) {
+    assert.ok(probe.includes(needle), `probeFullscreen não contém ${needle}`);
   }
-  assert.equal(fs.existsSync(path.join(__dirname, 'fullscreen.js')), false, 'fullscreen.js não deve existir');
-  const manifest = JSON.parse(read('package.json'));
-  for (const group of ['dependencies', 'devDependencies']) {
-    assert.equal(native in (manifest[group] ?? {}), false, `package.json tem o pacote em ${group}`);
-  }
+  const startBody = bodyOf('function start(');
+  assert.ok(startBody.includes("process.platform === 'win32'"), 'start só liga a sondagem no Windows');
+  assert.ok(startBody.includes('setInterval(probeFullscreen, FULLSCREEN_PROBE_MS)'), 'start liga a sondagem a 2 Hz');
+
   const lines = mainSource.split(/\r?\n/);
-  const declaration = lines.findIndex((line) => line.startsWith('const fullscreenByDisplay'));
+  const declaration = lines.findIndex((line) => line.startsWith('const fullscreenByDisplay = new Map();'));
   assert.ok(declaration > 0, 'fullscreenByDisplay ausente no main.js');
   let first = declaration;
   while (first > 0 && lines[first - 1].startsWith('//')) first -= 1;
-  const comment = lines.slice(first, declaration).join(' ');
-  for (const needle of ['ponytail:', 'nextFullscreen', 'applyVisibility', 'PowerShell']) {
-    assert.ok(comment.includes(needle), `o comentário do ponto de entrada do sensor não cita ${needle}`);
+  assert.ok(lines.slice(first, declaration).join(' ').includes('ponytail:'), 'o mapa leva um comentário ponytail:');
+
+  const manifest = JSON.parse(read('package.json'));
+  assert.equal(manifest.dependencies?.[native], '3.3.8', 'o pacote nativo fica exato em dependencies');
+  assert.equal(native in (manifest.devDependencies ?? {}), false, 'o pacote nativo não vai em devDependencies');
+  assert.ok('electron' in (manifest.devDependencies ?? {}), 'electron segue em devDependencies');
+  const workspace = read('pnpm-workspace.yaml');
+  assert.match(workspace, /^\s+koffi: false\s*$/m, 'o build do pacote nativo fica negado');
+  assert.match(workspace, /^\s+electron: true\s*$/m, 'o build do Electron segue liberado');
+});
+
+// Trava de comportamento: carregar o sensor não carrega o pacote nativo (a carga é preguiçosa), então um
+// require('./fullscreen') por engano num hook não pesa nem quebra a sessão (T-03w-01).
+test('require do fullscreen.js não carrega o pacote nativo', () => {
+  const script = "require('./fullscreen'); process.stdout.write(JSON.stringify(Object.keys(require.cache)));";
+  const loaded = JSON.parse(execFileSync(process.execPath, ['-e', script], { cwd: __dirname, encoding: 'utf8' }));
+  assert.deepEqual(loaded.filter((file) => /[\\/]koffi[\\/]/.test(file)), []);
+});
+
+// O sensor nunca lança, mesmo com entrada fora do contrato (T-03w-02). Fora do Windows devolve null; no
+// Windows devolve a amostra no formato que o nextFullscreen espera.
+test('probeForeground nunca lança e devolve a amostra no contrato do nextFullscreen', () => {
+  const { probeForeground } = require('./fullscreen');
+  const sample = probeForeground([0, 'x', 1.5]);
+  assert.doesNotThrow(() => probeForeground());
+  if (process.platform !== 'win32') {
+    assert.equal(sample, null);
+    assert.equal(probeForeground(), null);
+    return;
+  }
+  assert.ok(sample && typeof sample === 'object', 'no Windows o pacote é dependência instalada');
+  assert.deepEqual(sample.gone, [0]);
+  assert.deepEqual(probeForeground().gone, []);
+  const { foreground } = sample;
+  if (foreground === null) return;
+  assert.ok(Number.isInteger(foreground.hwnd) && foreground.hwnd > 0);
+  assert.equal(typeof foreground.className, 'string');
+  assert.ok(Number.isInteger(foreground.pid) && Number.isInteger(foreground.exStyle));
+  assert.equal(typeof foreground.visible, 'boolean');
+  assert.equal(typeof foreground.minimized, 'boolean');
+  assert.ok(foreground.cloaked === null || typeof foreground.cloaked === 'boolean');
+  for (const rect of [foreground.clientRect, foreground.monitorRect]) {
+    if (rect === null) continue;
+    for (const side of ['left', 'top', 'right', 'bottom']) assert.ok(Number.isFinite(rect[side]));
   }
 });
 
