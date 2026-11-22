@@ -72,6 +72,9 @@ let menuIsland = null;
 // Último pedido de captura do mouse de cada ilha. Quem decide é o renderer, pelo retângulo vivo da
 // pílula; o main só aplica (applyCapture).
 const captureRequests = new Map();
+// O renderer pede captura exatamente quando o cursor está sobre a pílula (hover). Um renderer fora do contrato que
+// mentisse só seguraria o "concluído" na tela (D-22), sem tocar no gate.
+const isCursorOverIsland = () => [...captureRequests.values()].some((capture) => capture === true);
 // Ilhas que receberam o ponto do cursor no último tique, para mandar null uma vez só quando o cursor
 // se afasta.
 const nearIslands = new Set();
@@ -478,7 +481,10 @@ function refresh(reason) {
   const now = Date.now();
   const monotonicNow = performance.now();
   const sessions = readSessions();
-  const list = sessionList(sessions, now);
+  // D-22: o "concluído" exibido vence em 10 s, menos com o cursor sobre a pílula (de qualquer monitor): aí ele
+  // fica até o cursor sair, para a pílula não virar outra sessão, ou um pedido, sob a mão de quem ia clicar.
+  const heldKey = isCursorOverIsland() ? selection.key : null;
+  const list = sessionList(sessions, now, heldKey);
   // A lista do refresh anterior serve para achar a vizinha da sessão que saiu. O pedido na tela (shown.id,
   // ainda o de antes deste refresh) diz se um pedido novo entra na fila ou leva a ilha até ele. Um snap só
   // muda a seleção: a ilha escondida ou em tela cheia não reaparece.
@@ -494,7 +500,7 @@ function refresh(reason) {
   if (selection.snapped) wheelLockedUntil = monotonicNow + SNAP_WHEEL_LOCK_MS;
   // A lista guardada é a mesma que os pontos mostram, porque o clique e a roda andam nela.
   lastSessionList = list;
-  const picked = pickState(sessions, now, selection);
+  const picked = pickState(sessions, now, selection, heldKey);
   const serialized = JSON.stringify(picked);
   const permissionId = picked.permission ? picked.permission.id : null;
   // Relógio monotônico: o de parede salta com NTP e suspensão, o que armaria os botões antes da

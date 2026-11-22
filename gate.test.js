@@ -1318,16 +1318,20 @@ test('o canal island:select só leva um índice, conferido no main, e passa por 
 test('a seleção só muda por nextSelection e o refresh a calcula antes de escolher a sessão', () => {
   const body = mainFunctionBody('refresh');
   const order = [
-    'sessionList(sessions, now)',
+    'const heldKey = isCursorOverIsland() ? selection.key : null;',
+    'sessionList(sessions, now, heldKey)',
     "nextSelection(selection, list, {\n    type: 'poll'",
     'lastSessionList = list;',
-    'pickState(sessions, now, selection)',
+    'pickState(sessions, now, selection, heldKey)',
   ].map((piece) => {
     const at = body.indexOf(piece);
     assert.ok(at >= 0, `refresh sem: ${piece}`);
     return at;
   });
   assert.deepEqual(order, [...order].sort((a, b) => a - b), 'ordem do refresh');
+  // D-22: o concluído só é segurado com o cursor sobre a pílula, e esse fato vem só do pedido de captura (hover).
+  assert.ok(mainLf.includes('const isCursorOverIsland = () => [...captureRequests.values()].some((capture) => capture === true);'));
+  assert.equal(mainLf.split('isCursorOverIsland()').length - 1, 1, 'só o refresh pergunta pelo cursor');
   assert.match(mainLf, /^let selection = \{ key: null, requests: \[\] \};/m);
   const code = mainLf.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
   const assignments = [...code.matchAll(/(?<![\w.])(let\s+)?selection\s*=(?!=)([^;]*);/g)].filter((match) => !match[1]);
