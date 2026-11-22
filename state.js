@@ -185,11 +185,12 @@ const SHELL_WINDOW_CLASSES = Object.freeze(['Progman', 'WorkerW', 'Shell_TrayWnd
 const WS_EX_TRANSPARENT = 0x20;
 
 /**
- * Regra de D-18, o contrato do sensor de tela cheia, que ainda não existe (pendente da escolha do autor,
- * D-20). Devolve um Map novo de id de monitor para o HWND que o cobre; nunca lança nem muta `previous`.
+ * Regra de D-18, o contrato do sensor de tela cheia, alimentado a 2 Hz pelo fullscreen.js no Windows (D-17).
+ * Devolve um Map novo de id de monitor para o HWND que o cobre; nunca lança nem muta `previous`.
  * `probe` é null ou { foreground, gone }: `foreground` é null ou { hwnd, className, pid, exStyle, visible,
  * minimized, cloaked, clientRect, monitorRect } (retângulos { left, top, right, bottom } em pixels físicos)
- * e `gone` lista os HWND lembrados que sumiram. `displays` é [{ id, rect }] em pixels físicos. Começa do
+ * e `gone` lista os HWND lembrados que sumiram (fechados, minimizados, invisíveis ou cloaked, como na troca de
+ * área de trabalho virtual). `displays` é [{ id, rect }] em pixels físicos. Começa do
  * mapa anterior, solta o que sumiu ou saiu de `displays` e então olha o primeiro plano: o próprio pid e
  * janela invisível, minimizada, cloaked ou transparente não mudam nada; no monitor do primeiro plano, a
  * janela que cobre a área inteira (com a tolerância) fica lembrada e qualquer outra solta o monitor.

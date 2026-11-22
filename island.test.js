@@ -563,7 +563,8 @@ test('nextUserHidden inverte, exceto quando toda ilha está coberta por tela che
   assert.deepEqual([ids, covered], [[1, 2], [1]]);
 });
 
-// D-18: a regra do primeiro plano em tela cheia, pura; o sensor que a alimentaria ainda não existe (D-20).
+// D-18: a regra do primeiro plano em tela cheia, pura, testada aqui; o sensor que a alimenta é o fullscreen.js
+// (D-17, D-18), coberto em gate.test.js.
 test('nextFullscreen marca e solta o monitor coberto pelo primeiro plano', () => {
   const A = { id: 1, rect: { left: 0, top: 0, right: 2560, bottom: 1080 } };
   const B = { id: 2, rect: { left: -1920, top: 0, right: 0, bottom: 1080 } };

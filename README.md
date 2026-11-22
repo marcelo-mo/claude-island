@@ -8,7 +8,7 @@ Feita em Electron, roda em Windows, macOS e Linux.
 ## Uso
 
 ```bash
-pnpm install            # baixa o Electron
+pnpm install            # baixa o Electron e o koffi (sensor de tela cheia, só usado no Windows)
 pnpm hooks:install  # registra os hooks no ~/.claude/settings.json (faz backup antes)
 ```
 
@@ -155,9 +155,13 @@ ociosa, a pílula fica invisível e sem `pointer-events`, e os cliques passam pa
   "sempre no topo" por timer. O que foi verificado dessa convivência, do toast do Windows e dos apps de notch está em
   [`docs/INTEGRACOES.md`](docs/INTEGRACOES.md); `scripts/measure-coexistence.ps1` mede as duas ilhas juntas
   por 5 minutos, só lendo as janelas.
-- **Tela cheia: ainda não está ativo.** A regra de esconder a ilha do monitor ocupado por um app em tela
-  cheia está pronta, mas o sensor depende de uma decisão pendente. Por enquanto a ilha continua por
-  cima de app em tela cheia, e o atalho é o jeito de tirá-la do caminho.
+- **Tela cheia (só no Windows).** A ilha do monitor ocupado por um app em tela cheia (vídeo em F11, jogo,
+  apresentação) some e volta quando ele sai, minimiza ou some na troca de área de trabalho virtual, com até
+  0,5 s de atraso. Janela maximizada, área de trabalho e barra de tarefas não contam, e focar outro monitor não
+  a traz de volta. Com a ilha coberta, um pedido de permissão só toca o som: responda no terminal ou na ilha
+  de um monitor descoberto. O atalho não mostra a ilha por cima da tela cheia. Custa uma dependência nativa
+  (koffi, cerca de +5 MB de memória, carregada só no Windows). No macOS e no Linux a ilha continua por cima e
+  o atalho a tira do caminho.
 
 O que só uma pessoa na tela confirma (hover com terminal elevado e AltGr+C) está em
 `scripts/human-checks.js`, que só escuta, não gera entrada e exige a ilha parada:
