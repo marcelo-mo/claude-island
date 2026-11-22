@@ -154,15 +154,17 @@
   :root[data-shape="notch"] { --stage-top: 0px; }
   :root[data-shape="notch"] #pill { border-radius: 0 0 16px 16px; }
   /* Âncoras: a pílula encosta no lado ancorado do palco, deixando a margem da sombra, e a ampliação do cursor
-     cresce a partir da borda ancorada. O centro e o topo seguem a regra base do body e do #pill. Embaixo o
-     respiro de cima não vale (padding-top: 0) e a margem da sombra passa para a base. */
+     cresce a partir da borda ancorada. O centro e o topo seguem a regra base do body e do #pill. O lado de cima
+     ou de baixo vem do main (data-edge): é o das âncoras de baixo e também o da ilha arrastada para a metade de
+     baixo da tela, onde o palco cresce para cima para a pílula expandida e o pedido caberem. Embaixo o respiro
+     de cima não vale (padding-top: 0) e a margem da sombra passa para a base. */
   :root[data-anchor] #pill { transform-origin: var(--origin-x, 50%) var(--origin-y, 0); }
   :root[data-anchor$="-left"] { --origin-x: 0%; }
   :root[data-anchor$="-right"] { --origin-x: 100%; }
-  :root[data-anchor^="bottom-"] { --origin-y: 100%; }
+  :root[data-edge="bottom"] { --origin-y: 100%; }
   :root[data-anchor$="-left"] body { justify-content: flex-start; padding-left: var(--stage-shadow); }
   :root[data-anchor$="-right"] body { justify-content: flex-end; padding-right: var(--stage-shadow); }
-  :root[data-anchor^="bottom-"] body { align-items: flex-end; padding-top: 0; padding-bottom: var(--stage-shadow); }
+  :root[data-edge="bottom"] body { align-items: flex-end; padding-top: 0; padding-bottom: var(--stage-shadow); }
   /* Ao lado da ilha do sistema (Fase 6): a pílula encosta na borda do palco de frente para o mod e cresce para
      fora dela, então mola, hover e nudge nunca a empurram para cima da pílula dele. À direita do mod é o
      alinhamento das âncoras -left, à esquerda é o das -right; o nome não usa o sufixo para não herdar o lado
@@ -1149,16 +1151,19 @@
   // e dos temas. Estilo e velocidade das molas não passam por aqui: springFrame os lê de
   // current.preferences. Trocar tema ou forma pode mover os botões, e o ResizeObserver não vê mudança
   // só de posição; rearmar é o lado seguro.
-  function applyPreferences(preferences) {
+  function applyPreferences(preferences, stageEdge) {
     const root = document.documentElement;
     const theme = preferences?.theme || 'auto';
     const shape = preferences?.shape || 'pill';
     const anchor = preferences?.anchor || 'top-center';
-    // Trocar a âncora move os botões no palco; rearmar é o lado seguro.
-    const changed = root.dataset.theme !== theme || root.dataset.shape !== shape || root.dataset.anchor !== anchor;
+    const edge = stageEdge === 'bottom' ? 'bottom' : 'top';
+    // Trocar a âncora ou o lado do palco move os botões no palco; rearmar é o lado seguro.
+    const changed = root.dataset.theme !== theme || root.dataset.shape !== shape || root.dataset.anchor !== anchor
+      || root.dataset.edge !== edge;
     root.dataset.theme = theme;
     root.dataset.shape = shape;
     root.dataset.anchor = anchor;
+    root.dataset.edge = edge;
     if (changed && current.permission) restartArming();
   }
 
@@ -1219,7 +1224,7 @@
       lastArmEpoch = next.armEpoch;
       restartArming();
     }
-    applyPreferences(next.preferences);
+    applyPreferences(next.preferences, next.stageEdge);
     render();
   });
 

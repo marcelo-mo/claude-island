@@ -421,10 +421,12 @@ test('as regras de âncora alinham a pílula pelo lado ancorado e deixam a marge
   assert.deepEqual(only(':root[data-anchor] #pill'), { 'transform-origin': 'var(--origin-x, 50%) var(--origin-y, 0)' });
   assert.deepEqual(only(':root[data-anchor$="-left"]'), { '--origin-x': '0%' });
   assert.deepEqual(only(':root[data-anchor$="-right"]'), { '--origin-x': '100%' });
-  assert.deepEqual(only(':root[data-anchor^="bottom-"]'), { '--origin-y': '100%' });
+  // O lado de cima ou de baixo vem do main (data-edge), não da âncora: a ilha arrastada para baixo também cresce
+  // para cima.
+  assert.deepEqual(only(':root[data-edge="bottom"]'), { '--origin-y': '100%' });
   assert.deepEqual(only(':root[data-anchor$="-left"] body'), { 'justify-content': 'flex-start', 'padding-left': 'var(--stage-shadow)' });
   assert.deepEqual(only(':root[data-anchor$="-right"] body'), { 'justify-content': 'flex-end', 'padding-right': 'var(--stage-shadow)' });
-  assert.deepEqual(only(':root[data-anchor^="bottom-"] body'), {
+  assert.deepEqual(only(':root[data-edge="bottom"] body'), {
     'align-items': 'flex-end', 'padding-top': '0', 'padding-bottom': 'var(--stage-shadow)',
   });
   // As regras base do centro e do topo não mudam: sem âncora a pílula fica como na Fase 3.

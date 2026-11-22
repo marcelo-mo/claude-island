@@ -352,11 +352,45 @@ test('a âncora escolhe a posição, a folga e zera os deslocamentos', () => {
   assert.ok(bodyOf('function moveIsland(').includes('horizontalSlackFor(preferences.anchor)'), 'o clamp usa a folga da âncora');
   assert.ok(bodyOf('function savedPosition(').includes('positionFromSavedOffset(display.workArea, WINDOW_SIZE, savedOffsets[display.id], preferences.anchor)'));
   const apply = bodyOf('function applyPreference(');
-  assert.ok(apply.includes('next.anchor !== preferences.anchor'), 'só trocar a âncora zera');
+  // Trocar a âncora ou escolher de novo a que já está marcada zera: é o jeito do menu de voltar à posição padrão.
+  assert.ok(apply.includes("JSON.stringify(next) === JSON.stringify(preferences) && key !== 'anchor') return;"), 'reescolher a âncora não sai cedo');
+  assert.ok(apply.includes("if (key === 'anchor') {"), 'trocar ou reescolher a âncora zera');
   assert.ok(apply.includes('savedOffsets = {};') && apply.includes('persistSavedOffsets();'), 'zera e grava os deslocamentos');
   assert.ok(apply.indexOf('savedOffsets = {};') < apply.indexOf('preferences = next;'), 'zera antes de valer a âncora nova');
   const sync = apply.indexOf('syncIslands();');
   assert.ok(sync > apply.indexOf('writePreferences();') && sync < apply.indexOf("refresh('rearm');"), 'reposiciona antes de rearmar');
+});
+
+// Pedido do autor: clicar de novo na âncora marcada no menu leva a ilha à posição padrão, como o duplo clique.
+// Roda o applyPreference do main.js de verdade, com os efeitos registrados.
+test('escolher de novo a âncora marcada zera os deslocamentos, reposiciona e rearma; outra opção igual não faz nada', () => {
+  const run = (key, value) => {
+    const calls = [];
+    const context = {
+      normalizePreferences: require('./state').normalizePreferences,
+      preferences: require('./state').normalizePreferences({ anchor: 'bottom-left' }),
+      savedOffsets: { 1: { x: 0, y: 300, edge: 'top' }, 2: { x: 40, y: 0 } },
+      persistSavedOffsets: () => calls.push('persist'),
+      writePreferences: () => calls.push('write'),
+      syncIslands: () => calls.push('sync'),
+      refresh: (reason) => calls.push(`refresh:${reason}`),
+    };
+    vm.runInNewContext(`${mainFunctionBody('applyPreference')}\n}\napplyPreference(${JSON.stringify(key)}, ${JSON.stringify(value)});`, context);
+    // JSON tira o protótipo do outro contexto do vm, que o deepEqual estrito recusaria.
+    return { calls, savedOffsets: JSON.parse(JSON.stringify(context.savedOffsets)), anchor: context.preferences.anchor };
+  };
+  const reselected = run('anchor', 'bottom-left');
+  assert.deepEqual(reselected.savedOffsets, {});
+  assert.equal(reselected.anchor, 'bottom-left');
+  assert.deepEqual(reselected.calls, ['persist', 'write', 'sync', 'refresh:rearm']);
+  const changed = run('anchor', 'top-right');
+  assert.deepEqual(changed.savedOffsets, {});
+  assert.equal(changed.anchor, 'top-right');
+  assert.deepEqual(changed.calls, ['persist', 'write', 'sync', 'refresh:rearm']);
+  // outra preferência sem mudança segue sem efeito: não mexe na posição nem rearma
+  const same = run('theme', require('./state').normalizePreferences({}).theme);
+  assert.deepEqual(same.calls, []);
+  assert.equal(Object.keys(same.savedOffsets).length, 2);
 });
 
 // Trava de regressão (texto): no modo de uma ilha só a troca de monitor nunca acontece com pedido na tela
@@ -444,7 +478,9 @@ test('refresh não engole o rearme e o estado enviado leva answeredId, armEpoch 
   for (const glue of [
     "nextShownPermission(shown, permissionId, performance.now(), reason === 'rearm')",
     'if (serialized === lastSent && nextShown.epoch === shown.epoch) return;',
-    '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea }',
+    '{ ...lastPickedState, answeredId: decidedPermissionId, armEpoch: shown.epoch, preferences, fitsWorkArea, stageEdge }',
+    // o lado do palco é o do arraste em curso, senão o salvo com a âncora
+    'const stageEdge = drag ? drag.edge : stageEdgeOf(display && savedOffsets[display.id], preferences.anchor);',
     // a mesma conferência do gate (fitsVisibleArea), nunca uma mais frouxa
     'const fitsWorkArea = fitsVisibleArea(island, display);',
   ]) {
@@ -575,7 +611,7 @@ test('o renderer aplica as preferências do payload e rearma se mudaram com pedi
   const onState = rendererSource.slice(rendererSource.indexOf('window.island.onState('));
   assert.ok(onState.indexOf('answeredPermissionId = null;') >= 0);
   assert.ok(
-    onState.indexOf('applyPreferences(next.preferences);') > onState.indexOf('answeredPermissionId = null;'),
+    onState.indexOf('applyPreferences(next.preferences, next.stageEdge);') > onState.indexOf('answeredPermissionId = null;'),
     'applyPreferences vem depois de soltar a trava local',
   );
   const apply = rendererSource.slice(rendererSource.indexOf('function applyPreferences('));
@@ -1942,7 +1978,7 @@ test('sendState: o aviso sonoro é da primeira ilha e nunca de uma troca feita p
   const sendState = vm.runInNewContext(`${mainFunctionBody('sendState')}\n}\nsendState`, {
     isIslandSender: () => true, ISLAND_URL: 'file:///ilha', islands: new Map([[1, first], [2, second]]),
     displayOf: () => ({}), fitsVisibleArea: () => true, lastPickedState: {}, decidedPermissionId: null,
-    shown: { epoch: 1 }, preferences: {},
+    shown: { epoch: 1 }, preferences: {}, dragStartPositions: new Map(), savedOffsets: {}, stageEdgeOf: () => 'top',
   });
   sendState(first);
   sendState(second);
