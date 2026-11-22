@@ -1221,6 +1221,7 @@ test('só o fullscreen.js carrega o pacote nativo, e a sondagem a 2 Hz liga o se
   const read = (file) => fs.readFileSync(path.join(__dirname, file), 'utf8');
   for (const file of ['hook.js', 'permission-hook.js', 'window.js', 'state.js', 'install.js', 'preload.js']) {
     assert.equal(read(file).includes(native), false, `${file} cita o pacote nativo`);
+    assert.equal(read(file).includes('./fullscreen'), false, `${file} carrega o sensor`);
   }
   assert.equal(mainSource.includes(`require('${native}`), false, 'main.js carrega o pacote nativo');
   assert.ok(mainSource.includes("require('./fullscreen')"), 'main.js carrega o sensor');
@@ -1240,7 +1241,13 @@ test('só o fullscreen.js carrega o pacote nativo, e a sondagem a 2 Hz liga o se
     return mainSource.slice(start, mainSource.indexOf(closing, start));
   };
   const probe = bodyOf('function probeFullscreen(');
-  for (const needle of ['process.pid', 'screen.dipToScreenRect(null, display.bounds)', 'nextFullscreen(', 'applyVisibility(']) {
+  // O mapa anterior entra como previous, os HWND lembrados vão ao sensor (para soltar o que sumiu) e o
+  // resultado troca o conteúdo do mesmo Map, que o gate e o atalho leem.
+  for (const needle of [
+    'process.pid', 'screen.dipToScreenRect(null, display.bounds)', 'nextFullscreen(', 'applyVisibility(',
+    'previous: fullscreenByDisplay,', 'probeForeground([...fullscreenByDisplay.values()])',
+    'fullscreenByDisplay.clear();', 'fullscreenByDisplay.set(id, hwnd)',
+  ]) {
     assert.ok(probe.includes(needle), `probeFullscreen não contém ${needle}`);
   }
   const startBody = bodyOf('function start(');
