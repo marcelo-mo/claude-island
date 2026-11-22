@@ -146,7 +146,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Com várias sessões abertas a ilha mostra um ponto por sessão no lugar do contador (cor = estado, pulso = pede permissão), em ordem estável da mais antiga para a mais nova, com o nome do projeto da sessão exibida sempre visível
   2. A roda do mouse sobre a pílula troca a sessão exibida sem dar a volta no fim, com acúmulo, pausa entre passos e touchpad mais lento; clicar num ponto leva àquela sessão; sobre o texto de um pedido a roda só rola o texto
-  3. Um pedido de permissão novo leva a ilha até a sessão uma vez por pedido, nunca no meio de um gesto de rolagem; se o usuário rolar para longe ela não puxa de novo e o ponto segue pulsando; "concluído" e "voltou a trabalhar" nunca trocam a sessão sozinhos
+  3. Um pedido de permissão novo leva a ilha até a sessão uma vez por pedido, nunca no meio de um gesto de rolagem; se o usuário rolar para longe ela não puxa de novo e o ponto segue pulsando; concluir ou voltar a trabalhar nunca troca a sessão na hora; o "concluído" exibido vence em 10 s e a ilha segue para a próxima, menos com o cursor sobre a pílula (D-22, 2026-11-22)
   4. Pedidos simultâneos entram numa fila na ordem de chegada ("1 de N"), um pedido novo não substitui o que está sendo lido e, ao responder, a ilha vai para o próximo pendente; toda troca (scroll, snap, fila) reinicia o armamento, e Permitir/Negar atinge só o pedido que está na tela
   5. Uma sessão morta (terminal fechado sem `SessionEnd`) sai da lista de pontos e seus arquivos antigos são removidos
 **Plans**: 7/7 plans executed
@@ -163,7 +163,7 @@ Plans:
 - [x] 05-04-PLAN.md — snap uma vez por pedido, fila "1 de N" e avanço ao próximo pendente
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [x] 05-05-PLAN.md — sessão morta sai da lista e o arquivo é apagado; o "concluído" exibido não vence com outra sessão viva (D-21)
+- [x] 05-05-PLAN.md — sessão morta sai da lista e o arquivo é apagado; o "concluído" exibido não vence com outra sessão viva (D-21, revogada pela D-22 em 2026-11-22)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [x] 05-06-PLAN.md — mola de troca de sessão do mod e transição do acento

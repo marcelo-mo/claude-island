@@ -60,12 +60,12 @@ Escopo deste milestone: reformular a ilha com o comportamento e o visual do mod 
 
 ### Sessões (SESS)
 
-- [ ] **SESS-01**: Com várias sessões abertas, a ilha mostra pontos (um por sessão, cor = estado, pulso = pede permissão) no lugar do contador, em ordem estável (da mais antiga para a mais nova), com o nome do projeto da sessão exibida sempre visível
+- [ ] **SESS-01**: Com várias sessões abertas, a ilha mostra pontos (um por sessão, cor = estado, pulso = pede permissão) no lugar do contador, numa coluna vertical na lateral da pílula expandida e só nela, em ordem estável (da mais antiga, no alto, para a mais nova), com o nome do projeto da sessão exibida sempre visível (coluna e só expandida: 2026-11-22, pedido do autor)
 - [ ] **SESS-02**: A roda do mouse sobre a pílula (fora do texto de um pedido) troca a sessão exibida, sem dar a volta no fim, com as regras de gesto do mod (acumular, pausa entre passos, touchpad mais lento)
-- [ ] **SESS-03**: Clicar num ponto leva àquela sessão
+- [ ] **SESS-03**: Clicar num ponto leva àquela sessão (com a pílula expandida, onde os pontos aparecem; o "concluído" não expande, e ali a troca é pela roda)
 - [ ] **SESS-04**: Quando uma sessão faz um pedido de permissão novo, a ilha vai sozinha até ela uma vez por pedido — nunca no meio de um gesto de rolagem —, e se o usuário rolar para longe ela não puxa de novo; o ponto segue pulsando
 - [ ] **SESS-05**: Pedidos simultâneos entram numa fila na ordem de chegada ("1 de N"); um pedido novo não substitui o que está sendo lido, e ao responder a ilha vai para o próximo pendente
-- [ ] **SESS-06**: A troca automática acontece só por pedido de permissão, nunca no instante em que uma sessão conclui ou volta a trabalhar; o "concluído" exibido some no prazo de 10 s e, com outras sessões vivas, a ilha segue para a próxima pela regra de saída (revisto em 2026-11-22, pedido do autor)
+- [ ] **SESS-06**: A troca automática acontece só por pedido de permissão, nunca no instante em que uma sessão conclui ou volta a trabalhar; o "concluído" exibido some no prazo de 10 s e, com outras sessões vivas, a ilha segue para a próxima pela regra de saída, menos enquanto o cursor estiver sobre a pílula (revisto em 2026-11-22, pedido do autor)
 - [ ] **SESS-07**: Sessões mortas (terminal fechado sem `SessionEnd`) saem da lista e seus arquivos antigos são removidos
 
 ### Tela cheia (TELA)

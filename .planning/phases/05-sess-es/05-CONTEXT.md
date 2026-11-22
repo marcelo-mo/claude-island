@@ -53,7 +53,7 @@ Fica de fora:
   - A seleção é `null` (automático: mostra a sessão que o `pickState` escolheria, a mais urgente e depois a mais recente) ou a chave de uma sessão (manual).
   - Roda e clique num ponto põem em manual. Snap e fila também gravam a chave da sessão do pedido.
   - A seleção manual vale até a sessão sair da lista; aí volta ao automático.
-  - Sem tempo de expiração: a ilha nunca troca sozinha por "concluído" nem por "voltou a trabalhar" (SESS-06).
+  - Sem tempo de expiração: a ilha nunca troca sozinha por "concluído" nem por "voltou a trabalhar" (SESS-06). *Ajustado pela D-22: o "concluído" exibido sai da lista no prazo de 10 s.*
   - Uma função pura em `state.js`, `nextSelection`, decide a seleção a cada evento (`poll`, `scroll`, `select`, `answered`). O `pickState` passa a receber a seleção e devolve a sessão exibida, mais a lista de pontos e a fila.
   - **Conciliação com o SESS-06, ajustada na revisão do plano:**
     - O "automático" não acompanha o `pickState` ao vivo. A escolha por urgência acontece só na subida, quando a lista sai de vazia, ou quando a sessão exibida sai de fato da lista (`SessionEnd`, sessão morta ou prazo de `running`/`waiting`), e então fica fixa como chave.
@@ -62,7 +62,7 @@ Fica de fora:
   - A sessão em `done` que está na tela fica na lista e na tela além dos 10 s de `DONE_VISIBLE_MS`, até o usuário trocar (roda ou ponto) ou um pedido novo fazer o snap. Ao deixar de ser exibida, ela expira na hora, se já passou do prazo.
   - Se ela for a única sessão, o prazo de 10 s vale como hoje e a ilha fica ociosa. Isso não é troca de sessão, e a ilha continua existindo só enquanto o Claude roda.
   - Assim, "concluído" e "voltou a trabalhar" nunca trocam a sessão sozinhos (ROADMAP SC3, SESS-06), nem pela expiração.
-  - Sair de fato da lista (`SessionEnd`, sessão morta, prazo de `running`/`waiting`) não é troca por estado. Ajustado na terceira revisão do plano, para não contrariar a D-13 ("uma vez por pedido"):
+  - Sair de fato da lista (`SessionEnd`, sessão morta, prazo de `running`/`waiting` e, desde a D-22, de `done`) não é troca por estado. Ajustado na terceira revisão do plano, para não contrariar a D-13 ("uma vez por pedido"):
     - a ilha vai à sessão do pedido pendente **nunca exibido** mais antigo, se houver e se não houver gesto de roda em curso (a mesma espera de 400 ms do snap, D-13);
     - senão, à **vizinha na ordem estável** (a anterior, ou a seguinte se a que saiu era a primeira), nunca à "mais urgente".
     - **A vizinha pula as sessões com pedido já exibido e deixado.**
@@ -75,7 +75,7 @@ Fica de fora:
     - O reserva da roda (`wheelDeltaY || -deltaY × 1,2`) também converte quando `wheelDeltaY` é 0. Isso é inofensivo: delta 0 não gera passo.
 
 ### Pontos e rótulo (SESS-01)
-- **D-07:** **Um ponto por sessão viva, no lugar de `#count`, só com 2 ou mais sessões.**
+- **D-07:** **Um ponto por sessão viva, no lugar de `#count`, só com 2 ou mais sessões.** *Posição e visibilidade revistas pela D-23: coluna vertical, só na pílula expandida.*
   - Cor = cor fixa do estado (laranja trabalhando, âmbar precisa de você, verde concluído, cada uma com o par escuro/claro da Key Decision; os temas não mudam as cores de estado).
   - Pulso = a sessão tem pedido de permissão válido pendente, inclusive a sessão exibida.
   - O ponto da sessão exibida é maior (ou tem anel), sem mudar de cor.
@@ -209,11 +209,11 @@ Palavras do autor: "tá legal em ser scroll, mas ele poderia ser seletores verti
 - **D-22 (revoga a D-21):** **O "concluído" exibido vence no prazo de sempre (`DONE_VISIBLE_MS`, 10 s), mesmo com outra sessão viva.**
   - Ao vencer, a sessão exibida sai da lista e a ilha segue a regra de saída da D-21, que fica: o pedido pendente nunca exibido mais antigo (fora de gesto de roda), senão a vizinha na ordem estável que não tenha pedido já deixado, nunca a mais urgente.
   - A troca rearma como toda troca: Permitir/Negar seguem o armamento de 0,8 s e o rearme por retângulo, então a troca nunca deixa aprovar um pedido que não estava na tela.
-  - **Sem adiar a troca com o cursor sobre a ilha.** Avaliado e descartado: o "concluído" não expande no hover, então não há seletor nem botão de aprovar sob o cursor; o pior caso é o clique em "Abrir" cair na pílula da sessão seguinte, que não aprova nada. Adiar seguraria o "concluído" enquanto o cursor descansasse ali, o mesmo problema que o autor apontou.
-  - Código: `aliveSessions` perdeu a chave segurada; `sessionList(sessions, now)` e `pickState` não seguram mais nada, e o `refresh` usa uma lista só.
+  - **Com o cursor sobre a pílula, o vencimento espera** (opção dada pelo orquestrador, adotada na revisão de código, WR-01): a saída por vencimento cai, com frequência, na exceção da D-21 (todas as restantes com pedido já deixado), e a pílula viraria um pedido expandido sob a mão de quem ia clicar em "Abrir" (nas âncoras de baixo, Permitir no lugar do "Abrir"). O armamento já recusaria, mas não mover a pílula sob o cursor é o lado seguro. O fato "cursor sobre a pílula" é o pedido de captura do hover (`isCursorOverIsland` no main); ao sair, o ciclo seguinte (400 ms) solta. Segurar só vale com outra sessão viva; sozinho ele vence e a ilha fica ociosa.
+  - Código: `aliveSessions(sessions, now, heldKey)`, com `heldKey` só com o cursor sobre a pílula; `sessionList` e `pickState` recebem a mesma chave, e o `refresh` usa uma lista só.
 - **D-23:** **Seletor de sessões vertical, só com a pílula expandida.**
-  - `#sessions` sai de `#side` e vira o último filho de `#pill`, posto em coluna na lateral direita (`position: absolute; right: 12px; top/bottom: 8px`), fora do grid. O ponto fica a 20 px da borda, na parte reta do raio de 36 px.
-  - A expandida segue com 400 px, então a conta do palco e a folga das bordas (ddda2e4) não mudam: com os pontos visíveis, o conteúdo cede 16 px (`padding-right: 40px`).
+  - `#sessions` sai de `#side` e vira o último filho de `#pill`, posto em coluna na lateral direita (`position: absolute; right: 12px; top: 8px; height: 88px`), fora do grid. O ponto fica a 20 px da borda, dentro do recorte do raio de 36 px. A altura fixa impede que a pílula crescer (janela, pedido, mola) mova os pontos (WR-03 da revisão).
+  - A expandida segue com 400 px, então a conta do palco e a folga das bordas (ddda2e4) não mudam: com os pontos visíveis ou com pedido na tela, o conteúdo cede 16 px (`padding-right: 40px`). Com pedido a faixa fica mesmo sem pontos, para o número de sessões mudar (1 ↔ 2, 8 ↔ 9) sem mover Permitir e Negar (WR-02).
   - Ordem de cima para baixo, na direção da roda: para cima = sessão anterior = ponto de cima.
   - Botão de 16 px; na expandida de 104 px (sem janela) cabem 5, e de 6 a 8 eles encolhem até 10 px (`ponytail`).
   - Na compacta, pontos e contador (mais de 8 sessões) somem; o título com o projeto segue indicando que há várias sessões (D-08). O "1 de N" da fila já vivia só no bloco de pedido, que é expandido.
