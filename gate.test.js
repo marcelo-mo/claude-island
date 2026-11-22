@@ -1375,7 +1375,7 @@ test('sessionSwitchDirection dá a direção da troca e MAX_SESSION_DOTS é 8', 
   }
 });
 
-test('a pílula compacta tem teto na largura da expandida e os pontos ficam na ponta direita da barra', () => {
+test('a pílula compacta tem teto na largura da expandida e os pontos são uma coluna na lateral da expandida', () => {
   assert.equal(cssDeclarations('#pill:not(.expanded)')['max-width'], cssDeclarations('#pill.expanded').width);
   // Na expandida não há teto: ele cortaria a passagem da mola ao crescer (ANIM-01).
   assert.equal(cssDeclarations('#pill')['max-width'], undefined);
@@ -1385,9 +1385,31 @@ test('a pílula compacta tem teto na largura da expandida e os pontos ficam na p
     }
   }
   const side = rendererLf.slice(rendererLf.indexOf('<span id="side">'), rendererLf.indexOf('\n    </span>\n    </div>'));
-  assert.ok(side.indexOf('id="open-compact"') > 0 && side.indexOf('id="sessions"') > side.indexOf('id="open-compact"'));
-  const lines = side.split('\n').filter((line) => line.trim() !== '');
-  assert.ok(lines[lines.length - 1].includes('id="sessions"'), '#sessions é o último filho de #side');
+  // Fora da barra: último filho da pílula, depois de #actions, posto na lateral sem entrar no grid.
+  assert.ok(side.includes('id="open-compact"'));
+  assert.equal(side.includes('id="sessions"'), false, 'os pontos não moram mais na barra');
+  const afterActions = rendererLf.slice(rendererLf.indexOf('<div id="actions">'), rendererLf.indexOf('<script>'));
+  const lines = afterActions.split('\n').map((line) => line.trim()).filter(Boolean);
+  assert.deepEqual(lines.slice(-3), ['</div>', '<span id="sessions" role="group" aria-label="Sessões" hidden></span>', '</div>']);
+  const column = cssDeclarations('#sessions');
+  assert.equal(column.position, 'absolute');
+  assert.equal(column['flex-direction'], 'column');
+  // Só na expandida (pedido do autor), e o contador de mais de 8 sessões segue a mesma regra.
+  assert.equal(cssDeclarations('#pill:not(.expanded) #sessions, #sessions[hidden]').display, 'none');
+  assert.equal(cssDeclarations('#pill:not(.expanded) #count').display, 'none');
+  // O conteúdo cede a faixa da coluna e a largura da expandida não muda: a conta do palco segue valendo.
+  const gutter = cssDeclarations('#pill.expanded:has(> #sessions:not([hidden]))');
+  assert.deepEqual(Object.keys(gutter), ['padding-right']);
+  const right = cssPixels(column.right, 'right de #sessions');
+  const button = cssDeclarations('#sessions button');
+  assert.equal(button.width, '16px');
+  assert.equal(button.flex, '0 1 16px');
+  // Entre o conteúdo e a coluna sobra pelo menos a distância da coluna à borda, e o ponto fica a 20 px da borda.
+  assert.ok(cssPixels(gutter['padding-right'], 'padding-right') - right - 16 >= right, 'folga entre o conteúdo e a coluna');
+  assert.equal(right + 16 / 2, 20);
+  // 8 pontos no tamanho mínimo cabem na expandida mais baixa (104 px) menos as margens de cima e de baixo.
+  const inset = cssPixels(column.top, 'top de #sessions') + cssPixels(column.bottom, 'bottom de #sessions');
+  assert.ok(8 * cssPixels(button['min-height'], 'min-height') <= 104 - inset);
   const render = functionBody('renderContent');
   assert.ok(render.includes("pill.classList.toggle('multi-session', "));
   assert.ok(render.includes('current.sessions.length >= 2'));

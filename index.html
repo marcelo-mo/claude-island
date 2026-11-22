@@ -232,12 +232,22 @@
     border-radius: 11px; padding: 2px 9px; font-weight: 600;
   }
   #count:empty { display: none; }
-  /* Um ponto por sessão no lugar do contador: cor = estado (fixa nos temas, nunca o acento); o ponto da
-     sessão exibida é maior. O botão tem 16 px para ser fácil de acertar, e o ponto dentro dele é menor. */
-  #sessions { display: inline-flex; align-items: center; }
-  #sessions[hidden] { display: none; }
+  /* Seletor de sessões: uma coluna de pontos na lateral direita da pílula expandida, na direção da roda (para
+     cima = sessão anterior = ponto de cima). Só aparece expandida, a pedido do autor; na compacta o título com
+     o projeto já diz que há várias sessões. Fica fora do grid e dos 400 px da expandida, então a conta do palco
+     e a folga das bordas não mudam: o conteúdo cede 16 px à direita (40 = 12 da borda + 16 do botão + 12 de
+     folga) e o ponto fica a 20 px da borda, na parte reta do raio de 36 px. Cor = estado (fixa nos temas, nunca
+     o acento); o ponto da sessão exibida é maior. O botão tem 16 px para ser fácil de acertar.
+     ponytail: na expandida de 104 px (sem janela) cabem 5 botões de 16 px; com 6 a 8 sessões eles encolhem até
+     10 px. Se incomodar, subir a altura da expandida com muitas sessões. */
+  #sessions {
+    position: absolute; right: 12px; top: 8px; bottom: 8px;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+  }
+  #pill:not(.expanded) #sessions, #sessions[hidden] { display: none; }
+  #pill.expanded:has(> #sessions:not([hidden])) { padding-right: 40px; }
   #sessions button {
-    width: 16px; height: 16px; padding: 0; border: 0; background: transparent;
+    width: 16px; flex: 0 1 16px; min-height: 10px; padding: 0; border: 0; background: transparent;
     display: grid; place-items: center; cursor: pointer;
   }
   #sessions button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
@@ -255,7 +265,8 @@
   #open-compact:hover { filter: brightness(1.15); }
   #open-compact:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
   #pill[data-state="done"].has-window:not(.expanded) #open-compact { display: inline-block; }
-  #pill[data-state="done"].has-window:not(.expanded) #count { display: none; }
+  /* O contador (mais de MAX_SESSION_DOTS sessões) é o seletor de sessões sem pontos: só na expandida, como eles. */
+  #pill:not(.expanded) #count { display: none; }
   /* Concluído é verde por inteiro, inclusive o botão da versão expandida. */
   #pill[data-state="done"] #open { color: #fff; background: var(--done-button); }
   #detail {
@@ -358,7 +369,6 @@
       </span>
       <span id="count"></span>
       <button id="open-compact" type="button" aria-label="Abrir sessão">Abrir</button>
-      <span id="sessions" role="group" aria-label="Sessões" hidden></span>
     </span>
     </div>
     <span id="detail"></span>
@@ -372,6 +382,7 @@
       <button id="deny" type="button" hidden>Negar</button>
       <button id="allow" type="button" hidden>Permitir</button>
     </div>
+    <span id="sessions" role="group" aria-label="Sessões" hidden></span>
   </div>
 
 <script>
