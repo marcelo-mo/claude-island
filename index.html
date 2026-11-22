@@ -207,8 +207,7 @@
   #title { white-space: nowrap; font-weight: 600; }
   /* Com várias sessões o título tem largura fixa e corta com reticências: o nome do projeto, longo ou curto,
      nunca muda a largura da pílula nem empurra o "Abrir". Ele só encolhe abaixo de 140 px quando a barra
-     não cabe (muitos pontos com "Abrir" e anel de contexto).
-     ponytail: limite aceito; se incomodar, tirar o anel de contexto da compacta com muitas sessões. */
+     não cabe; os pontos não moram mais nela (coluna da expandida), então hoje isso não acontece. */
   #pill.multi-session #title { flex: 0 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   #side { display: flex; align-items: center; gap: 11px; }
   #side:not(:has(> :not([hidden]):not(:empty))) { display: none; }
@@ -236,16 +235,19 @@
      cima = sessão anterior = ponto de cima). Só aparece expandida, a pedido do autor; na compacta o título com
      o projeto já diz que há várias sessões. Fica fora do grid e dos 400 px da expandida, então a conta do palco
      e a folga das bordas não mudam: o conteúdo cede 16 px à direita (40 = 12 da borda + 16 do botão + 12 de
-     folga) e o ponto fica a 20 px da borda, na parte reta do raio de 36 px. Cor = estado (fixa nos temas, nunca
-     o acento); o ponto da sessão exibida é maior. O botão tem 16 px para ser fácil de acertar.
-     ponytail: na expandida de 104 px (sem janela) cabem 5 botões de 16 px; com 6 a 8 sessões eles encolhem até
-     10 px. Se incomodar, subir a altura da expandida com muitas sessões. */
+     folga) e o ponto fica a 20 px da borda, dentro do recorte do raio de 36 px. A coluna tem altura fixa, a da
+     expandida mais baixa (104) menos 8 px em cima e embaixo: a pílula crescer (janela, pedido, mola) não move os
+     pontos. Com pedido na tela a faixa fica reservada mesmo sem pontos, para outra sessão aparecer ou sair
+     (1 ↔ 2, 8 ↔ 9) nunca mover Permitir e Negar. Cor = estado (fixa nos temas, nunca o acento); o ponto da
+     sessão exibida é maior. O botão tem 16 px para ser fácil de acertar.
+     ponytail: na coluna de 88 px cabem 5 botões de 16 px; com 6 a 8 sessões eles encolhem até 10 px. Se
+     incomodar, crescer a coluna nas expandidas mais altas. */
   #sessions {
-    position: absolute; right: 12px; top: 8px; bottom: 8px;
+    position: absolute; right: 12px; top: 8px; height: 88px;
     display: flex; flex-direction: column; justify-content: center; align-items: center;
   }
   #pill:not(.expanded) #sessions, #sessions[hidden] { display: none; }
-  #pill.expanded:has(> #sessions:not([hidden])) { padding-right: 40px; }
+  #pill.expanded:is(.has-permission, :has(> #sessions:not([hidden]))) { padding-right: 40px; }
   #sessions button {
     width: 16px; flex: 0 1 16px; min-height: 10px; padding: 0; border: 0; background: transparent;
     display: grid; place-items: center; cursor: pointer;
@@ -705,8 +707,8 @@
   const MAX_SESSION_DOTS = 8;
 
   /**
-   * Para que lado a sessão exibida andou entre duas listas de pontos: 1 se o ponto atual foi para a
-   * direita, -1 para a esquerda, 0 se não andou, se as listas têm tamanhos diferentes ou menos de dois
+   * Para que lado a sessão exibida andou entre duas listas de pontos: 1 se o ponto atual desceu na
+   * coluna (sessão seguinte), -1 se subiu, 0 se não andou, se as listas têm tamanhos diferentes ou menos de dois
    * itens, ou se algum dos dois lados não tem um item com `current` verdadeiro.
    */
   function sessionSwitchDirection(previousSessions, nextSessions) {

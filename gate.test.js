@@ -956,16 +956,21 @@ function horizontalPadding(value, what) {
 // Suposição: 0,6 cobre nome misto com sublinhados; um nome de 100 'W' passaria disso e teria uma linha a mais.
 const TOOL_CHAR_WIDTH_EM = 0.6;
 
+// Regra que reserva a faixa da coluna de sessões na expandida: com pontos visíveis ou com pedido na tela.
+const SESSIONS_GUTTER_RULE = '#pill.expanded:is(.has-permission, :has(> #sessions:not([hidden])))';
+
 // Linhas que o rótulo da ferramenta ocupa no pior caso: PERMISSION_TOOL_LIMIT caracteres. O modelo
 // só vale porque o rótulo quebra em qualquer ponto (overflow-wrap: anywhere): sem isso um nome sem
 // espaço, como mcp__servidor__ferramenta, passaria da caixa e seria cortado.
 function toolLabelLines() {
   assert.equal(cssDeclarations('#permission-tool')['overflow-wrap'], 'anywhere', 'o rótulo da ferramenta precisa quebrar em qualquer ponto');
   const expanded = cssDeclarations('#pill.expanded');
-  // A expandida pode ter respiro lateral próprio (padding-inline), maior que o da compacta.
-  const pillPadding = expanded['padding-inline']
-    ? 2 * cssPixels(expanded['padding-inline'], 'padding-inline da expandida')
-    : horizontalPadding(cssDeclarations('#pill').padding, 'padding de #pill');
+  // A expandida pode ter respiro lateral próprio (padding-inline), maior que o da compacta. Com pedido na tela
+  // o lado direito é sempre a faixa da coluna de sessões (SESSIONS_GUTTER_RULE).
+  const pillPadding = (expanded['padding-inline']
+    ? cssPixels(expanded['padding-inline'], 'padding-inline da expandida')
+    : horizontalPadding(cssDeclarations('#pill').padding, 'padding de #pill') / 2)
+    + cssPixels(cssDeclarations(SESSIONS_GUTTER_RULE)['padding-right'], 'faixa da coluna de sessões');
   const labelWidth = cssPixels(expanded.width, 'largura da expandida') - pillPadding
     - horizontalPadding(cssDeclarations('#permission').padding, 'padding de #permission');
   const fontSize = cssPixels(cssDeclarations('#permission-tool')['font-size'], 'font-size de #permission-tool');
@@ -1401,19 +1406,25 @@ test('a pílula compacta tem teto na largura da expandida e os pontos são uma c
   // Só na expandida (pedido do autor), e o contador de mais de 8 sessões segue a mesma regra.
   assert.equal(cssDeclarations('#pill:not(.expanded) #sessions, #sessions[hidden]').display, 'none');
   assert.equal(cssDeclarations('#pill:not(.expanded) #count').display, 'none');
-  // O conteúdo cede a faixa da coluna e a largura da expandida não muda: a conta do palco segue valendo.
-  const gutter = cssDeclarations('#pill.expanded:has(> #sessions:not([hidden]))');
+  // O conteúdo cede a faixa da coluna e a largura da expandida não muda: a conta do palco segue valendo. Com
+  // pedido na tela a faixa vale mesmo sem pontos, para mudar o número de sessões nunca mover Permitir e Negar.
+  const gutter = cssDeclarations(SESSIONS_GUTTER_RULE);
   assert.deepEqual(Object.keys(gutter), ['padding-right']);
   const right = cssPixels(column.right, 'right de #sessions');
   const button = cssDeclarations('#sessions button');
-  assert.equal(button.width, '16px');
-  assert.equal(button.flex, '0 1 16px');
+  const buttonWidth = cssPixels(button.width, 'largura do ponto');
+  assert.ok(buttonWidth >= 16, 'alvo de pelo menos 16 px (D-12)');
+  assert.equal(button.flex, `0 1 ${button.width}`);
   // Entre o conteúdo e a coluna sobra pelo menos a distância da coluna à borda, e o ponto fica a 20 px da borda.
-  assert.ok(cssPixels(gutter['padding-right'], 'padding-right') - right - 16 >= right, 'folga entre o conteúdo e a coluna');
-  assert.equal(right + 16 / 2, 20);
-  // 8 pontos no tamanho mínimo cabem na expandida mais baixa (104 px) menos as margens de cima e de baixo.
-  const inset = cssPixels(column.top, 'top de #sessions') + cssPixels(column.bottom, 'bottom de #sessions');
-  assert.ok(8 * cssPixels(button['min-height'], 'min-height') <= 104 - inset);
+  assert.ok(cssPixels(gutter['padding-right'], 'padding-right') - right - buttonWidth >= right, 'folga entre o conteúdo e a coluna');
+  assert.equal(right + buttonWidth / 2, 20);
+  // A coluna tem altura fixa (a pílula crescer não move os pontos), cabe na expandida mais baixa com a mesma
+  // margem em cima e embaixo, e 8 pontos no tamanho mínimo cabem nela.
+  assert.equal(column.bottom, undefined);
+  const top = cssPixels(column.top, 'top de #sessions');
+  const height = cssPixels(column.height, 'altura de #sessions');
+  assert.equal(top + height + top, cssPixels(cssDeclarations('#pill.expanded').height, 'altura da expandida'));
+  assert.ok(8 * cssPixels(button['min-height'], 'min-height') <= height);
   const render = functionBody('renderContent');
   assert.ok(render.includes("pill.classList.toggle('multi-session', "));
   assert.ok(render.includes('current.sessions.length >= 2'));
