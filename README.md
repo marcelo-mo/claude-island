@@ -54,9 +54,11 @@ Com mais de um monitor, cada um ganha a sua ilha, e elas acompanham quando um mo
 conectado, removido ou muda de resolução. O aviso sonoro toca uma vez só.
 
 Para tirar a ilha do caminho (numa reunião, por exemplo), **clique na pílula e arraste**. Ela
-fica dentro da área útil do monitor em que está, cada monitor guarda a própria posição e ela
-é mantida depois de reiniciar (fica em `positions.json`, na pasta de dados do app). **Duplo
-clique** na pílula devolve aquela ilha ao topo central.
+vai até o pé da tela e fica dentro da área útil do monitor em que está. Na metade de baixo, a pílula
+expandida e o pedido de permissão crescem para cima, como nas âncoras de baixo, para caberem na
+tela. Cada monitor guarda a própria posição, e ela é mantida depois de reiniciar (fica em
+`positions.json`, na pasta de dados do app). **Duplo clique** na pílula devolve aquela ilha à
+posição da âncora; escolher no menu a âncora que já está marcada devolve todas as ilhas.
 
 Expandida, a ilha mostra o botão **Abrir sessão**, que traz para frente (e restaura, se
 minimizada) a janela do terminal daquela sessão. No primeiro evento de cada sessão o hook sobe a
