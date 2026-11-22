@@ -58,7 +58,7 @@ Fica de fora:
   - **Conciliação com o SESS-06, ajustada na revisão do plano:**
     - O "automático" não acompanha o `pickState` ao vivo. A escolha por urgência acontece só na subida, quando a lista sai de vazia, ou quando a sessão exibida sai de fato da lista (`SessionEnd`, sessão morta ou prazo de `running`/`waiting`), e então fica fixa como chave.
     - Acompanhar ao vivo trocaria a sessão exibida quando outra terminasse ou ficasse mais urgente, e isso o SESS-06 proíbe.
-- **D-21:** **O "concluído" exibido não expira enquanto houver outra sessão viva na lista.**
+- **D-21:** **O "concluído" exibido não expira enquanto houver outra sessão viva na lista.** **Revogada em 2026-11-22 pela D-22** (pedido do autor); a regra de saída abaixo continua valendo.
   - A sessão em `done` que está na tela fica na lista e na tela além dos 10 s de `DONE_VISIBLE_MS`, até o usuário trocar (roda ou ponto) ou um pedido novo fazer o snap. Ao deixar de ser exibida, ela expira na hora, se já passou do prazo.
   - Se ela for a única sessão, o prazo de 10 s vale como hoje e a ilha fica ociosa. Isso não é troca de sessão, e a ilha continua existindo só enquanto o Claude roda.
   - Assim, "concluído" e "voltou a trabalhar" nunca trocam a sessão sozinhos (ROADMAP SC3, SESS-06), nem pela expiração.
@@ -203,6 +203,21 @@ Fica de fora:
 - Onde fica o "1 de N" dentro do bloco de pedido, sem passar o pico do palco.
 - Nomes finais das funções puras e constantes (`nextSelection`, `wheelStep`, `isSessionDead`, `SNAP_*`).
 - Se o lerp do acento vira só uma `transition` CSS.
+
+### Ajuste depois da Fase 5 na tela (2026-11-22, pedido do autor)
+Palavras do autor: "tá legal em ser scroll, mas ele poderia ser seletores verticais, e tá na horizontal. e esse mostrador de sessão pode aparecer qnd a ilha estiver em foco, com o conteudo expandido. Notei tbm que pela regra do concluido que criamos ele n permite eu ver as sessoes que estao ativas ainda pq a que tava em foco foi concluida".
+- **D-22 (revoga a D-21):** **O "concluído" exibido vence no prazo de sempre (`DONE_VISIBLE_MS`, 10 s), mesmo com outra sessão viva.**
+  - Ao vencer, a sessão exibida sai da lista e a ilha segue a regra de saída da D-21, que fica: o pedido pendente nunca exibido mais antigo (fora de gesto de roda), senão a vizinha na ordem estável que não tenha pedido já deixado, nunca a mais urgente.
+  - A troca rearma como toda troca: Permitir/Negar seguem o armamento de 0,8 s e o rearme por retângulo, então a troca nunca deixa aprovar um pedido que não estava na tela.
+  - **Sem adiar a troca com o cursor sobre a ilha.** Avaliado e descartado: o "concluído" não expande no hover, então não há seletor nem botão de aprovar sob o cursor; o pior caso é o clique em "Abrir" cair na pílula da sessão seguinte, que não aprova nada. Adiar seguraria o "concluído" enquanto o cursor descansasse ali, o mesmo problema que o autor apontou.
+  - Código: `aliveSessions` perdeu a chave segurada; `sessionList(sessions, now)` e `pickState` não seguram mais nada, e o `refresh` usa uma lista só.
+- **D-23:** **Seletor de sessões vertical, só com a pílula expandida.**
+  - `#sessions` sai de `#side` e vira o último filho de `#pill`, posto em coluna na lateral direita (`position: absolute; right: 12px; top/bottom: 8px`), fora do grid. O ponto fica a 20 px da borda, na parte reta do raio de 36 px.
+  - A expandida segue com 400 px, então a conta do palco e a folga das bordas (ddda2e4) não mudam: com os pontos visíveis, o conteúdo cede 16 px (`padding-right: 40px`).
+  - Ordem de cima para baixo, na direção da roda: para cima = sessão anterior = ponto de cima.
+  - Botão de 16 px; na expandida de 104 px (sem janela) cabem 5, e de 6 a 8 eles encolhem até 10 px (`ponytail`).
+  - Na compacta, pontos e contador (mais de 8 sessões) somem; o título com o projeto segue indicando que há várias sessões (D-08). O "1 de N" da fila já vivia só no bloco de pedido, que é expandido.
+  - Cores de estado fixas e pulso inalterados; a mola da troca segue sem alcançar os pontos.
 
 </decisions>
 

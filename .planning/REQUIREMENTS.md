@@ -65,7 +65,7 @@ Escopo deste milestone: reformular a ilha com o comportamento e o visual do mod 
 - [ ] **SESS-03**: Clicar num ponto leva àquela sessão
 - [ ] **SESS-04**: Quando uma sessão faz um pedido de permissão novo, a ilha vai sozinha até ela uma vez por pedido — nunca no meio de um gesto de rolagem —, e se o usuário rolar para longe ela não puxa de novo; o ponto segue pulsando
 - [ ] **SESS-05**: Pedidos simultâneos entram numa fila na ordem de chegada ("1 de N"); um pedido novo não substitui o que está sendo lido, e ao responder a ilha vai para o próximo pendente
-- [ ] **SESS-06**: A troca automática acontece só por pedido de permissão, nunca por "concluído" ou "voltou a trabalhar"
+- [ ] **SESS-06**: A troca automática acontece só por pedido de permissão, nunca no instante em que uma sessão conclui ou volta a trabalhar; o "concluído" exibido some no prazo de 10 s e, com outras sessões vivas, a ilha segue para a próxima pela regra de saída (revisto em 2026-11-22, pedido do autor)
 - [ ] **SESS-07**: Sessões mortas (terminal fechado sem `SessionEnd`) saem da lista e seus arquivos antigos são removidos
 
 ### Tela cheia (TELA)
